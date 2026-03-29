@@ -1,0 +1,872 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		044797918B87617B932B207E /* StreakService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D728A8CADE725637A19A9BB /* StreakService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		0BA6DFD28FCE7884B665A7E5 /* TrainingArcIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388F96AE8C94106FA9AC5259 /* TrainingArcIntents.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		11E17FCA0A9CC6C3B78C60C9 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = D152CDC5059EE06345475D04 /* Formatting.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		154CF33D1A61285308A4A8A3 /* WeekMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB3388320E4CA3FC29D0CAB /* WeekMath.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		180895B4489451A64E6472F2 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 59297CDE3A963D7FD9D2AA83 /* Foundation.framework */; };
+		1C364E4FCCD49115735B289E /* WeeklyReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F7069200C3F35CD8F4A64E0 /* WeeklyReviewView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		20E530694A62B0432B0F503B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091FF2C46E60DE37FFF1D4C7 /* SettingsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		271B21D459B75F6C0DE22FFD /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492A80CC5BC32481EC8A1FC2 /* OnboardingFlowView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		2A2941B0475E533E2C5F3031 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 59297CDE3A963D7FD9D2AA83 /* Foundation.framework */; };
+		2B76A581D0530FE0BAFBD4F1 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F058A0EA464B1C4E23F0B58 /* NotificationService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		31D11A3FD90344D9432356BD /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A612F7A6CDAB9C833BDCC562 /* WidgetSnapshot.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3C75403E1F8717871B72B3DD /* AuraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD8689A9087063D50A4DFE /* AuraView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3E38D108C71245FF33A9B5C4 /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2EEF34031D8740BDC98659 /* AppIdentity.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3F315572691487DA8DFE8474 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E8305523EE7DE95589815CD /* AppRootView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		424C32B82EAB92716DBF480F /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 581E21FC0A1F50DBA931355D /* DeepLink.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		44C2C3C9993FAE4A7F94DD5A /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68751D7922C525113755FD33 /* DashboardView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4688DBF8B03A6BE09C9CCC74 /* TrainingArcAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75800994F4C9009D1A443565 /* TrainingArcAppShortcuts.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		489FAD78B7F88F9CFDB83948 /* TrainingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 663B7CB58A479EB4B237A834 /* TrainingTheme.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4B052DD8F4FD6E731D9809A9 /* TrainingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC167C0D15D361AC6F0DE93C /* TrainingModels.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4C5BFFBC568D56D25F5B8532 /* ArcLogApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83F19A9EF27D9BF38175A5F7 /* ArcLogApp.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4C7ED08FB959CFE93B7D9787 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF0478A7AB29F9F3CC20143 /* ContentView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		54E4EF1686EBCEBEE28AA46C /* HabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467DEADE9CCAFFC53852C797 /* HabitsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		5BB22AC78E0874BDA299ECE7 /* CharacterSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A0A35C9D74ECF4621212C0 /* CharacterSheetView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		5D1DF376DC2FEE764E5F7EB6 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = D152CDC5059EE06345475D04 /* Formatting.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		7636ADB1F1DF657898ABEBCC /* TrainingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C49E7619D477AFBCFDC87B /* TrainingStore.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		772A91202C65C4FAF63D9736 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 59297CDE3A963D7FD9D2AA83 /* Foundation.framework */; };
+		77B092AD67C33EE773EC8D7C /* ProgressionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A543853EA310E8442F56D5 /* ProgressionEngine.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		7DB6687234B9FA090F188640 /* TrainingRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D55673B5EE1911A569DA9CB /* TrainingRoute.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		86145AD76F746DEBDA208EDE /* ArcLogWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C3719CE5D9CED4A9E42D7D /* ArcLogWidgets.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		86BADFC20E36BBE769B82779 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C01D742FAC72FFD8C025F5D /* AppRouter.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		8EDB063E4D367722AB575DB3 /* ArcLogWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 021E2A6A0C5AAA80716C60C6 /* ArcLogWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		9C48FC555CA5A7EF8E61CD03 /* HapticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F09082BC462301B581297E2 /* HapticsService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		9C4DAF685B1D0C4A8AFD3E8E /* HabitEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D3245D528AD6B5799DD6D4 /* HabitEditorView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		A1B2C3D4E5F60718293A4B5C /* RankArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5061728394A5B6C /* RankArtworkView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		A484177CE099D8F88E7F932D /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D223EA57ABE4CC7BB6104D /* SurfaceCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		ACA28B9A2DB4609D7C932162 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA67145519BE43BB10B1BCA /* HistoryView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		B247047904B8E649F3CC46AD /* ArcLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F3C62047544052B4E31C013 /* ArcLogTests.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		B7B6FE957A1CB1C37D192243 /* ExternalEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF1357F11211D95F7C7B3AA /* ExternalEventService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		BD4B79CAA4417ACB3057ABA1 /* TrainingArcConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B081553F1C4DB7CC718AE38 /* TrainingArcConfig.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		C9F252AC8329343B9422B938 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2D70CD9D2FC6161C361B908A /* Assets.xcassets */; };
+		CBE6FFD991828F22DDF724DF /* HabitQuickLogRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AA6B6DFE1A7414CBD1A8AD1 /* HabitQuickLogRow.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		CF29010E5A31CB7A142B5D47 /* TrainingExportDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EA1EE7A31C08AFCBF10587A /* TrainingExportDocument.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		D3E9127C3A193FD8C19E054E /* TrainingRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D55673B5EE1911A569DA9CB /* TrainingRoute.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		E222280EB787C007E68648E9 /* ArcLogWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58FE6E27776B28F66390FFAB /* ArcLogWidgetsBundle.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		ED56573AE215508FA5CD9F25 /* HabitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FB0D1FD1E9237BB40A13D1 /* HabitDetailView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		F4A768C44EF0DFFFAB76C32A /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2EEF34031D8740BDC98659 /* AppIdentity.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		F4D3BC69EAD9E68398AF60AC /* StatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC22A7DD7CE792763AAB81AF /* StatCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		FB74A77F821FA5227564BEDB /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A612F7A6CDAB9C833BDCC562 /* WidgetSnapshot.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4EF52A2F87F32AABA9B00EFA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C82BDD5E78B9E32F273F90D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F540D0C212A3AAD9CAC756EA;
+			remoteInfo = ArcLogWidgets;
+		};
+		A638D9462DA39DFB4FBD9C7C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C82BDD5E78B9E32F273F90D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13AA2B55274AF982230D3FD2;
+			remoteInfo = ArcLog;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0A31C4AC6DE444714483F33C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8EDB063E4D367722AB575DB3 /* ArcLogWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		021E2A6A0C5AAA80716C60C6 /* ArcLogWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ArcLogWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		07C3719CE5D9CED4A9E42D7D /* ArcLogWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogWidgets.swift; path = ArcLogWidgets/ArcLogWidgets.swift; sourceTree = "<group>"; };
+		091FF2C46E60DE37FFF1D4C7 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = ArcLog/Views/Settings/SettingsView.swift; sourceTree = "<group>"; };
+		0AB3388320E4CA3FC29D0CAB /* WeekMath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekMath.swift; path = ArcLog/Domain/WeekMath.swift; sourceTree = "<group>"; };
+		0B081553F1C4DB7CC718AE38 /* TrainingArcConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcConfig.swift; path = ArcLog/Domain/TrainingArcConfig.swift; sourceTree = "<group>"; };
+		0CA67145519BE43BB10B1BCA /* HistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistoryView.swift; path = ArcLog/Views/History/HistoryView.swift; sourceTree = "<group>"; };
+		0F7069200C3F35CD8F4A64E0 /* WeeklyReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewView.swift; path = ArcLog/Views/WeeklyReview/WeeklyReviewView.swift; sourceTree = "<group>"; };
+		15A543853EA310E8442F56D5 /* ProgressionEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ProgressionEngine.swift; path = ArcLog/Domain/ProgressionEngine.swift; sourceTree = "<group>"; };
+		16C49E7619D477AFBCFDC87B /* TrainingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingStore.swift; path = ArcLog/Domain/TrainingStore.swift; sourceTree = "<group>"; };
+		17FB0D1FD1E9237BB40A13D1 /* HabitDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitDetailView.swift; path = ArcLog/Views/Habits/HabitDetailView.swift; sourceTree = "<group>"; };
+		1EF0478A7AB29F9F3CC20143 /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = ArcLog/ContentView.swift; sourceTree = "<group>"; };
+		1F058A0EA464B1C4E23F0B58 /* NotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotificationService.swift; path = ArcLog/Domain/NotificationService.swift; sourceTree = "<group>"; };
+		1F09082BC462301B581297E2 /* HapticsService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HapticsService.swift; path = ArcLog/Domain/HapticsService.swift; sourceTree = "<group>"; };
+		2D55673B5EE1911A569DA9CB /* TrainingRoute.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingRoute.swift; path = ArcLog/Support/TrainingRoute.swift; sourceTree = "<group>"; };
+		2D70CD9D2FC6161C361B908A /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = ArcLog/Assets.xcassets; sourceTree = "<group>"; };
+		388F96AE8C94106FA9AC5259 /* TrainingArcIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcIntents.swift; path = ArcLog/Intents/TrainingArcIntents.swift; sourceTree = "<group>"; };
+		3EA1EE7A31C08AFCBF10587A /* TrainingExportDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingExportDocument.swift; path = ArcLog/Support/TrainingExportDocument.swift; sourceTree = "<group>"; };
+		467DEADE9CCAFFC53852C797 /* HabitsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitsView.swift; path = ArcLog/Views/Habits/HabitsView.swift; sourceTree = "<group>"; };
+		492A80CC5BC32481EC8A1FC2 /* OnboardingFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OnboardingFlowView.swift; path = ArcLog/Views/Onboarding/OnboardingFlowView.swift; sourceTree = "<group>"; };
+		4AA6B6DFE1A7414CBD1A8AD1 /* HabitQuickLogRow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitQuickLogRow.swift; path = ArcLog/Views/Components/HabitQuickLogRow.swift; sourceTree = "<group>"; };
+		4D728A8CADE725637A19A9BB /* StreakService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreakService.swift; path = ArcLog/Domain/StreakService.swift; sourceTree = "<group>"; };
+		51A0A35C9D74ECF4621212C0 /* CharacterSheetView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CharacterSheetView.swift; path = ArcLog/Views/Character/CharacterSheetView.swift; sourceTree = "<group>"; };
+		581E21FC0A1F50DBA931355D /* DeepLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeepLink.swift; path = ArcLog/Support/DeepLink.swift; sourceTree = "<group>"; };
+		58FE6E27776B28F66390FFAB /* ArcLogWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogWidgetsBundle.swift; path = ArcLogWidgets/ArcLogWidgetsBundle.swift; sourceTree = "<group>"; };
+		59297CDE3A963D7FD9D2AA83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS12.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		5E8305523EE7DE95589815CD /* AppRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppRootView.swift; path = ArcLog/App/AppRootView.swift; sourceTree = "<group>"; };
+		663B7CB58A479EB4B237A834 /* TrainingTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingTheme.swift; path = ArcLog/Theme/TrainingTheme.swift; sourceTree = "<group>"; };
+		68751D7922C525113755FD33 /* DashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DashboardView.swift; path = ArcLog/Views/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		75800994F4C9009D1A443565 /* TrainingArcAppShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcAppShortcuts.swift; path = ArcLog/Intents/TrainingArcAppShortcuts.swift; sourceTree = "<group>"; };
+		76F6A238B46EF415C01F7913 /* ArcLog.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArcLog.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A2EEF34031D8740BDC98659 /* AppIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppIdentity.swift; path = ArcLog/App/AppIdentity.swift; sourceTree = "<group>"; };
+		7F3C62047544052B4E31C013 /* ArcLogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogTests.swift; path = ArcLogTests/ArcLogTests.swift; sourceTree = "<group>"; };
+		83F19A9EF27D9BF38175A5F7 /* ArcLogApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogApp.swift; path = ArcLog/ArcLogApp.swift; sourceTree = "<group>"; };
+		9C01D742FAC72FFD8C025F5D /* AppRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppRouter.swift; path = ArcLog/App/AppRouter.swift; sourceTree = "<group>"; };
+		A1D223EA57ABE4CC7BB6104D /* SurfaceCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SurfaceCard.swift; path = ArcLog/Views/Components/SurfaceCard.swift; sourceTree = "<group>"; };
+		A612F7A6CDAB9C833BDCC562 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = ArcLog/Support/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		A7D3245D528AD6B5799DD6D4 /* HabitEditorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitEditorView.swift; path = ArcLog/Views/Habits/HabitEditorView.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5061728394A5B6C /* RankArtworkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RankArtworkView.swift; path = ArcLog/Views/Components/RankArtworkView.swift; sourceTree = "<group>"; };
+		D152CDC5059EE06345475D04 /* Formatting.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Formatting.swift; path = ArcLog/Support/Formatting.swift; sourceTree = "<group>"; };
+		D5AE4FA1C07BCD7B3BCF8C8D /* ArcLogTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcLogTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBF1357F11211D95F7C7B3AA /* ExternalEventService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExternalEventService.swift; path = ArcLog/Domain/ExternalEventService.swift; sourceTree = "<group>"; };
+		DC167C0D15D361AC6F0DE93C /* TrainingModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingModels.swift; path = ArcLog/Models/TrainingModels.swift; sourceTree = "<group>"; };
+		EC22A7DD7CE792763AAB81AF /* StatCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatCard.swift; path = ArcLog/Views/Components/StatCard.swift; sourceTree = "<group>"; };
+		F0BD8689A9087063D50A4DFE /* AuraView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuraView.swift; path = ArcLog/Views/Components/AuraView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D1065A2B69F917248D0ADEBF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				772A91202C65C4FAF63D9736 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F048FF72D1799EF9BBE0B16B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				180895B4489451A64E6472F2 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F68EA252FEECFA709504926B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A2941B0475E533E2C5F3031 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0ED62F290F9CB5A62BECF03A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7BEDFFC530F84232CE469311 /* Character */,
+				1586DA5EC1F08993EA6FDFED /* Components */,
+				B4C44FFE328F387544297C27 /* Dashboard */,
+				72A9327CDE0FE6B777A414E2 /* Habits */,
+				9054500AD3AD9B64A1345CFD /* History */,
+				4C1C0E5964C52AB64F58F5BF /* Onboarding */,
+				A449769094162AE96A8888A6 /* Settings */,
+				722672ECCEAA95ACA0B947C8 /* WeeklyReview */,
+			);
+			name = Views;
+			sourceTree = "<group>";
+		};
+		0F909CBA2B07E4B2E4EDD062 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7A2EEF34031D8740BDC98659 /* AppIdentity.swift */,
+				5E8305523EE7DE95589815CD /* AppRootView.swift */,
+				9C01D742FAC72FFD8C025F5D /* AppRouter.swift */,
+			);
+			name = App;
+			sourceTree = "<group>";
+		};
+		119B7660BADEBD45C892C5A8 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E05ADE05AC9279C562582293 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		1586DA5EC1F08993EA6FDFED /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				F0BD8689A9087063D50A4DFE /* AuraView.swift */,
+				4AA6B6DFE1A7414CBD1A8AD1 /* HabitQuickLogRow.swift */,
+				B1C2D3E4F5061728394A5B6C /* RankArtworkView.swift */,
+				EC22A7DD7CE792763AAB81AF /* StatCard.swift */,
+				A1D223EA57ABE4CC7BB6104D /* SurfaceCard.swift */,
+			);
+			name = Components;
+			sourceTree = "<group>";
+		};
+		2785922DFED0B678358BEB27 /* ArcLogWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				07C3719CE5D9CED4A9E42D7D /* ArcLogWidgets.swift */,
+				58FE6E27776B28F66390FFAB /* ArcLogWidgetsBundle.swift */,
+			);
+			name = ArcLogWidgets;
+			sourceTree = "<group>";
+		};
+		4C1C0E5964C52AB64F58F5BF /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				492A80CC5BC32481EC8A1FC2 /* OnboardingFlowView.swift */,
+			);
+			name = Onboarding;
+			sourceTree = "<group>";
+		};
+		557397FA78667E6A5DA5848C /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				75800994F4C9009D1A443565 /* TrainingArcAppShortcuts.swift */,
+				388F96AE8C94106FA9AC5259 /* TrainingArcIntents.swift */,
+			);
+			name = Intents;
+			sourceTree = "<group>";
+		};
+		6DC9DEBF37D96FD8EEE1CDB7 /* ArcLog */ = {
+			isa = PBXGroup;
+			children = (
+				0F909CBA2B07E4B2E4EDD062 /* App */,
+				1EF0478A7AB29F9F3CC20143 /* ContentView.swift */,
+				B5452E424843DBBD894DA2AD /* Domain */,
+				83F19A9EF27D9BF38175A5F7 /* ArcLogApp.swift */,
+				557397FA78667E6A5DA5848C /* Intents */,
+				A5D03B135B2A318CF1A360D4 /* Models */,
+				A134E6A2EAB2E224CFC09D4C /* Support */,
+				C1CB5FCDA3FF82F7800BB325 /* Theme */,
+				0ED62F290F9CB5A62BECF03A /* Views */,
+				2D70CD9D2FC6161C361B908A /* Assets.xcassets */,
+			);
+			name = ArcLog;
+			sourceTree = "<group>";
+		};
+		722672ECCEAA95ACA0B947C8 /* WeeklyReview */ = {
+			isa = PBXGroup;
+			children = (
+				0F7069200C3F35CD8F4A64E0 /* WeeklyReviewView.swift */,
+			);
+			name = WeeklyReview;
+			sourceTree = "<group>";
+		};
+		72A9327CDE0FE6B777A414E2 /* Habits */ = {
+			isa = PBXGroup;
+			children = (
+				17FB0D1FD1E9237BB40A13D1 /* HabitDetailView.swift */,
+				A7D3245D528AD6B5799DD6D4 /* HabitEditorView.swift */,
+				467DEADE9CCAFFC53852C797 /* HabitsView.swift */,
+			);
+			name = Habits;
+			sourceTree = "<group>";
+		};
+		7BEDFFC530F84232CE469311 /* Character */ = {
+			isa = PBXGroup;
+			children = (
+				51A0A35C9D74ECF4621212C0 /* CharacterSheetView.swift */,
+			);
+			name = Character;
+			sourceTree = "<group>";
+		};
+		9054500AD3AD9B64A1345CFD /* History */ = {
+			isa = PBXGroup;
+			children = (
+				0CA67145519BE43BB10B1BCA /* HistoryView.swift */,
+			);
+			name = History;
+			sourceTree = "<group>";
+		};
+		A00206074A78B136D3928744 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				76F6A238B46EF415C01F7913 /* ArcLog.app */,
+				021E2A6A0C5AAA80716C60C6 /* ArcLogWidgets.appex */,
+				D5AE4FA1C07BCD7B3BCF8C8D /* ArcLogTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A134E6A2EAB2E224CFC09D4C /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				581E21FC0A1F50DBA931355D /* DeepLink.swift */,
+				D152CDC5059EE06345475D04 /* Formatting.swift */,
+				3EA1EE7A31C08AFCBF10587A /* TrainingExportDocument.swift */,
+				2D55673B5EE1911A569DA9CB /* TrainingRoute.swift */,
+				A612F7A6CDAB9C833BDCC562 /* WidgetSnapshot.swift */,
+			);
+			name = Support;
+			sourceTree = "<group>";
+		};
+		A449769094162AE96A8888A6 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				091FF2C46E60DE37FFF1D4C7 /* SettingsView.swift */,
+			);
+			name = Settings;
+			sourceTree = "<group>";
+		};
+		A5D03B135B2A318CF1A360D4 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				DC167C0D15D361AC6F0DE93C /* TrainingModels.swift */,
+			);
+			name = Models;
+			sourceTree = "<group>";
+		};
+		B4C44FFE328F387544297C27 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				68751D7922C525113755FD33 /* DashboardView.swift */,
+			);
+			name = Dashboard;
+			sourceTree = "<group>";
+		};
+		B5452E424843DBBD894DA2AD /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				DBF1357F11211D95F7C7B3AA /* ExternalEventService.swift */,
+				1F09082BC462301B581297E2 /* HapticsService.swift */,
+				1F058A0EA464B1C4E23F0B58 /* NotificationService.swift */,
+				15A543853EA310E8442F56D5 /* ProgressionEngine.swift */,
+				4D728A8CADE725637A19A9BB /* StreakService.swift */,
+				0B081553F1C4DB7CC718AE38 /* TrainingArcConfig.swift */,
+				16C49E7619D477AFBCFDC87B /* TrainingStore.swift */,
+				0AB3388320E4CA3FC29D0CAB /* WeekMath.swift */,
+			);
+			name = Domain;
+			sourceTree = "<group>";
+		};
+		BAB95B661859A0E92A0425B9 /* ArcLogTests */ = {
+			isa = PBXGroup;
+			children = (
+				7F3C62047544052B4E31C013 /* ArcLogTests.swift */,
+			);
+			name = ArcLogTests;
+			sourceTree = "<group>";
+		};
+		C1CB5FCDA3FF82F7800BB325 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				663B7CB58A479EB4B237A834 /* TrainingTheme.swift */,
+			);
+			name = Theme;
+			sourceTree = "<group>";
+		};
+		CEC413F08C7B514ED9E5335F = {
+			isa = PBXGroup;
+			children = (
+				A00206074A78B136D3928744 /* Products */,
+				119B7660BADEBD45C892C5A8 /* Frameworks */,
+				6DC9DEBF37D96FD8EEE1CDB7 /* ArcLog */,
+				2785922DFED0B678358BEB27 /* ArcLogWidgets */,
+				BAB95B661859A0E92A0425B9 /* ArcLogTests */,
+			);
+			sourceTree = "<group>";
+		};
+		E05ADE05AC9279C562582293 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				59297CDE3A963D7FD9D2AA83 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		13AA2B55274AF982230D3FD2 /* ArcLog */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8B54338DC216C55E4C11B338 /* Build configuration list for PBXNativeTarget "ArcLog" */;
+			buildPhases = (
+				6E2B7B781B2372A4F10F3CB2 /* Sources */,
+				F68EA252FEECFA709504926B /* Frameworks */,
+				13D509A2EEF848FA5E066257 /* Resources */,
+				0A31C4AC6DE444714483F33C /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EC9711AC410E2E5713CB8380 /* PBXTargetDependency */,
+			);
+			name = ArcLog;
+			productName = ArcLog;
+			productReference = 76F6A238B46EF415C01F7913 /* ArcLog.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BF926E0679768D4C716C65EF /* ArcLogTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D5D9BB424D00613EE46A0FB /* Build configuration list for PBXNativeTarget "ArcLogTests" */;
+			buildPhases = (
+				5F7BFC454505C0CCE2DB5F7C /* Sources */,
+				D1065A2B69F917248D0ADEBF /* Frameworks */,
+				AE83F7B9E04B4783CEF79B60 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7C5237949696D569DC3FE4C8 /* PBXTargetDependency */,
+			);
+			name = ArcLogTests;
+			productName = ArcLogTests;
+			productReference = D5AE4FA1C07BCD7B3BCF8C8D /* ArcLogTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F540D0C212A3AAD9CAC756EA /* ArcLogWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BABFD4E3C30A1695E66DEF57 /* Build configuration list for PBXNativeTarget "ArcLogWidgets" */;
+			buildPhases = (
+				CA710FA14B4E9B4C931607A1 /* Sources */,
+				F048FF72D1799EF9BBE0B16B /* Frameworks */,
+				E907197B8EDA1D8C242AA45D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ArcLogWidgets;
+			productName = ArcLogWidgets;
+			productReference = 021E2A6A0C5AAA80716C60C6 /* ArcLogWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4C82BDD5E78B9E32F273F90D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1700;
+				LastUpgradeCheck = 1700;
+			};
+			buildConfigurationList = 94B7986E15AD3993D44F84AB /* Build configuration list for PBXProject "ArcLog" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CEC413F08C7B514ED9E5335F;
+			productRefGroup = A00206074A78B136D3928744 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				13AA2B55274AF982230D3FD2 /* ArcLog */,
+				F540D0C212A3AAD9CAC756EA /* ArcLogWidgets */,
+				BF926E0679768D4C716C65EF /* ArcLogTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		13D509A2EEF848FA5E066257 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9F252AC8329343B9422B938 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE83F7B9E04B4783CEF79B60 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E907197B8EDA1D8C242AA45D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5F7BFC454505C0CCE2DB5F7C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B247047904B8E649F3CC46AD /* ArcLogTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6E2B7B781B2372A4F10F3CB2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3E38D108C71245FF33A9B5C4 /* AppIdentity.swift in Sources */,
+				3F315572691487DA8DFE8474 /* AppRootView.swift in Sources */,
+				86BADFC20E36BBE769B82779 /* AppRouter.swift in Sources */,
+				4C7ED08FB959CFE93B7D9787 /* ContentView.swift in Sources */,
+				B7B6FE957A1CB1C37D192243 /* ExternalEventService.swift in Sources */,
+				9C48FC555CA5A7EF8E61CD03 /* HapticsService.swift in Sources */,
+				2B76A581D0530FE0BAFBD4F1 /* NotificationService.swift in Sources */,
+				77B092AD67C33EE773EC8D7C /* ProgressionEngine.swift in Sources */,
+				044797918B87617B932B207E /* StreakService.swift in Sources */,
+				BD4B79CAA4417ACB3057ABA1 /* TrainingArcConfig.swift in Sources */,
+				7636ADB1F1DF657898ABEBCC /* TrainingStore.swift in Sources */,
+				154CF33D1A61285308A4A8A3 /* WeekMath.swift in Sources */,
+				4C5BFFBC568D56D25F5B8532 /* ArcLogApp.swift in Sources */,
+				4688DBF8B03A6BE09C9CCC74 /* TrainingArcAppShortcuts.swift in Sources */,
+				0BA6DFD28FCE7884B665A7E5 /* TrainingArcIntents.swift in Sources */,
+				4B052DD8F4FD6E731D9809A9 /* TrainingModels.swift in Sources */,
+				424C32B82EAB92716DBF480F /* DeepLink.swift in Sources */,
+				11E17FCA0A9CC6C3B78C60C9 /* Formatting.swift in Sources */,
+				CF29010E5A31CB7A142B5D47 /* TrainingExportDocument.swift in Sources */,
+				7DB6687234B9FA090F188640 /* TrainingRoute.swift in Sources */,
+				31D11A3FD90344D9432356BD /* WidgetSnapshot.swift in Sources */,
+				489FAD78B7F88F9CFDB83948 /* TrainingTheme.swift in Sources */,
+				5BB22AC78E0874BDA299ECE7 /* CharacterSheetView.swift in Sources */,
+				3C75403E1F8717871B72B3DD /* AuraView.swift in Sources */,
+				CBE6FFD991828F22DDF724DF /* HabitQuickLogRow.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* RankArtworkView.swift in Sources */,
+				F4D3BC69EAD9E68398AF60AC /* StatCard.swift in Sources */,
+				A484177CE099D8F88E7F932D /* SurfaceCard.swift in Sources */,
+				44C2C3C9993FAE4A7F94DD5A /* DashboardView.swift in Sources */,
+				ED56573AE215508FA5CD9F25 /* HabitDetailView.swift in Sources */,
+				9C4DAF685B1D0C4A8AFD3E8E /* HabitEditorView.swift in Sources */,
+				54E4EF1686EBCEBEE28AA46C /* HabitsView.swift in Sources */,
+				ACA28B9A2DB4609D7C932162 /* HistoryView.swift in Sources */,
+				271B21D459B75F6C0DE22FFD /* OnboardingFlowView.swift in Sources */,
+				20E530694A62B0432B0F503B /* SettingsView.swift in Sources */,
+				1C364E4FCCD49115735B289E /* WeeklyReviewView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CA710FA14B4E9B4C931607A1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F4A768C44EF0DFFFAB76C32A /* AppIdentity.swift in Sources */,
+				5D1DF376DC2FEE764E5F7EB6 /* Formatting.swift in Sources */,
+				D3E9127C3A193FD8C19E054E /* TrainingRoute.swift in Sources */,
+				FB74A77F821FA5227564BEDB /* WidgetSnapshot.swift in Sources */,
+				86145AD76F746DEBDA208EDE /* ArcLogWidgets.swift in Sources */,
+				E222280EB787C007E68648E9 /* ArcLogWidgetsBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7C5237949696D569DC3FE4C8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ArcLog;
+			target = 13AA2B55274AF982230D3FD2 /* ArcLog */;
+			targetProxy = A638D9462DA39DFB4FBD9C7C /* PBXContainerItemProxy */;
+		};
+		EC9711AC410E2E5713CB8380 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ArcLogWidgets;
+			target = F540D0C212A3AAD9CAC756EA /* ArcLogWidgets */;
+			targetProxy = 4EF52A2F87F32AABA9B00EFA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		00BBCC9559526033FB6443FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2QAALFV4AA;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0A0A5BD6F7831D13137F0BD0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ArcLog/ArcLog.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ArcLog/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1C0A0436426C26698599C642 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ArcLog.app/ArcLog";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		60DC0E601725B2F16D2AFB22 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ArcLogWidgets/ArcLogWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ArcLogWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8D128C7C2243C174291CBD98 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ArcLogWidgets/ArcLogWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ArcLogWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		977A20D7C19B97272C1A52BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ArcLog/ArcLog.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ArcLog/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A9C0EA8B3CF27577FECA69E0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2QAALFV4AA;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BCCCF6AB89409E4B713EC651 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ArcLog.app/ArcLog";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7D5D9BB424D00613EE46A0FB /* Build configuration list for PBXNativeTarget "ArcLogTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C0A0436426C26698599C642 /* Release */,
+				BCCCF6AB89409E4B713EC651 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8B54338DC216C55E4C11B338 /* Build configuration list for PBXNativeTarget "ArcLog" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				977A20D7C19B97272C1A52BE /* Release */,
+				0A0A5BD6F7831D13137F0BD0 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		94B7986E15AD3993D44F84AB /* Build configuration list for PBXProject "ArcLog" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00BBCC9559526033FB6443FF /* Debug */,
+				A9C0EA8B3CF27577FECA69E0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BABFD4E3C30A1695E66DEF57 /* Build configuration list for PBXNativeTarget "ArcLogWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				60DC0E601725B2F16D2AFB22 /* Release */,
+				8D128C7C2243C174291CBD98 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4C82BDD5E78B9E32F273F90D /* Project object */;
+}
