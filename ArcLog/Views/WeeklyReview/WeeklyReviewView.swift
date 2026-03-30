@@ -18,7 +18,7 @@ struct WeeklyReviewView: View {
     private var selectedWeekResolutions: [WeeklyResolution] {
         guard let selectedWeekStart else { return [] }
         return resolutions.filter {
-            WeekMath.isSameWeek($0.weekStartDate, selectedWeekStart, weekStartsOnMonday: settings?.weekStartsOnMonday ?? true)
+            $0.weekStartDate == selectedWeekStart
         }.sorted { $0.statName < $1.statName }
     }
 
@@ -39,9 +39,9 @@ struct WeeklyReviewView: View {
                                 Text("Training Report Ready")
                                     .font(.system(.title2, design: .rounded).weight(.bold))
                                     .foregroundStyle(TrainingTheme.textPrimary)
-                                Text("Resolve \(pendingWeek.displayTitle) to bank rank progress and process decay.")
+                                Text("Resolve \(pendingWeek.displayTitle) to apply the weekly rank check and save the report.")
                                     .foregroundStyle(TrainingTheme.textSecondary)
-                                Button("Resolve Week") {
+                                Button("Sync Week") {
                                     let batch = try? TrainingStore.resolvePendingWeek(context: modelContext)
                                     selectedWeekStart = batch?.week.start
                                 }
@@ -71,32 +71,29 @@ struct WeeklyReviewView: View {
                                             .font(.headline)
                                             .foregroundStyle(TrainingTheme.textPrimary)
                                         Spacer()
-                                        if resolution.didLevelUp {
-                                            Label("Level Up", systemImage: "arrow.up.circle.fill")
-                                                .foregroundStyle(TrainingTheme.positive)
-                                        } else if resolution.didRegress {
-                                            Label("Regression", systemImage: "arrow.down.circle.fill")
-                                                .foregroundStyle(TrainingTheme.warning)
-                                        }
+                                        Text("Level \(resolution.levelAfter)")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(TrainingTheme.textSecondary)
                                     }
 
                                     HStack {
-                                        metricTile(title: "Baseline", value: "\(resolution.baselineAtStart)")
+                                        metricTile(title: "Expected", value: MetricFormatting.shortMetric(resolution.expectedTotal))
                                         metricTile(title: "Actual", value: MetricFormatting.shortMetric(resolution.actualCompletedValue))
-                                        metricTile(title: "Rank", value: "+\(resolution.chargesEarned)")
+                                        metricTile(title: "Delta", value: MetricFormatting.shortMetric(resolution.weeklyDelta))
                                     }
 
-                                    if resolution.didStagnate || resolution.didDecay {
-                                        HStack(spacing: 12) {
-                                            if resolution.didStagnate {
-                                                Label("Stagnation warning", systemImage: "exclamationmark.triangle.fill")
-                                            }
-                                            if resolution.didDecay {
-                                                Label("Rank progress decay", systemImage: "bolt.slash.fill")
-                                            }
-                                        }
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(TrainingTheme.warning)
+                                    if resolution.didLevelUp {
+                                        Label("Ranked up this week", systemImage: "arrow.up.circle.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(TrainingTheme.positive)
+                                    } else if resolution.didRegress {
+                                        Label("Ranked down this week", systemImage: "arrow.down.circle.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(TrainingTheme.warning)
+                                    } else if resolution.weeklyDelta < 0 {
+                                        Label("Banked debt this week", systemImage: "exclamationmark.triangle.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(TrainingTheme.warning)
                                     }
 
                                     Text(resolution.summaryText)
@@ -107,7 +104,7 @@ struct WeeklyReviewView: View {
                         }
                     } else {
                         SurfaceCard {
-                            Text("No weekly reports yet. Log habits throughout the week, then resolve the last completed week here.")
+                            Text("No weekly reports yet. Weekly rank checks save themselves here after each Sunday evaluation.")
                                 .foregroundStyle(TrainingTheme.textSecondary)
                         }
                     }

@@ -143,6 +143,35 @@ enum ThemePreference: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case detailedCards
+    case compactGrid
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .detailedCards:
+            return "Detailed Cards"
+        case .compactGrid:
+            return "Compact Grid"
+        }
+    }
+}
+
+enum RankChangeDirection: String, Codable, Sendable {
+    case up
+    case down
+}
+
+enum RankChangeReason: String, Codable, Sendable {
+    case onboarding
+    case logMutation
+    case deleteMutation
+    case appRefresh
+    case skillOpen
+}
+
 @Model
 final class StatDomain {
     @Attribute(.unique) var id: UUID
@@ -153,8 +182,17 @@ final class StatDomain {
     var descriptor: String
     var currentLevel: Int
     var currentTierName: String
+    var startingBaseline: Int
     var currentBaseline: Int
     var storedCharges: Int
+    var bankedProgressUnits: Double
+    var lastResolvedWeekStart: Date?
+    var lastAcknowledgedLevel: Int
+    var pendingRankChangeDirectionRaw: String?
+    var pendingRankChangeFromLevel: Int?
+    var pendingRankChangeToLevel: Int?
+    var pendingRankChangeRecordedAt: Date?
+    var pendingRankChangeReasonRaw: String?
     var createdAt: Date
     var updatedAt: Date
     var isArchived: Bool
@@ -170,8 +208,17 @@ final class StatDomain {
         descriptor: String,
         currentLevel: Int = 1,
         currentTierName: String,
+        startingBaseline: Int,
         currentBaseline: Int,
         storedCharges: Int = 0,
+        bankedProgressUnits: Double = 0,
+        lastResolvedWeekStart: Date? = nil,
+        lastAcknowledgedLevel: Int = 1,
+        pendingRankChangeDirectionRaw: String? = nil,
+        pendingRankChangeFromLevel: Int? = nil,
+        pendingRankChangeToLevel: Int? = nil,
+        pendingRankChangeRecordedAt: Date? = nil,
+        pendingRankChangeReasonRaw: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         isArchived: Bool = false
@@ -184,8 +231,17 @@ final class StatDomain {
         self.descriptor = descriptor
         self.currentLevel = currentLevel
         self.currentTierName = currentTierName
+        self.startingBaseline = startingBaseline
         self.currentBaseline = currentBaseline
         self.storedCharges = storedCharges
+        self.bankedProgressUnits = bankedProgressUnits
+        self.lastResolvedWeekStart = lastResolvedWeekStart
+        self.lastAcknowledgedLevel = lastAcknowledgedLevel
+        self.pendingRankChangeDirectionRaw = pendingRankChangeDirectionRaw
+        self.pendingRankChangeFromLevel = pendingRankChangeFromLevel
+        self.pendingRankChangeToLevel = pendingRankChangeToLevel
+        self.pendingRankChangeRecordedAt = pendingRankChangeRecordedAt
+        self.pendingRankChangeReasonRaw = pendingRankChangeReasonRaw
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isArchived = isArchived
@@ -207,9 +263,62 @@ extension StatDomain {
         set { currentTierName = newValue }
     }
 
-    var rankProgress: Int {
+    var chargeValue: Int {
         get { storedCharges }
         set { storedCharges = max(0, newValue) }
+    }
+
+    var acknowledgedRankLevel: Int {
+        get { TrainingArcConfig.clampedRankLevel(lastAcknowledgedLevel) }
+        set { lastAcknowledgedLevel = TrainingArcConfig.clampedRankLevel(newValue) }
+    }
+
+    var pendingRankChangeDirection: RankChangeDirection? {
+        get { pendingRankChangeDirectionRaw.flatMap(RankChangeDirection.init(rawValue:)) }
+        set { pendingRankChangeDirectionRaw = newValue?.rawValue }
+    }
+
+    var pendingRankChangeReason: RankChangeReason? {
+        get { pendingRankChangeReasonRaw.flatMap(RankChangeReason.init(rawValue:)) }
+        set { pendingRankChangeReasonRaw = newValue?.rawValue }
+    }
+
+    var pendingRankChange: PendingRankChange? {
+        guard
+            let direction = pendingRankChangeDirection,
+            let statKey,
+            let fromLevel = pendingRankChangeFromLevel,
+            let toLevel = pendingRankChangeToLevel,
+            let recordedAt = pendingRankChangeRecordedAt
+        else {
+            return nil
+        }
+
+        return PendingRankChange(
+            direction: direction,
+            fromLevel: TrainingArcConfig.clampedRankLevel(fromLevel),
+            toLevel: TrainingArcConfig.clampedRankLevel(toLevel),
+            fromTitle: TrainingArcConfig.rankTitle(for: statKey, level: fromLevel),
+            toTitle: TrainingArcConfig.rankTitle(for: statKey, level: toLevel),
+            recordedAt: recordedAt,
+            reason: pendingRankChangeReason
+        )
+    }
+
+    func setPendingRankChange(from fromLevel: Int, to toLevel: Int, direction: RankChangeDirection, reason: RankChangeReason, recordedAt: Date) {
+        pendingRankChangeFromLevel = TrainingArcConfig.clampedRankLevel(fromLevel)
+        pendingRankChangeToLevel = TrainingArcConfig.clampedRankLevel(toLevel)
+        pendingRankChangeDirection = direction
+        pendingRankChangeReason = reason
+        pendingRankChangeRecordedAt = recordedAt
+    }
+
+    func clearPendingRankChange() {
+        pendingRankChangeFromLevel = nil
+        pendingRankChangeToLevel = nil
+        pendingRankChangeDirection = nil
+        pendingRankChangeReason = nil
+        pendingRankChangeRecordedAt = nil
     }
 }
 
@@ -276,6 +385,7 @@ final class HabitLog {
     @Attribute(.unique) var id: UUID
     var date: Date
     var numericValue: Double
+    var sessionType: String?
     var note: String
     var sourceTypeRaw: String
     var createdAt: Date
@@ -285,6 +395,7 @@ final class HabitLog {
         id: UUID = UUID(),
         date: Date,
         numericValue: Double,
+        sessionType: String? = nil,
         note: String = "",
         sourceType: LogSourceType = .manual,
         createdAt: Date = .now,
@@ -293,6 +404,7 @@ final class HabitLog {
         self.id = id
         self.date = date
         self.numericValue = numericValue
+        self.sessionType = sessionType
         self.note = note
         self.sourceTypeRaw = sourceType.rawValue
         self.createdAt = createdAt
@@ -313,10 +425,14 @@ final class WeeklyResolution {
     var weekStartDate: Date
     var weekEndDate: Date
     var baselineAtStart: Int
+    var expectedTotal: Double
     var actualCompletedValue: Double
+    var weeklyDelta: Double
     var excessValue: Double
     var chargesEarned: Int
     var chargesSpentOnLevelUp: Int
+    var bankedUnitsBefore: Double
+    var bankedUnitsAfter: Double
     var levelBefore: Int
     var levelAfter: Int
     var storedChargesAfter: Int
@@ -335,10 +451,14 @@ final class WeeklyResolution {
         weekStartDate: Date,
         weekEndDate: Date,
         baselineAtStart: Int,
+        expectedTotal: Double,
         actualCompletedValue: Double,
+        weeklyDelta: Double,
         excessValue: Double,
         chargesEarned: Int,
         chargesSpentOnLevelUp: Int,
+        bankedUnitsBefore: Double,
+        bankedUnitsAfter: Double,
         levelBefore: Int,
         levelAfter: Int,
         storedChargesAfter: Int,
@@ -356,10 +476,14 @@ final class WeeklyResolution {
         self.weekStartDate = weekStartDate
         self.weekEndDate = weekEndDate
         self.baselineAtStart = baselineAtStart
+        self.expectedTotal = expectedTotal
         self.actualCompletedValue = actualCompletedValue
+        self.weeklyDelta = weeklyDelta
         self.excessValue = excessValue
         self.chargesEarned = chargesEarned
         self.chargesSpentOnLevelUp = chargesSpentOnLevelUp
+        self.bankedUnitsBefore = bankedUnitsBefore
+        self.bankedUnitsAfter = bankedUnitsAfter
         self.levelBefore = levelBefore
         self.levelAfter = levelAfter
         self.storedChargesAfter = storedChargesAfter
@@ -386,6 +510,7 @@ final class AppSettings {
     var hapticsEnabled: Bool
     var lockInWeeklyReview: Bool
     var themePreferenceRaw: String
+    var dashboardLayoutModeRaw: String
     var createdAt: Date
     var updatedAt: Date
 
@@ -401,6 +526,7 @@ final class AppSettings {
         hapticsEnabled: Bool = true,
         lockInWeeklyReview: Bool = true,
         themePreference: ThemePreference = .light,
+        dashboardLayoutMode: DashboardLayoutMode = .detailedCards,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -415,6 +541,7 @@ final class AppSettings {
         self.hapticsEnabled = hapticsEnabled
         self.lockInWeeklyReview = lockInWeeklyReview
         self.themePreferenceRaw = themePreference.rawValue
+        self.dashboardLayoutModeRaw = dashboardLayoutMode.rawValue
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -423,15 +550,37 @@ final class AppSettings {
         get { ThemePreference(rawValue: themePreferenceRaw) ?? .dark }
         set { themePreferenceRaw = newValue.rawValue }
     }
+
+    var dashboardLayoutMode: DashboardLayoutMode {
+        get { DashboardLayoutMode(rawValue: dashboardLayoutModeRaw) ?? .detailedCards }
+        set { dashboardLayoutModeRaw = newValue.rawValue }
+    }
 }
 
-struct HabitLogDraft: Sendable {
+struct LogEntryDraft: Identifiable {
+    let id = UUID()
+    let habit: Habit
     var value: Double
     var date: Date
+    var sessionType: String
     var note: String
     var sourceType: LogSourceType
 
-    static let `default` = HabitLogDraft(value: 1, date: .now, note: "", sourceType: .manual)
+    init(
+        habit: Habit,
+        value: Double? = nil,
+        date: Date = .now,
+        sessionType: String = "",
+        note: String = "",
+        sourceType: LogSourceType = .manual
+    ) {
+        self.habit = habit
+        self.value = value ?? habit.measurementType.defaultIncrement
+        self.date = date
+        self.sessionType = sessionType
+        self.note = note
+        self.sourceType = sourceType
+    }
 }
 
 struct HabitStreakSummary: Sendable {
@@ -461,6 +610,31 @@ struct MomentumStatus: Sendable {
     var score: Double
 }
 
+enum SkillEngagementState: String, Sendable {
+    case neutral
+    case nearCharge
+    case aheadOfTarget
+    case behindTarget
+    case pendingRankChange
+}
+
+enum SkillPacingStatus: String, Sendable {
+    case behind
+    case onPace
+    case ahead
+
+    var label: String {
+        switch self {
+        case .behind:
+            return "Behind Pace"
+        case .onPace:
+            return "On Pace"
+        case .ahead:
+            return "Ahead of Pace"
+        }
+    }
+}
+
 struct ChargeSnapshot: Sendable {
     var current: Int
     var maximum: Int
@@ -468,13 +642,51 @@ struct ChargeSnapshot: Sendable {
     var label: String
 }
 
+struct SkillLogEntrySnapshot: Identifiable, Sendable {
+    var id: UUID
+    var habitName: String
+    var valueLabel: String
+    var date: Date
+    var note: String
+    var sessionType: String?
+}
+
+struct DayLogSummary: Identifiable, Sendable {
+    var id: Date { date }
+    var date: Date
+    var totalValue: Double
+    var logCount: Int
+    var totalLabel: String
+    var isToday: Bool
+}
+
+struct SkillWeekSnapshot: Identifiable, Sendable {
+    var id: Date { week.start }
+    var week: WeekRange
+    var daySummaries: [DayLogSummary]
+    var totalValue: Double
+    var totalLabel: String
+    var logEntries: [SkillLogEntrySnapshot]
+}
+
+struct PendingRankChange: Sendable, Equatable {
+    var direction: RankChangeDirection
+    var fromLevel: Int
+    var toLevel: Int
+    var fromTitle: String
+    var toTitle: String
+    var recordedAt: Date
+    var reason: RankChangeReason?
+}
+
 struct RankSnapshot: Sendable {
     var level: Int
     var maximumLevel: Int
     var title: String
     var nextTitle: String?
-    var progressUnits: Int
-    var progressRequired: Int
+    var progressValue: Double
+    var progressValueLabel: String
+    var progressRequiredLabel: String
     var progressToNextLevel: Double
     var isAtMaximumRank: Bool
     var image: RankImageReference?
@@ -486,7 +698,68 @@ struct SkillProgressSnapshot: Sendable {
     var overview: String
     var currentWeekActual: Double
     var baseline: Int
-    var earnedRankProgressThisWeek: Int
+    var bankedProgressUnits: Double
+    var nextEvaluationDate: Date
+    var pendingRankChange: PendingRankChange?
+    var weeklyCounterLabel: String
+    var weeklyCounterValueLabel: String
+    var chargeExplanation: String
+    var nextEvaluationLabel: String
+    var nextRankImage: RankImageReference?
+    var bankedChargeLabel: String
+    var nextRankStatusLabel: String
+    var focusState: SkillEngagementState
+    var nextActionLabel: String
+    var pacingStatus: SkillPacingStatus
+    var bankCountdownLabel: String
+}
+
+enum DashboardInsightOption: String, CaseIterable, Identifiable, Sendable {
+    case whatToWorkOn
+    case whatImproved
+    case standardDay
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .whatToWorkOn:
+            return "What To Work On"
+        case .whatImproved:
+            return "What Improved"
+        case .standardDay:
+            return "Standard Day"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .whatToWorkOn:
+            return "target"
+        case .whatImproved:
+            return "chart.line.uptrend.xyaxis"
+        case .standardDay:
+            return "sun.max"
+        }
+    }
+}
+
+struct WorkFocusAnalysis: Sendable {
+    var headline: String
+    var focusSkillName: String
+    var recommendations: [String]
+}
+
+struct MonthlyImprovementAnalysis: Sendable {
+    var headline: String
+    var summary: String
+    var improvedSkills: [String]
+}
+
+struct StandardDayAnalysis: Sendable {
+    var headline: String
+    var rhythmSummary: String
+    var suggestions: [String]
 }
 
 nonisolated struct TrainingExportBundle: Codable, Sendable {
@@ -513,7 +786,8 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
             weekStartsOnMonday: true,
             hapticsEnabled: true,
             lockInWeeklyReview: true,
-            themePreferenceRaw: ThemePreference.dark.rawValue
+            themePreferenceRaw: ThemePreference.dark.rawValue,
+            dashboardLayoutModeRaw: DashboardLayoutMode.detailedCards.rawValue
         )
     )
 }
@@ -545,8 +819,17 @@ nonisolated struct StatExport: Codable, Sendable {
     var descriptor: String
     var currentLevel: Int
     var currentTierName: String
+    var startingBaseline: Int
     var currentBaseline: Int
     var storedCharges: Int
+    var bankedProgressUnits: Double
+    var lastResolvedWeekStart: Date?
+    var lastAcknowledgedLevel: Int
+    var pendingRankChangeDirectionRaw: String?
+    var pendingRankChangeFromLevel: Int?
+    var pendingRankChangeToLevel: Int?
+    var pendingRankChangeRecordedAt: Date?
+    var pendingRankChangeReasonRaw: String?
     var createdAt: Date
     var updatedAt: Date
     var isArchived: Bool
@@ -573,6 +856,7 @@ nonisolated struct HabitLogExport: Codable, Sendable {
     var habitID: UUID?
     var date: Date
     var numericValue: Double
+    var sessionType: String?
     var note: String
     var sourceTypeRaw: String
     var createdAt: Date
@@ -586,10 +870,14 @@ nonisolated struct WeeklyResolutionExport: Codable, Sendable {
     var weekStartDate: Date
     var weekEndDate: Date
     var baselineAtStart: Int
+    var expectedTotal: Double
     var actualCompletedValue: Double
+    var weeklyDelta: Double
     var excessValue: Double
     var chargesEarned: Int
     var chargesSpentOnLevelUp: Int
+    var bankedUnitsBefore: Double
+    var bankedUnitsAfter: Double
     var levelBefore: Int
     var levelAfter: Int
     var storedChargesAfter: Int
@@ -612,4 +900,5 @@ nonisolated struct SettingsExport: Codable, Sendable {
     var hapticsEnabled: Bool
     var lockInWeeklyReview: Bool
     var themePreferenceRaw: String
+    var dashboardLayoutModeRaw: String
 }

@@ -67,7 +67,7 @@ struct SettingsView: View {
                 }
 
                 Section("Debug Tools") {
-                    Button("Resolve Pending Week") {
+                    Button("Sync Weekly Reports") {
                         _ = try? TrainingStore.resolvePendingWeek(context: modelContext)
                     }
                     ForEach(SampleProfile.allCases) { profile in

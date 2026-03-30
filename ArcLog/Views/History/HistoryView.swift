@@ -58,13 +58,13 @@ struct HistoryView: View {
 
                                     LineMark(
                                         x: .value("Week", week.weekStartDate, unit: .weekOfYear),
-                                        y: .value("Baseline", week.baselineAtStart)
+                                        y: .value("Baseline", week.expectedTotal)
                                     )
                                     .foregroundStyle(TrainingTheme.textSecondary)
 
                                     LineMark(
                                         x: .value("Week", week.weekStartDate, unit: .weekOfYear),
-                                        y: .value("Rank Progress", week.chargesEarned)
+                                        y: .value("Level", Double(week.levelAfter))
                                     )
                                     .lineStyle(.init(lineWidth: 2, dash: [4, 4]))
                                     .foregroundStyle(TrainingTheme.warning)
@@ -83,7 +83,9 @@ struct HistoryView: View {
                                         .foregroundStyle(TrainingTheme.textSecondary)
                                     Text("Rank: \(stat.currentTierName) · Level \(stat.rankLevel)/\(TrainingArcConfig.maximumRankLevel)")
                                         .foregroundStyle(TrainingTheme.textSecondary)
-                                    Text("Stored rank progress: \(stat.rankProgress)")
+                                    Text("Current charge: \(stat.chargeValue)")
+                                        .foregroundStyle(TrainingTheme.textSecondary)
+                                    Text("Banked units: \(MetricFormatting.shortMetric(stat.bankedProgressUnits))")
                                         .foregroundStyle(TrainingTheme.textSecondary)
                                 }
                             }

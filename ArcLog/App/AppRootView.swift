@@ -51,6 +51,7 @@ struct AppRootView: View {
         .environmentObject(router)
         .task {
             reloadSettings()
+            try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
         }
         .onOpenURL { url in
             guard let link = DeepLinkRouter.parse(url) else { return }
@@ -59,6 +60,7 @@ struct AppRootView: View {
                 router.open(route)
             case .externalLog(let event):
                 try? ExternalEventService.ingest(event, context: modelContext)
+                try? TrainingStore.refreshAllProgress(context: modelContext, reason: .logMutation)
             }
         }
         .preferredColorScheme(preferredColorScheme)

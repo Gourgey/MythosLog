@@ -7,6 +7,7 @@ struct HabitDetailView: View {
     let habit: Habit
 
     @State private var showingEditor = false
+    @State private var logDraft: LogEntryDraft?
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -52,19 +53,13 @@ struct HabitDetailView: View {
 
             Section("Quick Log") {
                 HabitQuickActionButtons(habit: habit, accent: accent) { value in
-                    _ = try? TrainingStore.log(
-                        habit: habit,
-                        value: value,
-                        date: .now,
-                        note: "",
-                        source: .manual,
-                        context: modelContext
-                    )
-                    if settings?.hapticsEnabled ?? true {
-                        HapticsService.impact()
-                    }
+                    logDraft = LogEntryDraft(habit: habit, value: value)
                 }
-                HabitManualLogForm(habit: habit, accent: accent)
+                Button("Custom Log") {
+                    logDraft = LogEntryDraft(habit: habit)
+                }
+                .buttonStyle(.bordered)
+                .tint(accent)
             }
 
             Section("Recent Logs") {
@@ -85,6 +80,11 @@ struct HabitDetailView: View {
                                 Text(log.note)
                                     .font(.caption)
                                     .foregroundStyle(TrainingTheme.textSecondary)
+                            }
+                            if let sessionType = log.sessionType {
+                                Text(sessionType)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(accent)
                             }
                         }
                         .swipeActions {
@@ -109,93 +109,150 @@ struct HabitDetailView: View {
         .sheet(isPresented: $showingEditor) {
             HabitEditorView(habit: habit)
         }
+        .sheet(item: $logDraft) { draft in
+            NavigationStack {
+                LogEntrySheetView(draft: draft, accent: accent) { submittedDraft in
+                    _ = try? TrainingStore.log(
+                        habit: submittedDraft.habit,
+                        value: submittedDraft.value,
+                        date: submittedDraft.date,
+                        sessionType: submittedDraft.sessionType,
+                        note: submittedDraft.note,
+                        source: submittedDraft.sourceType,
+                        context: modelContext
+                    )
+
+                    if settings?.hapticsEnabled ?? true {
+                        HapticsService.logSuccess()
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
 
-struct HabitManualLogForm: View {
+struct LogEntrySheetView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Query private var settingsRecords: [AppSettings]
-
-    let habit: Habit
+    @FocusState private var focusedField: FocusField?
+    @State private var workingDraft: LogEntryDraft
     let accent: Color
-    var dismissOnSubmit = false
+    let onSave: (LogEntryDraft) -> Void
 
-    @State private var amount: Double
-    @State private var logDate = Date()
-    @State private var note = ""
-    @State private var sourceType: LogSourceType = .manual
-
-    init(habit: Habit, accent: Color, dismissOnSubmit: Bool = false) {
-        self.habit = habit
-        self.accent = accent
-        self.dismissOnSubmit = dismissOnSubmit
-        _amount = State(initialValue: habit.measurementType.defaultIncrement)
+    private enum FocusField: Hashable {
+        case amount
+        case sessionType
+        case note
     }
 
-    private var settings: AppSettings? {
-        settingsRecords.first
+    init(draft: LogEntryDraft, accent: Color, onSave: @escaping (LogEntryDraft) -> Void) {
+        self.accent = accent
+        self.onSave = onSave
+        _workingDraft = State(initialValue: draft)
+    }
+
+    private var habit: Habit {
+        workingDraft.habit
     }
 
     var body: some View {
-        DatePicker("Date", selection: $logDate, displayedComponents: [.date])
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SurfaceCard(accent: accent) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(habit.name)
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
 
-        if habit.measurementType != .booleanSession {
-            HStack {
-                Text("Amount")
-                Spacer()
-                TextField("Amount", value: $amount, format: .number)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 120)
+                        Text("Choose the date and time for this entry, then confirm it with Enter.")
+                            .font(.subheadline)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+
+                        HStack(spacing: 12) {
+                            DatePicker("Date", selection: $workingDraft.date, displayedComponents: [.date])
+                                .datePickerStyle(.compact)
+                            DatePicker("Time", selection: $workingDraft.date, displayedComponents: [.hourAndMinute])
+                                .datePickerStyle(.compact)
+                        }
+                    }
+                }
+
+                SurfaceCard(accent: accent) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if habit.measurementType != .booleanSession {
+                            HStack {
+                                Text("Amount")
+                                    .foregroundStyle(TrainingTheme.textPrimary)
+                                Spacer()
+                                TextField("Amount", value: $workingDraft.value, format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .focused($focusedField, equals: .amount)
+                                    .frame(maxWidth: 140)
+                            }
+
+                            HStack(spacing: 10) {
+                                ForEach(habit.measurementType.quickStepValues, id: \.self) { step in
+                                    Button("+\(Int(step))") {
+                                        workingDraft.value += step
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(accent)
+                                }
+                            }
+                        } else {
+                            Label("This will log one completed session.", systemImage: "checkmark.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(accent)
+                        }
+
+                        TextField("Session type (optional)", text: $workingDraft.sessionType)
+                            .focused($focusedField, equals: .sessionType)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.next)
+
+                        TextField("Notes (optional)", text: $workingDraft.note, axis: .vertical)
+                            .focused($focusedField, equals: .note)
+                            .lineLimit(2...4)
+                    }
+                }
+
+                Button("Enter") {
+                    save()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(16)
+        }
+        .scrollContentBackground(.hidden)
+        .background(TrainingTheme.background.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle(habit.measurementType == .booleanSession ? "Log Session" : "Log Progress")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") {
+                    dismiss()
+                }
             }
 
-            HStack(spacing: 10) {
-                ForEach(habit.measurementType.quickStepValues, id: \.self) { step in
-                    Button("+\(Int(step))") {
-                        amount += step
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    focusedField = nil
                 }
             }
         }
-
-        Picker("Source", selection: $sourceType) {
-            ForEach(LogSourceType.allCases) { source in
-                Text(source.displayName).tag(source)
-            }
-        }
-        TextField("Note", text: $note)
-
-        Button(habit.measurementType == .booleanSession ? "Mark Complete" : "Log Entry") {
-            addLog()
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
     }
 
-    private func addLog() {
-        _ = try? TrainingStore.log(
-            habit: habit,
-            value: habit.measurementType == .booleanSession ? 1 : amount,
-            date: logDate,
-            note: note,
-            source: sourceType,
-            context: modelContext
-        )
-
-        if settings?.hapticsEnabled ?? true {
-            HapticsService.success()
+    private func save() {
+        if habit.measurementType == .booleanSession {
+            workingDraft.value = 1
+        } else {
+            workingDraft.value = max(0, workingDraft.value)
         }
-
-        amount = habit.measurementType.defaultIncrement
-        note = ""
-        sourceType = .manual
-        logDate = .now
-
-        if dismissOnSubmit {
-            dismiss()
-        }
+        onSave(workingDraft)
+        dismiss()
     }
 }

@@ -7,8 +7,22 @@ enum RankImageReference: Hashable, Sendable {
 
 struct ChargeConfiguration: Sendable {
     let maximumValue: Int
-    let fullChargeBaselineRatio: Double
     let label: String
+}
+
+struct BaselineOnboardingConfiguration: Sendable {
+    let question: String
+    let valueLabelSingular: String
+    let valueLabelPlural: String
+    let minimumValue: Int
+    let maximumValue: Int
+    let quickAdjustments: [Int]
+    let manualEntryLabel: String
+}
+
+struct RankProgressionConfiguration: Sendable {
+    let rollingWindowWeeks: Int
+    let levelThresholds: [Int]
 }
 
 struct RankLevelDefinition: Identifiable, Sendable {
@@ -50,16 +64,23 @@ struct HabitProgressionDefinition: Identifiable, Sendable {
     let defaultBaseline: Int
     let starterHabit: HabitTemplate
     let charge: ChargeConfiguration
+    let onboarding: BaselineOnboardingConfiguration
+    let progression: RankProgressionConfiguration
     let ranks: [RankLevelDefinition]
 
     var id: StatKey { key }
 }
 
 enum TrainingArcConfig {
-    static let minimumBaseline = 1
+    static let minimumBaseline = 0
     static let minimumRankLevel = 1
     static let maximumRankLevel = 10
-    static let requiredRankProgressToLevelUp = 4
+    static let defaultRollingWindowWeeks = 4
+    static let defaultChargeMaximum = 4
+    static let defaultRankThresholds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    static let focusRankThresholds = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150]
+    static let intellectRankThresholds = [0, 10, 20, 30, 45, 60, 80, 100, 130, 170]
+    static let cardioRankThresholds = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 
     static let habitDefinitions: [HabitProgressionDefinition] = [
         HabitProgressionDefinition(
@@ -80,7 +101,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 3,
                 notes: "Sketching, design work, or creative practice."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many times a week do you draw, or paint?",
+                valueLabelSingular: "time per week",
+                valueLabelPlural: "times per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 30,
+                quickAdjustments: [1, 2, 3],
+                manualEntryLabel: "Custom number"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: defaultRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Idle Maker", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Casual Doodler", image: nil, description: nil),
@@ -112,7 +146,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 2,
                 notes: "Deep dives into topics that expand your range and perspective."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many research sessions do you do each week?",
+                valueLabelSingular: "session per week",
+                valueLabelPlural: "sessions per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 30,
+                quickAdjustments: [1, 2, 3],
+                manualEntryLabel: "Custom number"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: defaultRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Closed Observer", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Casual Browser", image: nil, description: nil),
@@ -144,7 +191,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 4,
                 notes: "Reflection, emotional processing, or personal writing."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many times a week do you journal, reflect, or reset?",
+                valueLabelSingular: "time per week",
+                valueLabelPlural: "times per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 30,
+                quickAdjustments: [1, 2, 3],
+                manualEntryLabel: "Custom number"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: defaultRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Untended Self", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Guarded Civilian", image: nil, description: nil),
@@ -176,7 +236,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 40,
                 notes: "Meditation, breathwork, or concentration training."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many minutes a week do you spend meditating or training focus?",
+                valueLabelSingular: "minute per week",
+                valueLabelPlural: "minutes per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 600,
+                quickAdjustments: [5, 10, 20],
+                manualEntryLabel: "Custom minutes"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: focusRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Scattered Starter", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Distracted Worker", image: nil, description: nil),
@@ -208,7 +281,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 30,
                 notes: "Non-fiction, study material, or deliberate learning."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many pages do you read each week?",
+                valueLabelSingular: "page per week",
+                valueLabelPlural: "pages per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 1_000,
+                quickAdjustments: [5, 10, 25],
+                manualEntryLabel: "Custom pages"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: intellectRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Dormant Student", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Casual Learner", image: nil, description: nil),
@@ -240,7 +326,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 3,
                 notes: "Strength training, sports, or any session that builds physical capacity."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many gym or strength sessions do you do each week?",
+                valueLabelSingular: "session per week",
+                valueLabelPlural: "sessions per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 30,
+                quickAdjustments: [1, 2, 3],
+                manualEntryLabel: "Custom number"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: defaultRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Frail Elder", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Soft Civilian", image: nil, description: nil),
@@ -272,7 +371,20 @@ enum TrainingArcConfig {
                 targetPerPeriod: 60,
                 notes: "Running, cycling, rowing, or sustained conditioning work."
             ),
-            charge: ChargeConfiguration(maximumValue: 4, fullChargeBaselineRatio: 1.0, label: "Charge"),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many minutes of cardio do you do each week?",
+                valueLabelSingular: "minute per week",
+                valueLabelPlural: "minutes per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 1_000,
+                quickAdjustments: [5, 10, 25],
+                manualEntryLabel: "Custom minutes"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: cardioRankThresholds
+            ),
             ranks: [
                 RankLevelDefinition(level: 1, title: "Winded Walker", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Casual Mover", image: nil, description: nil),
@@ -335,25 +447,90 @@ enum TrainingArcConfig {
         definition(for: statKey).charge
     }
 
-    static func currentCharge(for statKey: StatKey, actual: Double, baseline: Int) -> Int {
-        let config = chargeConfiguration(for: statKey)
-        let safeBaseline = max(Double(baseline), 1)
-        let ratio = max(0, actual) / safeBaseline
-        let normalized = min(ratio / max(config.fullChargeBaselineRatio, 0.25), 1)
-        let rawValue = Int((normalized * Double(config.maximumValue)).rounded(.down))
-
-        if actual > 0 {
-            return min(config.maximumValue, max(1, rawValue))
-        }
-
-        return 0
+    static func onboardingConfiguration(for statKey: StatKey) -> BaselineOnboardingConfiguration {
+        definition(for: statKey).onboarding
     }
 
-    static func chargeProgress(for statKey: StatKey, actual: Double, baseline: Int) -> Double {
-        let config = chargeConfiguration(for: statKey)
-        let safeBaseline = max(Double(baseline), 1)
-        let ratio = max(0, actual) / safeBaseline
-        return min(ratio / max(config.fullChargeBaselineRatio, 0.25), 1)
+    static func progressionConfiguration(for statKey: StatKey) -> RankProgressionConfiguration {
+        definition(for: statKey).progression
+    }
+
+    static func rollingWindowWeeks(for statKey: StatKey) -> Int {
+        progressionConfiguration(for: statKey).rollingWindowWeeks
+    }
+
+    static func rankThresholds(for statKey: StatKey) -> [Int] {
+        progressionConfiguration(for: statKey).levelThresholds
+    }
+
+    static func requiredWeeklyValue(for statKey: StatKey, level: Int) -> Int {
+        let thresholds = rankThresholds(for: statKey)
+        let clampedLevel = clampedRankLevel(level)
+        let index = min(max(clampedLevel - 1, 0), thresholds.count - 1)
+        return thresholds[index]
+    }
+
+    static func lowerRankThreshold(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard clampedLevel > minimumRankLevel else { return nil }
+        return requiredWeeklyValue(for: statKey, level: clampedLevel - 1)
+    }
+
+    static func nextRankThreshold(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard clampedLevel < maximumRankLevel else { return nil }
+        return requiredWeeklyValue(for: statKey, level: clampedLevel + 1)
+    }
+
+    static func rankLevel(for statKey: StatKey, weeklyValue: Double) -> Int {
+        let thresholds = rankThresholds(for: statKey)
+        let flooredValue = Int(max(0, weeklyValue).rounded(.down))
+
+        for (index, threshold) in thresholds.enumerated().reversed() where flooredValue >= threshold {
+            return clampedRankLevel(index + 1)
+        }
+
+        return minimumRankLevel
+    }
+
+    static func baselineValueLabel(for statKey: StatKey, value: Int) -> String {
+        let onboarding = onboardingConfiguration(for: statKey)
+        let label = value == 1 ? onboarding.valueLabelSingular : onboarding.valueLabelPlural
+        return "\(value) \(label)"
+    }
+
+    static func effectiveWeeklyTarget(for statKey: StatKey, level: Int) -> Int {
+        max(requiredWeeklyValue(for: statKey, level: level), 1)
+    }
+
+    static func nextRankChargeRequirement(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard clampedLevel < maximumRankLevel else { return nil }
+        return effectiveWeeklyTarget(for: statKey, level: clampedLevel + 1)
+    }
+
+    static func progressionBridgeUnits(for statKey: StatKey, fromLevel: Int, toLevel: Int) -> Double {
+        let fromTarget = effectiveWeeklyTarget(for: statKey, level: fromLevel)
+        let toTarget = effectiveWeeklyTarget(for: statKey, level: toLevel)
+        return Double(fromTarget * toTarget)
+    }
+
+    static func displayedCharge(for statKey: StatKey, bankedUnits: Double, level: Int) -> Int {
+        let target = effectiveWeeklyTarget(for: statKey, level: level)
+        guard target > 0 else { return 0 }
+        return max(0, Int(floor(bankedUnits / Double(target))))
+    }
+
+    static func chargeProgress(for statKey: StatKey, bankedUnits: Double, level: Int) -> Double {
+        let clampedLevel = clampedRankLevel(level)
+        guard let nextChargeRequirement = nextRankChargeRequirement(for: statKey, level: clampedLevel), clampedLevel < maximumRankLevel else {
+            return 1
+        }
+
+        let currentTarget = Double(effectiveWeeklyTarget(for: statKey, level: clampedLevel))
+        let requiredUnits = currentTarget * Double(nextChargeRequirement)
+        guard requiredUnits > 0 else { return 0 }
+        return min(max(max(bankedUnits, 0) / requiredUnits, 0), 1)
     }
 
     static func color(for token: String) -> Color {

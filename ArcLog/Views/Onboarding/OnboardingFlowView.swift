@@ -4,9 +4,11 @@ import SwiftUI
 struct OnboardingFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @FocusState private var focusedBaselineKey: StatKey?
     @State private var step = 0
     @State private var selectedHabitKeys = Set(TrainingArcConfig.defaultHabitTemplates.map(\.systemKey))
     @State private var baselines = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, $0.defaultBaseline) })
+    @State private var baselineDrafts = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, "\($0.defaultBaseline)") })
     @State private var enableNotifications = false
     let onComplete: () -> Void
 
@@ -73,7 +75,7 @@ struct OnboardingFlowView: View {
             }
 
             SurfaceCard(accent: TrainingArcConfig.color(for: "strength")) {
-                Text("Hit the baseline to maintain the build. Exceed it to earn rank progress. Charge reflects your current momentum.")
+                Text("Set the baseline that matches your real current form. Your starting rank comes from that baseline, while charge reflects banked weekly surplus toward the next rank.")
                     .font(.body)
                     .foregroundStyle(TrainingTheme.textPrimary)
             }
@@ -129,39 +131,32 @@ struct OnboardingFlowView: View {
     private var baselineStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Set Initial Baselines")
+                Text("Find your Rank")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                     .foregroundStyle(TrainingTheme.textPrimary)
-                Text("This is the standard you want to maintain each week before extra work becomes rank progress.")
+                Text("Set the amount you honestly do in a normal week. Your starting level updates live, along with the next and lower baseline targets.")
                     .foregroundStyle(TrainingTheme.textSecondary)
 
                 ForEach(TrainingArcConfig.statTemplates) { template in
-                    SurfaceCard(accent: TrainingArcConfig.color(for: template.colorToken)) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(template.key.displayName)
-                                    .font(.headline)
-                                    .foregroundStyle(TrainingTheme.textPrimary)
-                                Text("Default habit target: \(template.defaultBaseline)")
-                                    .font(.caption)
-                                    .foregroundStyle(TrainingTheme.textSecondary)
-                            }
-                            Spacer()
-                            Stepper(value: Binding(
-                                get: { baselines[template.key] ?? template.defaultBaseline },
-                                set: { baselines[template.key] = max(1, $0) }
-                            ), in: 1...120) {
-                                Text("\(baselines[template.key] ?? template.defaultBaseline)")
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(TrainingTheme.textPrimary)
-                            }
-                            .labelsHidden()
-                        }
-                    }
+                    baselineCard(for: template)
                 }
             }
             .padding(24)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    focusedBaselineKey = nil
+                }
+            }
+        }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                focusedBaselineKey = nil
+            }
+        )
     }
 
     private var reviewStep: some View {
@@ -170,15 +165,15 @@ struct OnboardingFlowView: View {
                 Text("Weekly Resolution")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                     .foregroundStyle(TrainingTheme.textPrimary)
-                Text("Each week ends with a training report. Surplus effort becomes rank progress. Charge remains your current momentum signal. Neglect still triggers stagnation and, eventually, regression.")
+                Text("The weekly report becomes a summary screen. Rank updates after completed weeks are resolved, while charge tracks banked surplus toward the next rank.")
                     .foregroundStyle(TrainingTheme.textSecondary)
 
                 SurfaceCard(accent: TrainingArcConfig.color(for: "curiosity")) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Baseline 3, actual 5 = +2 rank progress", systemImage: "bolt.fill")
-                        Label("Reach 4 stored progress to raise the rank by 1", systemImage: "arrow.up.circle.fill")
-                        Label("Charge fills from current-week momentum", systemImage: "flame.fill")
-                        Label("Miss the build for too long and the system pushes back", systemImage: "exclamationmark.triangle.fill")
+                        Label("Your opening baseline assigns your starting rank", systemImage: "figure.stand")
+                        Label("Your latest completed week resolves at the end of Sunday", systemImage: "calendar")
+                        Label("Charge now banks surplus across weeks toward the next rank", systemImage: "flame.fill")
+                        Label("Backdated logs can still update the current build when they matter", systemImage: "clock.arrow.circlepath")
                     }
                     .foregroundStyle(TrainingTheme.textPrimary)
                 }
@@ -225,5 +220,184 @@ struct OnboardingFlowView: View {
 
     private func accentColor(for template: HabitTemplate) -> Color {
         TrainingArcConfig.color(for: template.statKey.rawValue)
+    }
+
+    private func baselineCard(for template: StatTemplate) -> some View {
+        let onboarding = TrainingArcConfig.onboardingConfiguration(for: template.key)
+        let baseline = baselines[template.key] ?? template.defaultBaseline
+        let currentLevel = TrainingArcConfig.rankLevel(for: template.key, weeklyValue: Double(baseline))
+        let currentTitle = TrainingArcConfig.rankTitle(for: template.key, level: currentLevel)
+        let lowerThreshold = TrainingArcConfig.lowerRankThreshold(for: template.key, level: currentLevel)
+        let nextThreshold = TrainingArcConfig.nextRankThreshold(for: template.key, level: currentLevel)
+
+        return SurfaceCard(accent: TrainingArcConfig.color(for: template.colorToken)) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(template.key.displayName)
+                        .font(.headline)
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                    Text(onboarding.question)
+                        .font(.subheadline)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
+
+                HStack(spacing: 14) {
+                    baselineAdjustButton(systemName: "minus", action: {
+                        adjustBaseline(for: template.key, delta: -1)
+                    })
+
+                    VStack(spacing: 4) {
+                        Text("\(baseline)")
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                        Text(TrainingArcConfig.baselineValueLabel(for: template.key, value: baseline))
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    baselineAdjustButton(systemName: "plus", action: {
+                        adjustBaseline(for: template.key, delta: 1)
+                    })
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(onboarding.quickAdjustments, id: \.self) { amount in
+                            quickAdjustmentButton(title: "-\(amount)") {
+                                adjustBaseline(for: template.key, delta: -amount)
+                            }
+
+                            quickAdjustmentButton(title: "+\(amount)") {
+                                adjustBaseline(for: template.key, delta: amount)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                HStack(spacing: 12) {
+                    Text(onboarding.manualEntryLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+
+                    TextField(onboarding.manualEntryLabel, text: bindingForBaselineDraft(of: template.key))
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedBaselineKey, equals: template.key)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(TrainingTheme.background.opacity(0.5))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(TrainingTheme.border, lineWidth: 1)
+                        )
+                        .frame(maxWidth: 140)
+
+                    Spacer()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Level \(currentLevel) · \(currentTitle)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+
+                    Text(lowerRankText(for: template.key, currentLevel: currentLevel, threshold: lowerThreshold))
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+
+                    Text(nextRankText(for: template.key, currentLevel: currentLevel, threshold: nextThreshold))
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func baselineAdjustButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle()
+                        .fill(TrainingTheme.background.opacity(0.7))
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(TrainingTheme.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+    }
+
+    private func quickAdjustmentButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(TrainingTheme.background.opacity(0.55))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(TrainingTheme.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func bindingForBaselineDraft(of key: StatKey) -> Binding<String> {
+        Binding(
+            get: { baselineDrafts[key] ?? "\(baselines[key] ?? TrainingArcConfig.definition(for: key).defaultBaseline)" },
+            set: { updateBaselineDraft($0, for: key) }
+        )
+    }
+
+    private func updateBaselineDraft(_ draft: String, for key: StatKey) {
+        let onboarding = TrainingArcConfig.onboardingConfiguration(for: key)
+        let digitsOnly = draft.filter(\.isNumber)
+        baselineDrafts[key] = digitsOnly
+
+        guard !digitsOnly.isEmpty else { return }
+        let parsedValue = Int(digitsOnly) ?? onboarding.minimumValue
+        let clampedValue = min(max(parsedValue, onboarding.minimumValue), onboarding.maximumValue)
+        baselines[key] = clampedValue
+        baselineDrafts[key] = "\(clampedValue)"
+    }
+
+    private func adjustBaseline(for key: StatKey, delta: Int) {
+        let onboarding = TrainingArcConfig.onboardingConfiguration(for: key)
+        let currentValue = baselines[key] ?? TrainingArcConfig.definition(for: key).defaultBaseline
+        let nextValue = min(max(currentValue + delta, onboarding.minimumValue), onboarding.maximumValue)
+        baselines[key] = nextValue
+        baselineDrafts[key] = "\(nextValue)"
+    }
+
+    private func lowerRankText(for key: StatKey, currentLevel: Int, threshold: Int?) -> String {
+        guard let threshold else {
+            return "Lower rank: Level 1 starts at \(TrainingArcConfig.baselineValueLabel(for: key, value: TrainingArcConfig.requiredWeeklyValue(for: key, level: 1)))."
+        }
+
+        return "Lower rank: Level \(currentLevel - 1) at \(TrainingArcConfig.baselineValueLabel(for: key, value: threshold))."
+    }
+
+    private func nextRankText(for key: StatKey, currentLevel: Int, threshold: Int?) -> String {
+        guard let threshold else {
+            return "Next rank: You are already at Level \(TrainingArcConfig.maximumRankLevel)."
+        }
+
+        return "Next rank: Level \(currentLevel + 1) at \(TrainingArcConfig.baselineValueLabel(for: key, value: threshold))."
     }
 }
