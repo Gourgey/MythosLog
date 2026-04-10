@@ -105,6 +105,36 @@ struct ArcLogTests {
         #expect(settings.dashboardLayoutMode == .detailedCards)
     }
 
+    @Test func strengthRosterUsesUnlockedAndLockedAssetsByLevel() {
+        let entries = TrainingArcConfig.characterRosterEntries(for: .strength, currentLevel: 4)
+
+        #expect(entries.count == 10)
+        #expect(entries[0].isLocked == false)
+        #expect(entries[3].isLocked == false)
+        #expect(entries[4].isLocked == true)
+
+        if case .asset(let currentName)? = entries[3].image {
+            #expect(currentName == "Strength_Level_4")
+        } else {
+            Issue.record("Expected unlocked Strength art for level 4.")
+        }
+
+        if case .asset(let lockedName)? = entries[4].image {
+            #expect(lockedName == "Strength_Level_5_Locked")
+        } else {
+            Issue.record("Expected locked Strength art for level 5.")
+        }
+    }
+
+    @Test func nonStrengthRosterFallsBackWithoutInvalidLockedAssets() {
+        let entries = TrainingArcConfig.characterRosterEntries(for: .focus, currentLevel: 2)
+
+        #expect(entries.count == 10)
+        #expect(entries[1].isLocked == false)
+        #expect(entries[2].isLocked == true)
+        #expect(entries[2].image == nil)
+    }
+
     @Test @MainActor func progressSnapshotUsesExplicitWeeklyLabels() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let snapshot = TrainingStore.progressSnapshot(for: fixture.stat, settings: nil, now: isoDate("2026-03-30T12:00:00Z"))
@@ -117,6 +147,42 @@ struct ArcLogTests {
         #expect(snapshot.nextActionLabel.contains("Log"))
         #expect(snapshot.pacingStatus == .behind)
         #expect(snapshot.focusState == .behindTarget)
+    }
+
+    @Test @MainActor func recentLogSnapshotsCanFilterToRollingSevenDayWindow() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let now = isoDate("2026-04-09T12:00:00Z")
+
+        fixture.context.insert(
+            HabitLog(
+                date: isoDate("2026-04-08T09:00:00Z"),
+                numericValue: 1,
+                note: "Recent",
+                sourceType: .manual,
+                createdAt: isoDate("2026-04-08T09:00:00Z"),
+                habit: fixture.habit
+            )
+        )
+
+        fixture.context.insert(
+            HabitLog(
+                date: isoDate("2026-03-30T09:00:00Z"),
+                numericValue: 1,
+                note: "Old",
+                sourceType: .manual,
+                createdAt: isoDate("2026-03-30T09:00:00Z"),
+                habit: fixture.habit
+            )
+        )
+
+        try fixture.context.save()
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: now)
+        let snapshots = TrainingStore.recentLogSnapshots(for: fixture.stat, since: cutoff)
+
+        #expect(snapshots.count == 1)
+        #expect(snapshots.first?.note == "Recent")
+        #expect(snapshots.first?.date == isoDate("2026-04-08T09:00:00Z"))
     }
 
     @Test @MainActor func sessionTypePersistsOnLoggedEntries() throws {

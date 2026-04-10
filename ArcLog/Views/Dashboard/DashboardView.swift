@@ -16,8 +16,8 @@ struct DashboardView: View {
     @State private var flashedStatID: UUID?
     @State private var topMenuState: DashboardTopMenuState = .none
     @State private var presentedInsight: DashboardInsightOption?
-    private let compactGridColumnCount = 3
-    private let compactGridSpacing: CGFloat = 12
+    private let compactGridColumnCount = 2
+    private let compactGridSpacing: CGFloat = 16
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -70,6 +70,7 @@ struct DashboardView: View {
             }
         }
         .navigationTitle("Dashboard")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
         }
@@ -232,12 +233,7 @@ struct DashboardView: View {
     }
 
     private var compactGridDashboard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Skills")
-            Text("Compact mode keeps your skills visible at a glance. Tap any tile to open the character sheet.")
-                .font(.subheadline)
-                .foregroundStyle(TrainingTheme.textSecondary)
-
+        VStack(alignment: .leading, spacing: 0) {
             CenteredDashboardGridLayout(columns: compactGridColumnCount, spacing: compactGridSpacing) {
                 ForEach(activeStats) { stat in
                     DashboardGridTile(

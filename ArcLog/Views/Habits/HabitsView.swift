@@ -11,6 +11,8 @@ struct SkillDetailView: View {
     @State private var presentedRankChange: PendingRankChange?
     @State private var selectedWeekStart = TrainingStore.progressionWeek(containing: .now).start
     @State private var showingFullHistory = false
+    @State private var showingCharacterRoster = false
+    @State private var presentedHelpTopic: SkillHelpTopic?
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -45,7 +47,10 @@ struct SkillDetailView: View {
     }
 
     private var recentSnapshots: [SkillLogEntrySnapshot] {
-        TrainingStore.recentLogSnapshots(for: stat, limit: 5)
+        TrainingStore.recentLogSnapshots(
+            for: stat,
+            since: Calendar.current.date(byAdding: .day, value: -7, to: .now)
+        )
     }
 
     var body: some View {
@@ -103,11 +108,19 @@ struct SkillDetailView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .sheet(item: $presentedHelpTopic) { topic in
+            SkillHelpSheet(topic: topic)
+                .presentationDetents([.height(220)])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingFullHistory) {
             NavigationStack {
                 SkillHistorySheetView(stat: stat, accent: accent)
             }
             .presentationDetents([.large])
+        }
+        .navigationDestination(isPresented: $showingCharacterRoster) {
+            SkillCharacterRosterView(stat: stat)
         }
         .fullScreenCover(isPresented: Binding(
             get: { presentedRankChange != nil },
@@ -131,33 +144,67 @@ struct SkillDetailView: View {
     private var heroSection: some View {
         SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 16) {
-                sectionKicker("Current Form")
+                sectionHeaderRow("Current Form", topic: .currentForm)
 
-                RankArtworkView(
-                    habitName: stat.name,
-                    level: snapshot.rank.level,
-                    title: snapshot.rank.title,
-                    image: snapshot.rank.image,
-                    accent: accent
-                )
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(stat.name)
-                        .font(.system(.title2, design: .rounded).weight(.black))
+                Button {
+                    showingCharacterRoster = true
+                } label: {
+                    RankArtworkView(
+                        habitName: stat.name,
+                        level: snapshot.rank.level,
+                        title: snapshot.rank.title,
+                        image: snapshot.rank.image,
+                        accent: accent
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.3.sequence.fill")
+                            Text("Roster")
+                        }
+                        .font(.caption.weight(.black))
                         .foregroundStyle(TrainingTheme.textPrimary)
-                    Text(snapshot.overview)
-                        .font(.subheadline)
-                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(.white.opacity(0.94))
+                        )
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(TrainingTheme.borderStrong.opacity(0.16), lineWidth: 0.9)
+                        )
+                        .padding(16)
+                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(stat.name) character roster")
+                .accessibilityHint("Opens the full progression roster for this skill.")
 
                 HStack(spacing: 10) {
-                    summaryPill(title: "Rank", value: "Level \(snapshot.rank.level) · \(snapshot.rank.title)", tint: accent)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(snapshot.rank.title)
+                            .font(.system(.title2, design: .rounded).weight(.black))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+
+                        Text("LV \(snapshot.rank.level)")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(accent.opacity(0.12))
+                            )
+                    }
+
+                    Spacer(minLength: 12)
+
                     summaryPill(title: snapshot.weeklyCounterLabel, value: snapshot.weeklyCounterValueLabel, tint: accent.opacity(0.78))
                 }
 
                 HStack(spacing: 10) {
-                    summaryPill(title: "Current Target", value: MetricFormatting.shortMetric(Double(snapshot.baseline)), tint: TrainingTheme.backgroundTertiary)
                     summaryPill(title: "Pace", value: snapshot.pacingStatus.label, tint: paceTint)
+                    summaryPill(title: "Target", value: MetricFormatting.shortMetric(Double(snapshot.baseline)), tint: TrainingTheme.backgroundTertiary)
                 }
 
                 if let primaryHabit {
@@ -174,7 +221,7 @@ struct SkillDetailView: View {
     private var chargeSection: some View {
         SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionKicker("Charge")
+                sectionHeaderRow("Charge", topic: .charge)
 
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -184,23 +231,11 @@ struct SkillDetailView: View {
                         Text(snapshot.nextActionLabel)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(accent)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
                     chargeDots
                 }
-
-                Text(snapshot.chargeExplanation)
-                    .font(.subheadline)
-                    .foregroundStyle(TrainingTheme.textSecondary)
-
-                HStack(spacing: 10) {
-                    summaryPill(title: "Banks", value: snapshot.nextEvaluationLabel, tint: TrainingTheme.backgroundTertiary)
-                    summaryPill(title: "Countdown", value: snapshot.bankCountdownLabel, tint: TrainingTheme.backgroundTertiary)
-                }
-
-                Text("Logs you enter this week raise your running total immediately, but the rank only changes when the Sunday bank resolves.")
-                    .font(.subheadline)
-                    .foregroundStyle(TrainingTheme.textSecondary)
             }
         }
     }
@@ -208,7 +243,7 @@ struct SkillDetailView: View {
     private func nextRankSection(nextTitle: String) -> some View {
         SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionKicker("Next Rank")
+                sectionHeaderRow("Next Rank", topic: .nextRank)
 
                 HStack(spacing: 14) {
                     RankArtworkView(
@@ -221,7 +256,7 @@ struct SkillDetailView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Level \(snapshot.rank.level + 1)")
+                        Text("LV \(snapshot.rank.level + 1)")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(TrainingTheme.textSecondary)
                         Text(nextTitle)
@@ -230,6 +265,7 @@ struct SkillDetailView: View {
                         Text(snapshot.nextRankStatusLabel)
                             .font(.subheadline)
                             .foregroundStyle(TrainingTheme.textSecondary)
+                            .lineLimit(2)
                     }
 
                     Spacer()
@@ -282,7 +318,25 @@ struct SkillDetailView: View {
         SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    sectionKicker("This Week")
+                    HStack(spacing: 10) {
+                        sectionKicker("This Week")
+
+                        Button {
+                            presentedHelpTopic = .thisWeek
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(TrainingTheme.textMuted)
+                                .frame(width: 26, height: 26)
+                                .background(
+                                    Circle()
+                                        .fill(.white.opacity(0.72))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("This Week help")
+                    }
+
                     Spacer()
                     Button {
                         showingFullHistory = true
@@ -353,10 +407,10 @@ struct SkillDetailView: View {
     private var recentSessionsSection: some View {
         SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 12) {
-                sectionKicker("Recent Sessions")
+                sectionHeaderRow("Recent Sessions", topic: .recentSessions)
 
                 if recentSnapshots.isEmpty {
-                    Text("Recent logs will show up here once you start tracking this skill.")
+                    Text("No sessions logged in the last 7 days.")
                         .foregroundStyle(TrainingTheme.textSecondary)
                 } else {
                     ForEach(recentSnapshots) { entry in
@@ -417,6 +471,31 @@ struct SkillDetailView: View {
         )
     }
 
+    private func sectionHeaderRow(_ title: String, topic: SkillHelpTopic?) -> some View {
+        HStack(spacing: 10) {
+            sectionKicker(title)
+
+            Spacer(minLength: 8)
+
+            if let topic {
+                Button {
+                    presentedHelpTopic = topic
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(TrainingTheme.textMuted)
+                        .frame(width: 26, height: 26)
+                        .background(
+                            Circle()
+                                .fill(.white.opacity(0.72))
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(title) help")
+            }
+        }
+    }
+
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(.title3, design: .rounded).weight(.bold))
@@ -440,6 +519,68 @@ struct SkillDetailView: View {
     private func presentPendingRankChangeIfNeeded() {
         guard presentedRankChange == nil, let pending = stat.pendingRankChange else { return }
         presentedRankChange = pending
+    }
+}
+
+private enum SkillHelpTopic: String, Identifiable {
+    case currentForm
+    case charge
+    case nextRank
+    case thisWeek
+    case recentSessions
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .currentForm:
+            return "Current Form"
+        case .charge:
+            return "Charge"
+        case .nextRank:
+            return "Next Rank"
+        case .thisWeek:
+            return "This Week"
+        case .recentSessions:
+            return "Recent Sessions"
+        }
+    }
+
+    var body: String {
+        switch self {
+        case .currentForm:
+            return "Tap the character art to open the full roster and browse every form in this skill's progression."
+        case .charge:
+            return "Strong weeks bank charge toward the next rank. Your visible charge fills as you stack progress, and promotions resolve when the weekly bank checks in."
+        case .nextRank:
+            return "This preview shows the next form you are building toward. Locked forms stay ahead of you until enough charge is banked."
+        case .thisWeek:
+            return "This section shows your current progression week, daily totals, and the exact logs that count toward this week's pace."
+        case .recentSessions:
+            return "Recent Sessions shows a rolling seven-day view of your latest logs for this skill, newest first."
+        }
+    }
+}
+
+private struct SkillHelpSheet: View {
+    let topic: SkillHelpTopic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(topic.title)
+                .font(.system(.title3, design: .rounded).weight(.black))
+                .foregroundStyle(TrainingTheme.textPrimary)
+
+            Text(topic.body)
+                .font(.subheadline)
+                .foregroundStyle(TrainingTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(20)
+        .background(TrainingTheme.background.ignoresSafeArea())
     }
 }
 

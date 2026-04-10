@@ -156,9 +156,7 @@ struct RankArtworkView: View {
             dashboardArtworkShell(cornerRadius: 24)
 
             if let image {
-                configuredImage(for: image)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                dashboardCharacterImage(for: image, scale: 1.16)
             } else {
                 dashboardCompactPlaceholderArtwork
             }
@@ -166,27 +164,23 @@ struct RankArtworkView: View {
             dashboardLevelPill
                 .padding(10)
         }
-        .frame(width: 96, height: 126)
+        .frame(width: 104, height: 136)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: accent.opacity(0.22), radius: 16, x: 0, y: 8)
     }
 
     private var dashboardTileArtwork: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             dashboardArtworkShell(cornerRadius: 26)
 
             if let image {
-                configuredImage(for: image)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                dashboardCharacterImage(for: image, scale: 1.28)
             } else {
                 dashboardTilePlaceholderArtwork
             }
-
-            dashboardLevelPill
-                .padding(10)
         }
-        .frame(width: 104, height: 110)
+        .frame(maxWidth: .infinity)
+        .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: accent.opacity(0.24), radius: 16, x: 0, y: 8)
     }
@@ -300,7 +294,7 @@ struct RankArtworkView: View {
     }
 
     private var dashboardTilePlaceholderArtwork: some View {
-        dashboardGlyphPlaceholder(crestSize: 54, bottomLabel: habitName.uppercased())
+        dashboardGlyphPlaceholder(crestSize: 78, bottomLabel: habitName.uppercased())
             .padding(.top, 14)
     }
 
@@ -313,6 +307,19 @@ struct RankArtworkView: View {
                 .scaledToFit()
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCharacterImage(for reference: RankImageReference, scale: CGFloat) -> some View {
+        switch reference {
+        case .asset(let name):
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .clipped()
         }
     }
 
@@ -342,16 +349,6 @@ struct RankArtworkView: View {
                     .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
                     .padding(2)
             )
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(accent.opacity(0.16))
-                    .frame(width: 14, height: 14)
-                    .overlay(
-                        Circle()
-                            .strokeBorder(accent.opacity(0.36), lineWidth: 1)
-                    )
-                    .padding(10)
-            }
     }
 
     private func dashboardGlyphPlaceholder(crestSize: CGFloat, bottomLabel: String) -> some View {
@@ -414,7 +411,6 @@ struct RankArtworkView: View {
                     .strokeBorder(accent.opacity(0.18), lineWidth: 0.9)
             )
     }
-
     private var habitInitial: String {
         habitName
             .trimmingCharacters(in: .whitespacesAndNewlines)

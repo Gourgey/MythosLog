@@ -410,8 +410,12 @@ enum TrainingStore {
             }
     }
 
-    static func recentLogSnapshots(for stat: StatDomain, limit: Int? = nil) -> [SkillLogEntrySnapshot] {
+    static func recentLogSnapshots(for stat: StatDomain, limit: Int? = nil, since: Date? = nil) -> [SkillLogEntrySnapshot] {
         let logs = recentLogs(for: stat)
+            .filter { log in
+                guard let since else { return true }
+                return log.date >= since
+            }
         let trimmed = limit.map { Array(logs.prefix($0)) } ?? logs
         return trimmed.map(logSnapshot(for:))
     }
@@ -735,7 +739,13 @@ enum TrainingStore {
                 now: now
             ),
             nextEvaluationLabel: nextEvaluationLabel(now: now),
-            nextRankImage: nextRank?.image,
+            nextRankImage: nextRank.map { _ in
+                TrainingArcConfig.progressionImage(
+                    for: definition.key,
+                    level: currentLevel + 1,
+                    currentLevel: currentLevel
+                ) ?? nextRank?.image
+            } ?? nil,
             bankedChargeLabel: nextRank == nil ? "Maximum rank reached" : "\(chargeValue) / \(chargeMaximum) charges banked",
             nextRankStatusLabel: nextRankStatusLabel(
                 for: stat,

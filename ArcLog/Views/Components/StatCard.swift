@@ -411,22 +411,38 @@ struct DashboardGridTile: View {
 
     var body: some View {
         Button(action: onOpenDetail) {
-            VStack(spacing: 12) {
-                HStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(stat.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                HStack(alignment: .center, spacing: 10) {
                     Image(systemName: stat.iconName)
                         .font(.caption.weight(.black))
                         .foregroundStyle(accent)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 30, height: 30)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(accent.opacity(0.12))
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(accent.opacity(0.14))
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(accent.opacity(0.16), lineWidth: 0.9)
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .strokeBorder(accent.opacity(0.18), lineWidth: 1)
                         )
-                    Spacer()
-                    lvlChip
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(snapshot.rank.title)
+                        .font(.system(.subheadline, design: .rounded).weight(.black))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    levelBadge
                 }
 
                 RankArtworkView(
@@ -437,44 +453,49 @@ struct DashboardGridTile: View {
                     accent: stateAccent,
                     style: .dashboardTile
                 )
+                .frame(maxWidth: .infinity)
 
-                Text(stat.name)
-                    .font(.system(.headline, design: .rounded).weight(.black))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text("CHARGES")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(TrainingTheme.textMuted)
 
-                Text(snapshot.rank.title.uppercased())
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(TrainingTheme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                        Spacer()
 
-                HStack(spacing: 6) {
-                    ForEach(0..<DashboardChargeDots.maximumDots, id: \.self) { index in
-                        jewelTileDot(filled: index < filledChargeDots)
+                        Text("\(snapshot.charge.current) / \(snapshot.charge.maximum)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(0..<DashboardChargeDots.maximumDots, id: \.self) { index in
+                            jewelTileDot(filled: index < filledChargeDots)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
                 .background(
-                    Capsule()
-                        .fill(.white.opacity(0.88))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(.white.opacity(0.86))
                 )
                 .overlay(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(TrainingTheme.borderStrong.opacity(0.12), lineWidth: 1)
                 )
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
                                 TrainingTheme.card,
-                                .white.opacity(0.92),
-                                TrainingTheme.elevatedCard
+                                .white.opacity(0.95),
+                                TrainingTheme.elevatedCard,
+                                accent.opacity(0.08)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -482,40 +503,41 @@ struct DashboardGridTile: View {
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .strokeBorder(TrainingTheme.borderStrong.opacity(0.24), lineWidth: 1.1)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
                     .padding(2)
             )
             .overlay {
                 if snapshot.pendingRankChange != nil {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
                         .strokeBorder(stateAccent.opacity(0.24), lineWidth: 1.1)
                         .padding(3)
                 }
             }
-            .shadow(color: Color.black.opacity(0.07), radius: 8, x: 0, y: 4)
+            .shadow(color: accent.opacity(0.10), radius: 16, x: 0, y: 8)
+            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(stat.name), level \(snapshot.rank.level), \(filledChargeDots) charge dots filled")
     }
 
-    private var lvlChip: some View {
-        Text("Lvl \(snapshot.rank.level)")
-            .font(.caption2.weight(.black))
-            .foregroundStyle(accent.opacity(0.92))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+    private var levelBadge: some View {
+        Text("LV \(snapshot.rank.level)")
+            .font(.caption.weight(.black))
+            .foregroundStyle(accent.opacity(0.95))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(.white.opacity(0.92))
+                    .fill(.white.opacity(0.94))
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(accent.opacity(0.16), lineWidth: 0.8)
+                    .strokeBorder(accent.opacity(0.18), lineWidth: 0.9)
             )
     }
 

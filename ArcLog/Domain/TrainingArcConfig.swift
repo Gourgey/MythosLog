@@ -34,6 +34,15 @@ struct RankLevelDefinition: Identifiable, Sendable {
     var id: Int { level }
 }
 
+struct CharacterRosterEntry: Identifiable, Sendable {
+    let level: Int
+    let title: String
+    let image: RankImageReference?
+    let isLocked: Bool
+
+    var id: Int { level }
+}
+
 struct StatTemplate: Identifiable, Sendable {
     let key: StatKey
     let iconName: String
@@ -426,7 +435,18 @@ enum TrainingArcConfig {
     static func rankDefinition(for statKey: StatKey, level: Int) -> RankLevelDefinition {
         let definition = definition(for: statKey)
         let clampedLevel = clampedRankLevel(level)
-        return definition.ranks.first(where: { $0.level == clampedLevel }) ?? definition.ranks[0]
+        let rank = definition.ranks.first(where: { $0.level == clampedLevel }) ?? definition.ranks[0]
+
+        guard rank.image == nil, let displayImage = rankArtworkImage(for: statKey, level: clampedLevel) else {
+            return rank
+        }
+
+        return RankLevelDefinition(
+            level: rank.level,
+            title: rank.title,
+            image: displayImage,
+            description: rank.description
+        )
     }
 
     static func nextRankDefinition(for statKey: StatKey, level: Int) -> RankLevelDefinition? {
@@ -468,6 +488,77 @@ enum TrainingArcConfig {
         let clampedLevel = clampedRankLevel(level)
         let index = min(max(clampedLevel - 1, 0), thresholds.count - 1)
         return thresholds[index]
+    }
+
+    static func characterRosterEntries(for statKey: StatKey, currentLevel: Int) -> [CharacterRosterEntry] {
+        let clampedCurrentLevel = clampedRankLevel(currentLevel)
+
+        return (minimumRankLevel...maximumRankLevel).map { level in
+            CharacterRosterEntry(
+                level: level,
+                title: rankTitle(for: statKey, level: level),
+                image: progressionImage(for: statKey, level: level, currentLevel: clampedCurrentLevel),
+                isLocked: level > clampedCurrentLevel
+            )
+        }
+    }
+
+    static func progressionImage(for statKey: StatKey, level: Int, currentLevel: Int) -> RankImageReference? {
+        let clampedLevel = clampedRankLevel(level)
+        let clampedCurrentLevel = clampedRankLevel(currentLevel)
+        let isLocked = clampedLevel > clampedCurrentLevel
+
+        if let bundledImage = bundledProgressionImage(for: statKey, level: clampedLevel, isLocked: isLocked) {
+            return bundledImage
+        }
+
+        guard !isLocked else { return nil }
+        return rankArtworkImage(for: statKey, level: clampedLevel)
+    }
+
+    static func rankArtworkImage(for statKey: StatKey, level: Int) -> RankImageReference? {
+        let clampedLevel = clampedRankLevel(level)
+
+        if let bundledImage = bundledProgressionImage(for: statKey, level: clampedLevel, isLocked: false) {
+            return bundledImage
+        }
+
+        return prototypeRankImage(for: statKey, level: clampedLevel)
+    }
+
+    // Temporary art mapping so prototype character images can be previewed
+    // until full roster assets exist for every skill.
+    private static func prototypeRankImage(for statKey: StatKey, level: Int) -> RankImageReference? {
+        switch (statKey, level) {
+        case (.strength, 1):
+            return .asset(name: "StrengthFrailElderPrototype")
+        case (.strength, 4):
+            return .asset(name: "StrengthStrongHumanPrototype")
+        case (.focus, 2):
+            return .asset(name: "StrengthFrailElderPrototype")
+        default:
+            return nil
+        }
+    }
+
+    private static func bundledProgressionImage(for statKey: StatKey, level: Int, isLocked: Bool) -> RankImageReference? {
+        guard let assetName = bundledProgressionAssetName(for: statKey, level: level, isLocked: isLocked) else {
+            return nil
+        }
+
+        return .asset(name: assetName)
+    }
+
+    private static func bundledProgressionAssetName(for statKey: StatKey, level: Int, isLocked: Bool) -> String? {
+        switch statKey {
+        case .strength:
+            if isLocked, level == minimumRankLevel {
+                return nil
+            }
+            return "Strength_Level_\(level)\(isLocked ? "_Locked" : "")"
+        case .intellect, .creativity, .emotional, .focus, .curiosity, .cardio:
+            return nil
+        }
     }
 
     static func lowerRankThreshold(for statKey: StatKey, level: Int) -> Int? {
