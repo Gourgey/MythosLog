@@ -1,12 +1,137 @@
 import SwiftUI
 
 enum DashboardChargeDots {
-    static let maximumDots = 4
+    static let slotsPerSide = 4
+    static let totalDots = slotsPerSide * 2
 
-    static func filledDots(from progress: Double) -> Int {
-        let clampedProgress = min(max(progress, 0), 1)
-        if clampedProgress >= 1 { return maximumDots }
-        return Int(floor(clampedProgress * Double(maximumDots)))
+    static func clampedCharge(_ charge: Int) -> Int {
+        min(max(charge, -slotsPerSide), slotsPerSide)
+    }
+
+    static func positiveDots(from charge: Int) -> Int {
+        max(0, min(clampedCharge(charge), slotsPerSide))
+    }
+
+    static func negativeDots(from charge: Int) -> Int {
+        max(0, min(-clampedCharge(charge), slotsPerSide))
+    }
+
+    static func summaryLabel(for charge: Int) -> String {
+        let clamped = clampedCharge(charge)
+        switch clamped {
+        case let value where value > 0:
+            return "Charge +\(value)"
+        case let value where value < 0:
+            return "Charge \(value)"
+        default:
+            return "Charge 0"
+        }
+    }
+}
+
+struct SignedChargeMeter: View {
+    let charge: Int
+    var socketSize: CGFloat = 14
+    var spacing: CGFloat = 8
+
+    private var positiveDots: Int {
+        DashboardChargeDots.positiveDots(from: charge)
+    }
+
+    private var negativeDots: Int {
+        DashboardChargeDots.negativeDots(from: charge)
+    }
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
+                chargeSocket(
+                    filled: negativeDots > (DashboardChargeDots.slotsPerSide - index - 1),
+                    tint: TrainingTheme.warning
+                )
+            }
+
+            Capsule()
+                .fill(TrainingTheme.borderStrong.opacity(0.30))
+                .frame(width: max(socketSize * 0.3, 4), height: socketSize * 1.3)
+                .padding(.horizontal, 2)
+
+            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
+                chargeSocket(
+                    filled: positiveDots > index,
+                    tint: TrainingTheme.positiveStrong
+                )
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(DashboardChargeDots.summaryLabel(for: charge))
+    }
+
+    private func chargeSocket(filled: Bool, tint: Color) -> some View {
+        ZStack {
+            Circle()
+                .fill(filled ? tint.opacity(0.18) : TrainingTheme.socketInner)
+                .overlay(
+                    Circle()
+                        .stroke(
+                            filled ? tint.opacity(0.34) : TrainingTheme.socketOuter.opacity(0.72),
+                            lineWidth: filled ? 1.1 : 1
+                        )
+                )
+
+            Circle()
+                .fill(filled ? tint : .clear)
+                .frame(width: socketSize * 0.42, height: socketSize * 0.42)
+                .shadow(color: filled ? tint.opacity(0.32) : .clear, radius: 4, x: 0, y: 0)
+        }
+        .frame(width: socketSize, height: socketSize)
+    }
+}
+
+struct DirectionalChargeMeter: View {
+    let charge: Int
+    var socketSize: CGFloat = 10
+    var spacing: CGFloat = 5
+
+    private var clampedCharge: Int {
+        DashboardChargeDots.clampedCharge(charge)
+    }
+
+    private var filledSlots: Int {
+        abs(clampedCharge)
+    }
+
+    private var tint: Color {
+        clampedCharge < 0 ? TrainingTheme.danger : TrainingTheme.positiveStrong
+    }
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
+                chargeSocket(filled: isFilled(index))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(DashboardChargeDots.summaryLabel(for: charge))
+    }
+
+    private func isFilled(_ index: Int) -> Bool {
+        if clampedCharge < 0 {
+            return index >= DashboardChargeDots.slotsPerSide - filledSlots
+        }
+
+        return index < filledSlots
+    }
+
+    private func chargeSocket(filled: Bool) -> some View {
+        Circle()
+            .fill(filled ? tint : TrainingTheme.socketInner.opacity(0.58))
+            .overlay(
+                Circle()
+                    .stroke(filled ? tint.opacity(0.45) : TrainingTheme.socketOuter.opacity(0.20), lineWidth: 0.8)
+            )
+            .shadow(color: filled ? tint.opacity(0.22) : .clear, radius: 3, x: 0, y: 0)
+            .frame(width: socketSize, height: socketSize)
     }
 }
 
@@ -36,10 +161,6 @@ struct StatCard: View {
         if trend > 0.15 { return "arrow.up.right" }
         if trend < -0.15 { return "arrow.down.right" }
         return "minus"
-    }
-
-    private var filledChargeDots: Int {
-        DashboardChargeDots.filledDots(from: snapshot.rank.progressToNextLevel)
     }
 
     private var stateAccent: Color {
@@ -115,11 +236,6 @@ struct StatCard: View {
                     RoundedRectangle(cornerRadius: 32, style: .continuous)
                         .strokeBorder(TrainingTheme.borderStrong.opacity(0.28), lineWidth: 1.15)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
-                        .padding(2)
-                )
                 .overlay {
                     if isFocusTarget || snapshot.pendingRankChange != nil {
                         RoundedRectangle(cornerRadius: 32, style: .continuous)
@@ -127,7 +243,7 @@ struct StatCard: View {
                             .padding(3)
                     }
                 }
-                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 5)
+                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
 
             VStack(alignment: .leading, spacing: 14) {
                 Button(action: onOpenDetail) {
@@ -167,7 +283,7 @@ struct StatCard: View {
         .accessibilityLabel(
             "\(stat.name), \(snapshot.rank.title), level \(snapshot.rank.level) of \(snapshot.rank.maximumLevel), " +
             "\(snapshot.weeklyCounterLabel) \(snapshot.weeklyCounterValueLabel), " +
-            "\(filledChargeDots) of \(DashboardChargeDots.maximumDots) charge dots filled, " +
+            "\(DashboardChargeDots.summaryLabel(for: snapshot.charge.current)), " +
             "\(snapshot.nextActionLabel)"
         )
     }
@@ -337,29 +453,8 @@ struct StatCard: View {
             )
     }
 
-    private func jewelDot(filled: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(filled ? TrainingTheme.positiveStrong.opacity(0.18) : TrainingTheme.socketInner)
-                .overlay(
-                    Circle()
-                        .stroke(filled ? TrainingTheme.positiveStrong.opacity(0.28) : TrainingTheme.socketOuter, lineWidth: filled ? 1 : 1.4)
-                )
-
-            Circle()
-                .fill(filled ? TrainingTheme.positiveStrong : .clear)
-                .frame(width: 10, height: 10)
-                .shadow(color: filled ? TrainingTheme.positiveStrong.opacity(0.36) : .clear, radius: 5, x: 0, y: 0)
-        }
-        .frame(width: 18, height: 18)
-    }
-
     private var chargeMeter: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<DashboardChargeDots.maximumDots, id: \.self) { index in
-                jewelDot(filled: index < filledChargeDots)
-            }
-        }
+        SignedChargeMeter(charge: snapshot.charge.current, socketSize: 16, spacing: 7)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(
@@ -392,14 +487,14 @@ struct StatCard: View {
 struct DashboardGridTile: View {
     let stat: StatDomain
     let snapshot: SkillProgressSnapshot
+    let preview: DashboardCardPreview
+    let quickLogTitle: String
+    let isReordering: Bool
     let onOpenDetail: () -> Void
+    let onQuickLog: () -> Void
 
     private var accent: Color {
         TrainingArcConfig.color(for: stat.colorToken)
-    }
-
-    private var filledChargeDots: Int {
-        DashboardChargeDots.filledDots(from: snapshot.rank.progressToNextLevel)
     }
 
     private var stateAccent: Color {
@@ -409,120 +504,131 @@ struct DashboardGridTile: View {
         return accent
     }
 
+    @ViewBuilder
     var body: some View {
-        Button(action: onOpenDetail) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(stat.name)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TrainingTheme.textSecondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                HStack(alignment: .center, spacing: 10) {
-                    Image(systemName: stat.iconName)
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(accent)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .fill(accent.opacity(0.14))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .strokeBorder(accent.opacity(0.18), lineWidth: 1)
-                        )
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(snapshot.rank.title)
-                        .font(.system(.subheadline, design: .rounded).weight(.black))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
+        if isReordering {
+            tileBody
+        } else {
+            tileBody
+                .contextMenu(menuItems: {
+                    Button("Open Skill", systemImage: "arrow.up.forward.app") {
+                        onOpenDetail()
                     }
 
-                    Spacer(minLength: 8)
-
-                    levelBadge
-                }
-
-                RankArtworkView(
-                    habitName: stat.name,
-                    level: snapshot.rank.level,
-                    title: snapshot.rank.title,
-                    image: snapshot.rank.image,
-                    accent: stateAccent,
-                    style: .dashboardTile
-                )
-                .frame(maxWidth: .infinity)
-
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack {
-                        Text("CHARGES")
-                            .font(.caption2.weight(.black))
-                            .foregroundStyle(TrainingTheme.textMuted)
-
-                        Spacer()
-
-                        Text("\(snapshot.charge.current) / \(snapshot.charge.maximum)")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                    Button(quickLogTitle, systemImage: "plus.circle.fill") {
+                        onQuickLog()
                     }
-
-                    HStack(spacing: 8) {
-                        ForEach(0..<DashboardChargeDots.maximumDots, id: \.self) { index in
-                            jewelTileDot(filled: index < filledChargeDots)
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.white.opacity(0.86))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(TrainingTheme.borderStrong.opacity(0.12), lineWidth: 1)
-                )
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                TrainingTheme.card,
-                                .white.opacity(0.95),
-                                TrainingTheme.elevatedCard,
-                                accent.opacity(0.08)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                }, preview: {
+                    DashboardTilePreviewBubble(
+                        statName: stat.name,
+                        accent: accent,
+                        preview: preview
                     )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .strokeBorder(TrainingTheme.borderStrong.opacity(0.24), lineWidth: 1.1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
-                    .padding(2)
-            )
-            .overlay {
-                if snapshot.pendingRankChange != nil {
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .strokeBorder(stateAccent.opacity(0.24), lineWidth: 1.1)
-                        .padding(3)
-                }
-            }
-            .shadow(color: accent.opacity(0.10), radius: 16, x: 0, y: 8)
-            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                })
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(stat.name), level \(snapshot.rank.level), \(filledChargeDots) charge dots filled")
+    }
+
+    private var tileBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(stat.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textSecondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: stat.iconName)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(accent)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(accent.opacity(0.14))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .strokeBorder(accent.opacity(0.18), lineWidth: 1)
+                    )
+
+                Spacer(minLength: 8)
+
+                levelBadge
+            }
+
+            Text(snapshot.rank.title)
+                .font(.system(.headline, design: .rounded).weight(.black))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            RankArtworkView(
+                habitName: stat.name,
+                level: snapshot.rank.level,
+                title: snapshot.rank.title,
+                image: snapshot.rank.image,
+                accent: stateAccent,
+                style: .dashboardTile
+            )
+            .frame(maxWidth: .infinity)
+
+            Text(snapshot.weeklyTargetFractionLabel)
+                .font(.caption.weight(.black))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            SignedChargeMeter(charge: snapshot.charge.current, socketSize: 11, spacing: 6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.white.opacity(0.86))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(TrainingTheme.borderStrong.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            TrainingTheme.card,
+                            .white.opacity(0.95),
+                            TrainingTheme.elevatedCard,
+                            accent.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .strokeBorder(TrainingTheme.borderStrong.opacity(0.24), lineWidth: 1.1)
+        )
+        .overlay {
+            if snapshot.pendingRankChange != nil {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .strokeBorder(stateAccent.opacity(0.24), lineWidth: 1.1)
+                    .padding(3)
+            }
+        }
+        .shadow(color: accent.opacity(0.08), radius: 10, x: 0, y: 5)
+        .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .onTapGesture {
+            guard !isReordering else { return }
+            onOpenDetail()
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(stat.name), level \(snapshot.rank.level), \(DashboardChargeDots.summaryLabel(for: snapshot.charge.current))")
     }
 
     private var levelBadge: some View {
@@ -540,24 +646,60 @@ struct DashboardGridTile: View {
                     .strokeBorder(accent.opacity(0.18), lineWidth: 0.9)
             )
     }
+}
 
-    private func jewelTileDot(filled: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(filled ? TrainingTheme.positiveStrong.opacity(0.16) : TrainingTheme.socketInner)
-                .overlay(
-                    Circle()
-                        .stroke(
-                            filled ? TrainingTheme.positiveStrong.opacity(0.32) : TrainingTheme.socketOuter.opacity(0.70),
-                            lineWidth: filled ? 1.1 : 1
-                        )
-                )
+private struct DashboardTilePreviewBubble: View {
+    let statName: String
+    let accent: Color
+    let preview: DashboardCardPreview
 
-            Circle()
-                .fill(filled ? TrainingTheme.positiveStrong : .clear)
-                .frame(width: 5, height: 5)
-                .shadow(color: filled ? TrainingTheme.positiveStrong.opacity(0.36) : .clear, radius: 4, x: 0, y: 0)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(statName)
+                .font(.system(.subheadline, design: .rounded).weight(.black))
+                .foregroundStyle(TrainingTheme.textPrimary)
+
+            previewRow(systemImage: "sparkles", text: preview.rankSummary)
+            previewRow(systemImage: "bolt.fill", text: preview.bankedChargeSummary)
+            previewRow(systemImage: "target", text: preview.stayOnTargetSummary)
+            previewRow(systemImage: "calendar", text: preview.weeklyTargetSummary)
+            previewRow(systemImage: "arrow.up.circle", text: preview.levelUpSummary)
         }
-        .frame(width: 11, height: 11)
+        .padding(14)
+        .frame(maxWidth: 260, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.98),
+                            TrainingTheme.card,
+                            accent.opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(accent.opacity(0.20), lineWidth: 1)
+        )
+        .shadow(color: accent.opacity(0.18), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 5)
+    }
+
+    private func previewRow(systemImage: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(accent)
+                .frame(width: 14, height: 14)
+
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

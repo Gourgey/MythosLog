@@ -165,14 +165,14 @@ struct OnboardingFlowView: View {
                 Text("Weekly Resolution")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                     .foregroundStyle(TrainingTheme.textPrimary)
-                Text("The weekly report becomes a summary screen. Rank updates after completed weeks are resolved, while charge tracks banked surplus toward the next rank.")
+                Text("The weekly report becomes a summary screen. Rank updates after completed weeks are resolved, while charge now decays toward zero and moves up or down based on how far you were above or below your current rank target.")
                     .foregroundStyle(TrainingTheme.textSecondary)
 
                 SurfaceCard(accent: TrainingArcConfig.color(for: "curiosity")) {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your opening baseline assigns your starting rank", systemImage: "figure.stand")
                         Label("Your latest completed week resolves at the end of Sunday", systemImage: "calendar")
-                        Label("Charge now banks surplus across weeks toward the next rank", systemImage: "flame.fill")
+                        Label("Charge sits between -4 and +4, and decays 1 step toward zero each completed week", systemImage: "flame.fill")
                         Label("Backdated logs can still update the current build when they matter", systemImage: "clock.arrow.circlepath")
                     }
                     .foregroundStyle(TrainingTheme.textPrimary)

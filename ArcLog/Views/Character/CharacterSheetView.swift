@@ -92,6 +92,8 @@ struct SkillCharacterRosterView: View {
 
     @State private var centeredLevel: Int?
     @State private var didCenterInitialLevel = false
+    @State private var initialCenterTask: Task<Void, Never>?
+    @State private var isInitialCenteringComplete = false
 
     private var statKey: StatKey {
         stat.statKey ?? .strength
@@ -111,6 +113,18 @@ struct SkillCharacterRosterView: View {
 
     private var focusedEntry: CharacterRosterEntry {
         entries.first(where: { $0.level == (centeredLevel ?? currentLevel) }) ?? entries[0]
+    }
+
+    private var activeCenteredLevelBinding: Binding<Int?> {
+        Binding(
+            get: {
+                isInitialCenteringComplete ? centeredLevel : nil
+            },
+            set: { newValue in
+                guard isInitialCenteringComplete else { return }
+                centeredLevel = newValue
+            }
+        )
     }
 
     var body: some View {
@@ -192,16 +206,14 @@ struct SkillCharacterRosterView: View {
                         }
                         .frame(height: carouselHeight)
                         .scrollTargetBehavior(.viewAligned)
-                        .scrollPosition(id: $centeredLevel, anchor: .center)
+                        .scrollPosition(id: activeCenteredLevelBinding, anchor: .center)
                         .onAppear {
-                            guard !didCenterInitialLevel else { return }
-                            didCenterInitialLevel = true
-                            centeredLevel = currentLevel
-
-                            DispatchQueue.main.async {
-                                proxy.scrollTo(currentLevel, anchor: .center)
-                                centeredLevel = currentLevel
-                            }
+                            centerInitialLevelIfNeeded(using: proxy)
+                        }
+                        .onChange(of: currentLevel) { _, newLevel in
+                            guard didCenterInitialLevel else { return }
+                            centeredLevel = newLevel
+                            proxy.scrollTo(newLevel, anchor: .center)
                         }
                     }
                 }
@@ -222,8 +234,26 @@ struct SkillCharacterRosterView: View {
         }
         .navigationTitle("Character Roster")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
+        .onDisappear {
+            initialCenterTask?.cancel()
+        }
+    }
+
+    private func centerInitialLevelIfNeeded(using proxy: ScrollViewProxy) {
+        guard !didCenterInitialLevel else { return }
+        didCenterInitialLevel = true
+        centeredLevel = nil
+        isInitialCenteringComplete = false
+
+        initialCenterTask?.cancel()
+        initialCenterTask = Task { @MainActor in
+            await Task.yield()
+            proxy.scrollTo(currentLevel, anchor: .center)
+            await Task.yield()
+            proxy.scrollTo(currentLevel, anchor: .center)
+            await Task.yield()
             centeredLevel = currentLevel
+            isInitialCenteringComplete = true
         }
     }
 }
@@ -234,7 +264,7 @@ private struct SkillCharacterRosterCard: View {
     let accent: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(statName.uppercased())
                     .font(.caption.weight(.black))
@@ -258,37 +288,10 @@ private struct SkillCharacterRosterCard: View {
                                 .fill(.white.opacity(0.92))
                         )
                 }
+
             }
 
             ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.96),
-                                TrainingTheme.card,
-                                accent.opacity(0.12)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .strokeBorder(TrainingTheme.borderStrong.opacity(0.20), lineWidth: 1.2)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .strokeBorder(.white.opacity(0.24), lineWidth: 0.8)
-                            .padding(2)
-                    )
-
-                Circle()
-                    .fill(accent.opacity(0.12))
-                    .frame(width: 220, height: 220)
-                    .blur(radius: 10)
-                    .offset(x: 72, y: -68)
-
                 cardArtwork
 
                 if entry.isLocked {
@@ -306,40 +309,17 @@ private struct SkillCharacterRosterCard: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            TrainingTheme.card,
-                            .white.opacity(0.98),
-                            TrainingTheme.elevatedCard.opacity(0.96)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .strokeBorder(accent.opacity(0.14), lineWidth: 1.1)
-        )
-        .shadow(color: accent.opacity(0.16), radius: 20, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 5)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
     private var cardArtwork: some View {
         if let image = entry.image {
             rosterImage(for: image)
-                .padding(.horizontal, 2)
-                .padding(.top, 2)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         } else {
             rosterFallbackArtwork
-                .padding(.horizontal, 8)
-                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
@@ -351,38 +331,23 @@ private struct SkillCharacterRosterCard: View {
             Image(name)
                 .resizable()
                 .scaledToFit()
-                .scaleEffect(1.22, anchor: .bottom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.horizontal, 6)
+                .padding(.top, 6)
         }
     }
 
     private var rosterFallbackArtwork: some View {
         VStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [accent.opacity(0.20), .white.opacity(0.94)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .strokeBorder(accent.opacity(0.16), lineWidth: 1)
-                    )
-
-                if entry.isLocked {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 54, weight: .bold))
-                        .foregroundStyle(TrainingTheme.warning)
-                } else {
-                    Text(String(statName.prefix(1)).uppercased())
-                        .font(.system(size: 58, design: .rounded).weight(.black))
-                        .foregroundStyle(accent)
-                }
+            if entry.isLocked {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 70, weight: .bold))
+                    .foregroundStyle(TrainingTheme.warning)
+            } else {
+                Text(String(statName.prefix(1)).uppercased())
+                    .font(.system(size: 90, design: .rounded).weight(.black))
+                    .foregroundStyle(accent)
             }
-            .frame(width: 170, height: 230)
 
             Text(entry.isLocked ? "Unknown Form" : "Prototype Form")
                 .font(.caption.weight(.bold))

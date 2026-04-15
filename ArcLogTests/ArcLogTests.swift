@@ -89,20 +89,20 @@ struct ArcLogTests {
         #expect(TrainingArcConfig.baselineValueLabel(for: .intellect, value: 25) == "25 pages per week")
     }
 
-    @Test func dashboardChargeDotsMapProgressToFourSteps() {
-        #expect(DashboardChargeDots.filledDots(from: -0.5) == 0)
-        #expect(DashboardChargeDots.filledDots(from: 0) == 0)
-        #expect(DashboardChargeDots.filledDots(from: 0.24) == 0)
-        #expect(DashboardChargeDots.filledDots(from: 0.25) == 1)
-        #expect(DashboardChargeDots.filledDots(from: 0.5) == 2)
-        #expect(DashboardChargeDots.filledDots(from: 0.75) == 3)
-        #expect(DashboardChargeDots.filledDots(from: 1.0) == 4)
-        #expect(DashboardChargeDots.filledDots(from: 1.6) == 4)
+    @Test func dashboardChargeDotsClampSignedChargeIntoLeftAndRightSlots() {
+        #expect(DashboardChargeDots.positiveDots(from: -3) == 0)
+        #expect(DashboardChargeDots.negativeDots(from: -3) == 3)
+        #expect(DashboardChargeDots.positiveDots(from: 0) == 0)
+        #expect(DashboardChargeDots.negativeDots(from: 0) == 0)
+        #expect(DashboardChargeDots.positiveDots(from: 2) == 2)
+        #expect(DashboardChargeDots.negativeDots(from: 2) == 0)
+        #expect(DashboardChargeDots.positiveDots(from: 7) == 4)
+        #expect(DashboardChargeDots.negativeDots(from: -9) == 4)
     }
 
-    @Test func dashboardLayoutModeDefaultsToDetailedCards() {
+    @Test func dashboardLayoutModeDefaultsToCompactGrid() {
         let settings = AppSettings()
-        #expect(settings.dashboardLayoutMode == .detailedCards)
+        #expect(settings.dashboardLayoutMode == .compactGrid)
     }
 
     @Test func strengthRosterUsesUnlockedAndLockedAssetsByLevel() {
@@ -124,6 +124,12 @@ struct ArcLogTests {
         } else {
             Issue.record("Expected locked Strength art for level 5.")
         }
+
+        if case .asset(let fallbackName)? = entries[5].image {
+            #expect(fallbackName == "Strength_Level_6_Locked")
+        } else {
+            Issue.record("Expected future Strength levels to use locked Strength art when it exists.")
+        }
     }
 
     @Test func nonStrengthRosterFallsBackWithoutInvalidLockedAssets() {
@@ -141,7 +147,8 @@ struct ArcLogTests {
 
         #expect(snapshot.weeklyCounterLabel == "Weekly Sessions")
         #expect(snapshot.weeklyCounterValueLabel == "0 / 3")
-        #expect(snapshot.chargeExplanation.contains("Sunday"))
+        #expect(snapshot.chargeExplanation.contains("Level 4"))
+        #expect(snapshot.chargeExplanation.contains("+4 ranks you up"))
         #expect(snapshot.nextEvaluationLabel.contains("Banks"))
         #expect(snapshot.bankCountdownLabel.contains("Banking in"))
         #expect(snapshot.nextActionLabel.contains("Log"))
@@ -204,43 +211,81 @@ struct ArcLogTests {
         #expect(log.note == "Heavy set")
     }
 
-    @Test func weeklyProgressionBanksSurplusWithoutInstantLevelUp() {
+    @Test @MainActor func setSkillOrderPersistsCustomDashboardOrder() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        try TrainingStore.seedDefaultProfile(context: context, completeOnboarding: true)
+
+        let original = try TrainingStore.fetchActiveStats(context: context)
+        let reorderedIDs = Array(original.prefix(3).map(\.id).reversed()) + original.dropFirst(3).map(\.id)
+
+        try TrainingStore.setSkillOrder(reorderedIDs, context: context)
+
+        let updated = try TrainingStore.fetchActiveStats(context: context)
+        #expect(Array(updated.prefix(3).map(\.id)) == Array(reorderedIDs.prefix(3)))
+    }
+
+    @Test @MainActor func synchronizeCatalogPreservesCustomSkillOrder() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        try TrainingStore.seedDefaultProfile(context: context, completeOnboarding: true)
+
+        let original = try TrainingStore.fetchActiveStats(context: context)
+        let reorderedIDs = Array(original.suffix(2).map(\.id)) + original.dropLast(2).map(\.id)
+
+        try TrainingStore.setSkillOrder(reorderedIDs, context: context)
+        try TrainingStore.synchronizeCatalog(context: context)
+
+        let updated = try TrainingStore.fetchActiveStats(context: context)
+        #expect(updated.map(\.id) == reorderedIDs)
+    }
+
+    @Test @MainActor func refreshWidgetSnapshotIncludesMotivationCopy() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let now = isoDate("2026-04-09T12:00:00Z")
+
+        try TrainingStore.refreshWidgetSnapshot(context: fixture.context, now: now)
+        let snapshot = WidgetSnapshotStore.load()
+
+        #expect(!snapshot.motivationTitle.isEmpty)
+        #expect(!snapshot.motivationMessage.isEmpty)
+        #expect(!snapshot.motivationColorToken.isEmpty)
+    }
+
+    @Test func strongWeeksCanInstantlyRankUpWhenTheyReachPlusFourCharge() {
         let startingState = ProgressionEngine.initialState(for: .strength, startingBaseline: 3)
         let result = ProgressionEngine.evaluateWeek(statKey: .strength, state: startingState, actualTotal: 12)
 
         #expect(result.levelBefore == 4)
-        #expect(result.levelAfter == 4)
-        #expect(!result.didLevelUp)
+        #expect(result.levelAfter == 5)
+        #expect(result.didLevelUp)
         #expect(!result.didLevelDown)
         #expect(result.expectedTotal == 3)
         #expect(result.weeklyDelta == 9)
-        #expect(result.bankedUnitsAfter == 9)
-        #expect(result.visibleChargesAfter == 3)
+        #expect(result.weeklyChargeDelta == 9)
+        #expect(result.bankedUnitsAfter == 0)
+        #expect(result.visibleChargesAfter == 0)
     }
 
-    @Test func twoStrongWeeksProduceSingleRankUpWithCarryover() {
-        let weekOne = ProgressionEngine.evaluateWeek(
+    @Test func positiveChargeDecaysTowardZeroAcrossBaselineWeeks() {
+        let week = ProgressionEngine.evaluateWeek(
             statKey: .strength,
-            state: ProgressionEngine.initialState(for: .strength, startingBaseline: 3),
-            actualTotal: 12
-        )
-        let weekTwo = ProgressionEngine.evaluateWeek(
-            statKey: .strength,
-            state: weekOne.state,
-            actualTotal: 12
+            state: WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3),
+            actualTotal: 5
         )
 
-        #expect(weekTwo.levelBefore == 4)
-        #expect(weekTwo.levelAfter == 5)
-        #expect(weekTwo.didLevelUp)
-        #expect(!weekTwo.didLevelDown)
-        #expect(weekTwo.state.expectedWeeklyTarget == 4)
-        #expect(weekTwo.state.bankedProgressUnits == 6)
-        #expect(weekTwo.visibleChargesAfter == 1)
+        #expect(week.levelBefore == 6)
+        #expect(week.levelAfter == 6)
+        #expect(!week.didLevelUp)
+        #expect(!week.didLevelDown)
+        #expect(week.chargeBeforeDecay == 3)
+        #expect(week.chargeAfterDecay == 2)
+        #expect(week.weeklyChargeDelta == 0)
+        #expect(week.visibleChargesAfter == 2)
     }
 
     @Test func negativeWeekCreatesDebtAndSingleRankDownPerWeek() {
-        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: -50)
+        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: -3)
         let result = ProgressionEngine.evaluateWeek(statKey: .strength, state: state, actualTotal: 0)
 
         #expect(result.levelBefore == 6)
@@ -248,7 +293,8 @@ struct ArcLogTests {
         #expect(!result.didLevelUp)
         #expect(result.didLevelDown)
         #expect(result.weeklyDelta == -5)
-        #expect(result.bankedUnitsAfter == -35)
+        #expect(result.weeklyChargeDelta == -5)
+        #expect(result.bankedUnitsAfter == 0)
         #expect(result.visibleChargesAfter == 0)
     }
 
@@ -286,11 +332,11 @@ struct ArcLogTests {
         try addSessionLogs(count: 12, habit: fixture.habit, weekStart: completedWeekStart, context: fixture.context)
         try TrainingStore.refreshProgress(for: fixture.stat, context: fixture.context, reason: .logMutation, now: now)
 
-        #expect(fixture.stat.rankLevel == 4)
-        #expect(fixture.stat.currentBaseline == 3)
-        #expect(fixture.stat.bankedProgressUnits == 9)
-        #expect(fixture.stat.chargeValue == 3)
-        #expect(fixture.stat.pendingRankChange == nil)
+        #expect(fixture.stat.rankLevel == 5)
+        #expect(fixture.stat.currentBaseline == 4)
+        #expect(fixture.stat.bankedProgressUnits == 0)
+        #expect(fixture.stat.chargeValue == 0)
+        #expect(fixture.stat.pendingRankChange?.direction == .up)
         #expect(fixture.stat.weeklyResolutions.count == 1)
 
         let resolution = try #require(fixture.stat.weeklyResolutions.first)
@@ -328,17 +374,17 @@ struct ArcLogTests {
         try TrainingStore.refreshProgress(for: fixture.stat, context: fixture.context, reason: .appRefresh, now: now)
 
         let pending = try #require(fixture.stat.pendingRankChange)
-        #expect(fixture.stat.rankLevel == 5)
-        #expect(fixture.stat.currentBaseline == 4)
-        #expect(fixture.stat.bankedProgressUnits == 6)
-        #expect(fixture.stat.chargeValue == 1)
+        #expect(fixture.stat.rankLevel == 6)
+        #expect(fixture.stat.currentBaseline == 5)
+        #expect(fixture.stat.bankedProgressUnits == 0)
+        #expect(fixture.stat.chargeValue == 0)
         #expect(pending.direction == .up)
         #expect(pending.fromLevel == 4)
-        #expect(pending.toLevel == 5)
+        #expect(pending.toLevel == 6)
 
         try TrainingStore.acknowledgePendingRankChange(for: fixture.stat, context: fixture.context)
         #expect(fixture.stat.pendingRankChange == nil)
-        #expect(fixture.stat.acknowledgedRankLevel == 5)
+        #expect(fixture.stat.acknowledgedRankLevel == 6)
     }
 
     @Test @MainActor func localInsightHelpersReturnUsefulContent() throws {

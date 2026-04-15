@@ -13,7 +13,7 @@ struct SurfaceCard<Content: View>: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [TrainingTheme.card, TrainingTheme.elevatedCard, accent.opacity(0.10)],
+                        colors: [TrainingTheme.card, TrainingTheme.elevatedCard.opacity(0.96)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -21,12 +21,8 @@ struct SurfaceCard<Content: View>: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(accent.opacity(0.16).opacity(0.7), lineWidth: 1.1)
+                .strokeBorder(accent.opacity(0.12), lineWidth: 0.9)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(TrainingTheme.borderStrong.opacity(0.45), lineWidth: 0.5)
-        )
-        .shadow(color: TrainingTheme.shadowStrong, radius: 16, x: 0, y: 10)
+        .shadow(color: TrainingTheme.shadow.opacity(0.7), radius: 9, x: 0, y: 5)
     }
 }

@@ -1,11 +1,11 @@
 import SwiftUI
 
 enum TrainingTheme {
-    static let background = Color(red: 0.90, green: 0.94, blue: 0.92)
-    static let backgroundSecondary = Color(red: 0.84, green: 0.89, blue: 0.88)
-    static let backgroundTertiary = Color(red: 0.78, green: 0.84, blue: 0.83)
-    static let card = Color(red: 0.96, green: 0.98, blue: 0.97).opacity(0.95)
-    static let elevatedCard = Color(red: 0.88, green: 0.92, blue: 0.91)
+    static let background = Color(red: 0.97, green: 0.97, blue: 0.95)
+    static let backgroundSecondary = Color(red: 0.94, green: 0.95, blue: 0.93)
+    static let backgroundTertiary = Color(red: 0.90, green: 0.91, blue: 0.88)
+    static let card = Color(red: 0.98, green: 0.98, blue: 0.97).opacity(0.95)
+    static let elevatedCard = Color(red: 0.93, green: 0.94, blue: 0.92)
     static let insetSurface = Color(red: 0.18, green: 0.22, blue: 0.24).opacity(0.06)
     static let border = Color.black.opacity(0.10)
     static let borderStrong = Color.black.opacity(0.16)

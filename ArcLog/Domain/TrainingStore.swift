@@ -1,5 +1,8 @@
 import Foundation
 import SwiftData
+#if canImport(HealthKit)
+import HealthKit
+#endif
 
 #if canImport(WidgetKit)
 import WidgetKit
@@ -17,7 +20,8 @@ enum TrainingStore {
         Habit.self,
         HabitLog.self,
         WeeklyResolution.self,
-        AppSettings.self
+        AppSettings.self,
+        HealthImportedWorkout.self
     ])
 
     static let sharedModelContainer = makeModelContainer()
@@ -125,6 +129,7 @@ enum TrainingStore {
         try? synchronizeCatalog(context: context)
         try? refreshAllProgress(context: context, reason: .appRefresh)
         try? refreshWidgetSnapshot(context: context)
+        refreshHomeScreenQuickActions()
     }
 
     static func fetchSettings(context: ModelContext) throws -> AppSettings {
@@ -139,7 +144,7 @@ enum TrainingStore {
     }
 
     static func fetchStats(context: ModelContext) throws -> [StatDomain] {
-        let descriptor = FetchDescriptor<StatDomain>(sortBy: [SortDescriptor(\.name)])
+        let descriptor = FetchDescriptor<StatDomain>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)])
         return try context.fetch(descriptor)
     }
 
@@ -166,6 +171,11 @@ enum TrainingStore {
         return try context.fetch(descriptor)
     }
 
+    static func fetchImportedHealthWorkouts(context: ModelContext) throws -> [HealthImportedWorkout] {
+        let descriptor = FetchDescriptor<HealthImportedWorkout>(sortBy: [SortDescriptor(\.startDate, order: .reverse)])
+        return try context.fetch(descriptor)
+    }
+
     static func seedDefaultProfile(
         context: ModelContext,
         baselines: [StatKey: Int] = [:],
@@ -183,7 +193,7 @@ enum TrainingStore {
         }
 
         var statIndex: [StatKey: StatDomain] = [:]
-        for template in TrainingArcConfig.statTemplates {
+        for (offset, template) in TrainingArcConfig.statTemplates.enumerated() {
             let baseline = max(TrainingArcConfig.minimumBaseline, baselines[template.key] ?? template.defaultBaseline)
             let startingLevel = TrainingArcConfig.rankLevel(for: template.key, weeklyValue: Double(baseline))
             let stat = StatDomain(
@@ -192,6 +202,7 @@ enum TrainingStore {
                 iconName: template.iconName,
                 colorToken: template.colorToken,
                 descriptor: TrainingArcConfig.overview(for: template.key),
+                sortOrder: offset,
                 currentLevel: startingLevel,
                 currentTierName: TrainingArcConfig.rankTitle(for: template.key, level: startingLevel),
                 startingBaseline: baseline,
@@ -232,12 +243,15 @@ enum TrainingStore {
     }
 
     static func clearAll(context: ModelContext) throws {
+        for item in try fetchImportedHealthWorkouts(context: context) { context.delete(item) }
         for item in try fetchLogs(context: context) { context.delete(item) }
         for item in try fetchResolutions(context: context) { context.delete(item) }
         for item in try fetchHabits(context: context) { context.delete(item) }
         for item in try fetchStats(context: context) { context.delete(item) }
         for item in try context.fetch(FetchDescriptor<AppSettings>()) { context.delete(item) }
         try context.save()
+        let defaults = UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
+        defaults.removeObject(forKey: AppIdentity.healthWorkoutAnchorKey)
         try refreshWidgetSnapshot(context: context)
     }
 
@@ -254,7 +268,7 @@ enum TrainingStore {
         stat.rankLevel = resolvedLevel
         stat.rankTitle = resolvedTitle
         stat.descriptor = resolvedDescriptor
-        stat.chargeValue = max(0, stat.chargeValue)
+        stat.chargeValue = DashboardChargeDots.clampedCharge(stat.chargeValue)
         stat.acknowledgedRankLevel = max(stat.acknowledgedRankLevel, TrainingArcConfig.minimumRankLevel)
 
         if didMutate {
@@ -272,7 +286,7 @@ enum TrainingStore {
             return (key, stat)
         })
 
-        for template in TrainingArcConfig.statTemplates {
+        for (offset, template) in TrainingArcConfig.statTemplates.enumerated() {
             if let existing = statLookup[template.key] {
                 let didChange =
                     existing.name != template.key.displayName ||
@@ -286,12 +300,14 @@ enum TrainingStore {
                 continue
             }
 
+            let nextSortOrder = (statLookup.values.map(\.sortOrder).max() ?? -1) + 1
             let stat = StatDomain(
                 key: template.key.rawValue,
                 name: template.key.displayName,
                 iconName: template.iconName,
                 colorToken: template.colorToken,
                 descriptor: TrainingArcConfig.overview(for: template.key),
+                sortOrder: nextSortOrder,
                 currentLevel: TrainingArcConfig.rankLevel(for: template.key, weeklyValue: Double(template.defaultBaseline)),
                 currentTierName: TrainingArcConfig.rankTitle(
                     for: template.key,
@@ -482,6 +498,23 @@ enum TrainingStore {
         return "\(MetricFormatting.shortMetric(actual)) / \(MetricFormatting.shortMetric(Double(stat.currentBaseline)))"
     }
 
+    static func weeklyUnitLabel(for stat: StatDomain) -> String {
+        switch primaryHabit(for: stat)?.measurementType {
+        case .booleanSession:
+            return "sessions"
+        case .pages:
+            return "pages"
+        case .minutes:
+            return "minutes"
+        case .count:
+            return "counts"
+        case .customNumber:
+            return "points"
+        case .none:
+            return "logs"
+        }
+    }
+
     static func nextEvaluationLabel(now: Date = .now) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE 'at' HH:mm"
@@ -514,15 +547,40 @@ enum TrainingStore {
     static func chargeExplanation(
         for stat: StatDomain,
         chargeValue: Int,
-        chargeMaximum: Int,
         nextRank: RankLevelDefinition?,
         now: Date = .now
     ) -> String {
-        let counter = weeklyCounterLabel(for: stat)
-        if let nextRank {
-            return "\(counter) builds through the week. At Sunday midnight your surplus is banked into charge. You currently have \(chargeValue) of \(chargeMaximum) charges toward \(nextRank.title)."
+        guard let statKey = stat.statKey else {
+            return "Charge moves 1 step toward zero each completed week, then your latest week adds or removes charge."
         }
-        return "\(counter) still banks on Sunday night, but this skill is already at the current maximum rank."
+
+        let currentLevel = stat.rankLevel
+        let currentTarget = TrainingArcConfig.effectiveWeeklyTarget(for: statKey, level: currentLevel)
+        let nextTarget = TrainingArcConfig.nextRankChargeRequirement(for: statKey, level: currentLevel)
+        let lowerTarget = TrainingArcConfig.previousRankChargeRequirement(for: statKey, level: currentLevel)
+        let positiveStep = TrainingArcConfig.positiveChargeStep(for: statKey, level: currentLevel)
+        let negativeStep = TrainingArcConfig.negativeChargeStep(for: statKey, level: currentLevel)
+        let unitSingular = singularWeeklyUnitLabel(for: stat)
+
+        if let nextTarget, let lowerTarget, let positiveStep, let negativeStep {
+            let positiveExample = currentTarget + (positiveStep * 2)
+            let negativeExample = max(currentTarget - (negativeStep * 2), 0)
+
+            return """
+            Level \(currentLevel) is based on \(currentTarget) \(pluralize(unitSingular, count: currentTarget)) per week. Level \(currentLevel + 1) starts at \(nextTarget), so every \(positiveStep) \(pluralize(unitSingular, count: positiveStep)) above \(currentTarget) adds +1 charge. Level \(currentLevel - 1) starts at \(lowerTarget), so every \(negativeStep) \(pluralize(unitSingular, count: negativeStep)) below \(currentTarget) adds -1 charge. Example: \(positiveExample) \(pluralize(unitSingular, count: positiveExample)) this week is +2 charge, while \(negativeExample) is -2 charge. At the end of each completed week charge decays 1 step toward zero. +4 ranks you up and -4 ranks you down.
+            """
+        }
+
+        if let nextTarget, let positiveStep {
+            return "Level \(currentLevel) is based on \(currentTarget) \(pluralize(unitSingular, count: currentTarget)) per week. Level \(currentLevel + 1) starts at \(nextTarget), so every \(positiveStep) \(pluralize(unitSingular, count: positiveStep)) above \(currentTarget) adds +1 charge. Charge still decays 1 step toward zero each completed week."
+        }
+
+        if let lowerTarget, let negativeStep {
+            let nextRankText = nextRank?.title ?? "this rank"
+            return "You are already at the maximum rank, \(nextRankText). Level \(currentLevel) is held by \(currentTarget) \(pluralize(unitSingular, count: currentTarget)) per week, and every \(negativeStep) \(pluralize(unitSingular, count: negativeStep)) below that adds -1 charge toward the \(lowerTarget)-\(pluralize(unitSingular, count: lowerTarget)) tier. Negative charge still decays 1 step toward zero each completed week."
+        }
+
+        return "This opening rank only builds upward. Charge decays 1 step toward zero at the end of each completed week."
     }
 
     static func pacingStatus(for stat: StatDomain, settings: AppSettings?, now: Date = .now) -> SkillPacingStatus {
@@ -554,6 +612,9 @@ enum TrainingStore {
             return .pendingRankChange
         }
 
+        if stat.chargeValue <= -2 {
+            return .behindTarget
+        }
         let pacing = pacingStatus(for: stat, settings: settings, now: now)
         if pacing == .behind {
             return .behindTarget
@@ -585,16 +646,24 @@ enum TrainingStore {
     static func nextRankStatusLabel(
         for stat: StatDomain,
         chargeValue: Int,
-        chargeMaximum: Int,
         nextRank: RankLevelDefinition?
     ) -> String {
-        guard let nextRank else { return "You have reached the current maximum rank." }
-        let remaining = max(chargeMaximum - chargeValue, 0)
-        if remaining == 0 {
-            return "The next banked check can promote you to \(nextRank.title)."
+        let chargeLimit = DashboardChargeDots.slotsPerSide
+
+        if chargeValue <= -(chargeLimit - 1), stat.rankLevel > TrainingArcConfig.minimumRankLevel {
+            let remainingDebt = chargeLimit - abs(chargeValue)
+            return remainingDebt == 1
+                ? "One more weak week will drop this skill a rank."
+                : "\(remainingDebt) more negative charge steps will drop this skill a rank."
         }
-        let unit = remaining == 1 ? "charge" : "charges"
-        return "\(remaining) more \(unit) will unlock \(nextRank.title)."
+
+        guard let nextRank else { return "You have reached the current maximum rank." }
+        let remaining = max(chargeLimit - max(chargeValue, 0), 0)
+        if remaining == 0 {
+            return "The next completed week will resolve this skill into \(nextRank.title)."
+        }
+        let unit = remaining == 1 ? "charge step" : "charge steps"
+        return "\(remaining) more positive \(unit) will unlock \(nextRank.title)."
     }
 
     static func nextActionLabel(
@@ -602,7 +671,6 @@ enum TrainingStore {
         settings: AppSettings?,
         nextRank: RankLevelDefinition?,
         chargeValue: Int,
-        chargeMaximum: Int,
         now: Date = .now
     ) -> String {
         if let pending = stat.pendingRankChange {
@@ -620,23 +688,26 @@ enum TrainingStore {
         }
 
         if nextRank == nil {
-            return "Keep banking strong weeks to defend this max rank."
+            if chargeValue < 0 {
+                return "A steadier week will pull this charge back toward zero."
+            }
+            return "Keep matching this pace to hold the maximum rank."
         }
 
-        let remainingCharges = max(chargeMaximum - chargeValue, 0)
+        let remainingCharges = max(DashboardChargeDots.slotsPerSide - max(chargeValue, 0), 0)
         if remainingCharges == 0 {
-            return "Hold this pace through Sunday night to convert the next rank."
+            return "Hold a strong week to convert this rank-up."
         }
         if remainingCharges == 1 {
-            return "One more strong week will socket the final charge."
+            return "One more strong week can land the final positive charge."
         }
 
         let pacing = pacingStatus(for: stat, settings: settings, now: now)
         if pacing == .ahead {
-            return "You are ahead of pace. Keep stacking surplus for the next bank."
+            return "You are ahead of pace. Keep stacking surplus for more positive charge."
         }
 
-        return "\(remainingCharges) more charges stand between you and \(nextRank?.title ?? "the next rank")."
+        return "\(remainingCharges) more positive charge steps stand between you and \(nextRank?.title ?? "the next rank")."
     }
 
     static func normalizedSessionType(_ sessionType: String?) -> String? {
@@ -699,9 +770,7 @@ enum TrainingStore {
         let chargeValue = currentCharge(for: stat, settings: settings, now: now)
         let chargeProgress = currentChargeProgress(for: stat, settings: settings, now: now)
         let pacing = pacingStatus(for: stat, settings: settings, now: now)
-        let chargeMaximum = nextRank.map { _ in
-            TrainingArcConfig.nextRankChargeRequirement(for: definition.key, level: currentLevel) ?? max(chargeValue, 1)
-        } ?? max(chargeValue, 1)
+        let chargeMaximum = DashboardChargeDots.slotsPerSide
         let focusState = focusState(for: stat, settings: settings, chargeProgress: chargeProgress, now: now)
 
         return SkillProgressSnapshot(
@@ -710,9 +779,9 @@ enum TrainingStore {
                 maximumLevel: TrainingArcConfig.maximumRankLevel,
                 title: currentRank.title,
                 nextTitle: nextRank?.title,
-                progressValue: Double(chargeValue),
-                progressValueLabel: "\(chargeValue) charges",
-                progressRequiredLabel: nextRank == nil ? "Maximum" : "\(chargeMaximum) charges",
+                progressValue: Double(max(chargeValue, 0)),
+                progressValueLabel: DashboardChargeDots.summaryLabel(for: chargeValue),
+                progressRequiredLabel: nextRank == nil ? "Maximum rank" : "\(chargeMaximum) positive charge steps",
                 progressToNextLevel: chargeProgress,
                 isAtMaximumRank: currentLevel >= TrainingArcConfig.maximumRankLevel,
                 image: currentRank.image
@@ -734,7 +803,6 @@ enum TrainingStore {
             chargeExplanation: chargeExplanation(
                 for: stat,
                 chargeValue: chargeValue,
-                chargeMaximum: chargeMaximum,
                 nextRank: nextRank,
                 now: now
             ),
@@ -746,11 +814,12 @@ enum TrainingStore {
                     currentLevel: currentLevel
                 ) ?? nextRank?.image
             } ?? nil,
-            bankedChargeLabel: nextRank == nil ? "Maximum rank reached" : "\(chargeValue) / \(chargeMaximum) charges banked",
+            bankedChargeLabel: nextRank == nil && chargeValue == 0
+                ? "Stable at maximum rank"
+                : DashboardChargeDots.summaryLabel(for: chargeValue),
             nextRankStatusLabel: nextRankStatusLabel(
                 for: stat,
                 chargeValue: chargeValue,
-                chargeMaximum: chargeMaximum,
                 nextRank: nextRank
             ),
             focusState: focusState,
@@ -759,11 +828,39 @@ enum TrainingStore {
                 settings: settings,
                 nextRank: nextRank,
                 chargeValue: chargeValue,
-                chargeMaximum: chargeMaximum,
                 now: now
             ),
             pacingStatus: pacing,
             bankCountdownLabel: bankCountdownLabel(now: now)
+        )
+    }
+
+    static func dashboardCardPreview(for stat: StatDomain, settings: AppSettings?, now: Date = .now) -> DashboardCardPreview {
+        let snapshot = progressSnapshot(for: stat, settings: settings, now: now)
+        let definition = stat.statKey.map { TrainingArcConfig.definition(for: $0) } ?? TrainingArcConfig.habitDefinitions[0]
+        let weeklyTarget = TrainingArcConfig.effectiveWeeklyTarget(for: definition.key, level: stat.rankLevel)
+        let nextRequirement = TrainingArcConfig.nextRankChargeRequirement(for: definition.key, level: stat.rankLevel)
+        let currentWeekValue = currentWeekTotal(for: stat, settings: settings, now: now)
+        let remainingToTarget = max(Double(stat.currentBaseline) - currentWeekValue, 0)
+        let unitLabel = weeklyUnitLabel(for: stat)
+        let bankedChargeSummary = DashboardChargeDots.summaryLabel(for: snapshot.charge.current)
+        let stayOnTargetSummary: String = {
+            if remainingToTarget <= 0 {
+                return "On target this week"
+            }
+            return "\(MetricFormatting.shortMetric(remainingToTarget)) \(unitLabel) needed to stay on target"
+        }()
+        let levelUpSummary: String = {
+            guard let nextRequirement else { return "No further level-ups available" }
+            return "\(nextRequirement) \(unitLabel) per week needed to level up"
+        }()
+
+        return DashboardCardPreview(
+            rankSummary: "LV \(snapshot.rank.level) · \(snapshot.rank.title)",
+            bankedChargeSummary: bankedChargeSummary,
+            stayOnTargetSummary: stayOnTargetSummary,
+            weeklyTargetSummary: "\(weeklyTarget) \(unitLabel) weekly target",
+            levelUpSummary: levelUpSummary
         )
     }
 
@@ -824,16 +921,16 @@ enum TrainingStore {
                 actualCompletedValue: result.actualTotal,
                 weeklyDelta: result.weeklyDelta,
                 excessValue: result.weeklyDelta,
-                chargesEarned: max(0, Int(floor(result.weeklyDelta / Double(max(state.expectedWeeklyTarget, 1))))),
-                chargesSpentOnLevelUp: result.didLevelUp ? (TrainingArcConfig.nextRankChargeRequirement(for: statKey, level: result.levelBefore) ?? 0) : 0,
+                chargesEarned: result.weeklyChargeDelta,
+                chargesSpentOnLevelUp: (result.didLevelUp || result.didLevelDown) ? DashboardChargeDots.slotsPerSide : 0,
                 bankedUnitsBefore: result.bankedUnitsBefore,
                 bankedUnitsAfter: result.bankedUnitsAfter,
                 levelBefore: result.levelBefore,
                 levelAfter: result.levelAfter,
                 storedChargesAfter: result.visibleChargesAfter,
-                didDecay: result.didLevelDown,
+                didDecay: result.didDecayTowardZero,
                 didLevelUp: result.didLevelUp,
-                didStagnate: result.weeklyDelta < 0,
+                didStagnate: result.weeklyChargeDelta == 0,
                 didRegress: result.didLevelDown,
                 summaryText: summaryText(for: stat, week: week, result: result),
                 statDomain: stat
@@ -927,15 +1024,42 @@ enum TrainingStore {
         let actualLabel = MetricFormatting.shortMetric(result.actualTotal)
         let expectedLabel = MetricFormatting.shortMetric(result.expectedTotal)
         if result.didLevelUp {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) advanced \(stat.name) to Level \(result.levelAfter)."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) advanced \(stat.name) to Level \(result.levelAfter) after reaching +4 charge."
         }
         if result.didLevelDown {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) dropped \(stat.name) to Level \(result.levelAfter)."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) dropped \(stat.name) to Level \(result.levelAfter) after reaching -4 charge."
         }
-        if result.weeklyDelta >= 0 {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) banked extra charge for the next rank check."
+        if result.weeklyChargeDelta > 0 {
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added +\(result.weeklyChargeDelta) charge."
         }
-        return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) created charge debt that can pull the rank down later."
+        if result.weeklyChargeDelta < 0 {
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added \(result.weeklyChargeDelta) charge."
+        }
+        if result.didDecayTowardZero {
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held steady while charge drifted 1 step back toward zero."
+        }
+        return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held this rank steady."
+    }
+
+    private static func singularWeeklyUnitLabel(for stat: StatDomain) -> String {
+        switch primaryHabit(for: stat)?.measurementType {
+        case .booleanSession:
+            return "session"
+        case .pages:
+            return "page"
+        case .minutes:
+            return "minute"
+        case .count:
+            return "count"
+        case .customNumber:
+            return "point"
+        case .none:
+            return "log"
+        }
+    }
+
+    private static func pluralize(_ singular: String, count: Int) -> String {
+        count == 1 ? singular : "\(singular)s"
     }
 
     static func pendingWeek(context: ModelContext, now: Date = .now) throws -> WeekRange? {
@@ -985,7 +1109,7 @@ enum TrainingStore {
         case ..<1.05:
             return MomentumStatus(title: "Form Stable", subtitle: "You are holding your current build.", score: score)
         default:
-            return MomentumStatus(title: "Momentum Rising", subtitle: "You are pushing beyond baseline and banking pressure.", score: score)
+            return MomentumStatus(title: "Momentum Rising", subtitle: "You are pushing beyond baseline and building positive charge.", score: score)
         }
     }
 
@@ -1004,6 +1128,26 @@ enum TrainingStore {
         settings.dashboardLayoutMode = mode
         settings.updatedAt = .now
         try context.save()
+        refreshHomeScreenQuickActions()
+    }
+
+    static func setSkillOrder(_ orderedStatIDs: [UUID], context: ModelContext) throws {
+        let activeStats = try fetchActiveStats(context: context)
+        let statsByID = Dictionary(uniqueKeysWithValues: activeStats.map { ($0.id, $0) })
+        let orderedIDs = orderedStatIDs.filter { statsByID[$0] != nil }
+        let remainingIDs = activeStats.map(\.id).filter { !orderedIDs.contains($0) }
+
+        for (offset, id) in (orderedIDs + remainingIDs).enumerated() {
+            guard let stat = statsByID[id] else { continue }
+            if stat.sortOrder != offset {
+                stat.sortOrder = offset
+                stat.updatedAt = .now
+            }
+        }
+
+        try context.save()
+        try refreshWidgetSnapshot(context: context)
+        refreshHomeScreenQuickActions()
     }
 
     static func workFocusAnalysis(
@@ -1174,6 +1318,7 @@ enum TrainingStore {
         let habits = try fetchActiveHabits(context: context)
         let momentum = try momentum(context: context, now: now)
         let weakest = try weakestStat(context: context, now: now)
+        let weakestSnapshot = weakest.map { progressSnapshot(for: $0, settings: nil, now: now) }
         let pending = try pendingWeek(context: context, now: now) != nil
 
         let statSnapshots = stats.map { stat in
@@ -1216,12 +1361,33 @@ enum TrainingStore {
             )
         }
 
+        let motivationTitle: String
+        let motivationMessage: String
+        let motivationColorToken: String
+
+        if pending {
+            motivationTitle = "Weekly review ready"
+            motivationMessage = "Lock in last week so your progress and charge carry forward cleanly."
+            motivationColorToken = weakest?.colorToken ?? "focus"
+        } else if let weakest, let weakestSnapshot {
+            motivationTitle = "Focus on \(weakest.name)"
+            motivationMessage = weakestSnapshot.nextActionLabel
+            motivationColorToken = weakest.colorToken
+        } else {
+            motivationTitle = momentum.title
+            motivationMessage = momentum.subtitle
+            motivationColorToken = "focus"
+        }
+
         let snapshot = TrainingWidgetSnapshot(
             generatedAt: now,
             appName: AppIdentity.displayName,
             momentumTitle: momentum.title,
             momentumSubtitle: momentum.subtitle,
             characterSummary: selfSummary(from: stats),
+            motivationTitle: motivationTitle,
+            motivationMessage: motivationMessage,
+            motivationColorToken: motivationColorToken,
             pendingWeeklyReview: pending,
             weakestStat: statSnapshots.first(where: { $0.id == weakest?.id }),
             stats: statSnapshots,
@@ -1251,6 +1417,7 @@ enum TrainingStore {
                     iconName: $0.iconName,
                     colorToken: $0.colorToken,
                     descriptor: $0.descriptor,
+                    sortOrder: $0.sortOrder,
                     currentLevel: $0.currentLevel,
                     currentTierName: $0.currentTierName,
                     startingBaseline: $0.startingBaseline,
@@ -1336,6 +1503,8 @@ enum TrainingStore {
                 weekStartsOnMonday: settings.weekStartsOnMonday,
                 hapticsEnabled: settings.hapticsEnabled,
                 lockInWeeklyReview: settings.lockInWeeklyReview,
+                healthAutoImportEnabled: settings.healthAutoImportEnabled,
+                lastHealthSyncAt: settings.lastHealthSyncAt,
                 themePreferenceRaw: settings.themePreferenceRaw,
                 dashboardLayoutModeRaw: settings.dashboardLayoutModeRaw
             )
@@ -1354,6 +1523,7 @@ enum TrainingStore {
                 iconName: exported.iconName,
                 colorToken: exported.colorToken,
                 descriptor: exported.descriptor,
+                sortOrder: exported.sortOrder,
                 currentLevel: exported.currentLevel,
                 currentTierName: exported.currentTierName,
                 startingBaseline: exported.startingBaseline,
@@ -1451,8 +1621,10 @@ enum TrainingStore {
             weekStartsOnMonday: bundle.settings.weekStartsOnMonday,
             hapticsEnabled: bundle.settings.hapticsEnabled,
             lockInWeeklyReview: bundle.settings.lockInWeeklyReview,
+            healthAutoImportEnabled: bundle.settings.healthAutoImportEnabled ?? true,
+            lastHealthSyncAt: bundle.settings.lastHealthSyncAt,
             themePreference: ThemePreference(rawValue: bundle.settings.themePreferenceRaw) ?? .dark,
-            dashboardLayoutMode: DashboardLayoutMode(rawValue: bundle.settings.dashboardLayoutModeRaw) ?? .detailedCards
+            dashboardLayoutMode: DashboardLayoutMode(rawValue: bundle.settings.dashboardLayoutModeRaw) ?? .compactGrid
         )
         context.insert(settings)
 
@@ -1481,6 +1653,12 @@ enum TrainingStore {
             try seedDefaultProfile(context: context, completeOnboarding: true)
             try seedHistoricalProgress(context: context, style: .levelUpWeek, now: now)
         }
+    }
+
+    static func refreshHomeScreenQuickActions() {
+        #if canImport(UIKit)
+        HomeScreenQuickActionService.refresh(using: sharedModelContainer)
+        #endif
     }
 
     private enum HistoricalSeedStyle {
@@ -1551,3 +1729,316 @@ enum TrainingStore {
         return date.formatted(date: .omitted, time: .shortened)
     }
 }
+
+#if canImport(HealthKit)
+enum HealthAuthorizationState: Sendable {
+    case unavailable
+    case notConnected
+    case connected
+
+    var title: String {
+        switch self {
+        case .unavailable:
+            return "Unavailable"
+        case .notConnected:
+            return "Not Connected"
+        case .connected:
+            return "Connected"
+        }
+    }
+}
+
+struct HealthSyncSummary: Sendable {
+    var importedCount: Int
+    var duplicateCount: Int
+    var ignoredCount: Int
+    var syncedAt: Date
+
+    var message: String {
+        if importedCount > 0 {
+            return "Imported \(importedCount) workout\(importedCount == 1 ? "" : "s") from Apple Health."
+        }
+
+        if duplicateCount > 0 && ignoredCount == 0 {
+            return "Apple Health is up to date. No new workouts were imported."
+        }
+
+        return "No new eligible Apple Health workouts were found."
+    }
+}
+
+@MainActor
+enum HealthImportService {
+    private struct WorkoutMapping {
+        var statKey: StatKey
+        var sessionType: String
+    }
+
+    private static let healthStore = HKHealthStore()
+    private static let connectedDefaultsKey = "training.arc.health.connected"
+    private static var workoutObserverQuery: HKObserverQuery?
+
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
+    }
+
+    private static var workoutType: HKWorkoutType {
+        HKObjectType.workoutType()
+    }
+
+    static func authorizationState() -> HealthAuthorizationState {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            return .unavailable
+        }
+
+        if defaults.bool(forKey: connectedDefaultsKey) {
+            return .connected
+        }
+
+        return .notConnected
+    }
+
+    static func requestAuthorizationAndSync() async -> String {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            return "Apple Health is not available on this device."
+        }
+
+        do {
+            try await requestAuthorization()
+            defaults.set(true, forKey: connectedDefaultsKey)
+            let message = try await syncNow()
+            startWorkoutObserverIfEnabled()
+            return message
+        } catch {
+            return "Apple Health permission was not granted."
+        }
+    }
+
+    static func startWorkoutObserverIfEnabled() {
+        guard HKHealthStore.isHealthDataAvailable(), workoutObserverQuery == nil else { return }
+
+        let context = ModelContext(TrainingStore.sharedModelContainer)
+        guard
+            let settings = try? TrainingStore.fetchSettings(context: context),
+            settings.hasCompletedOnboarding,
+            settings.healthAutoImportEnabled,
+            authorizationState() == .connected
+        else {
+            return
+        }
+
+        let query = HKObserverQuery(sampleType: workoutType, predicate: nil) { _, completionHandler, error in
+            if error == nil {
+                Task { @MainActor in
+                    await syncIfEnabled()
+                }
+            }
+
+            completionHandler()
+        }
+
+        workoutObserverQuery = query
+        healthStore.execute(query)
+        healthStore.enableBackgroundDelivery(for: workoutType, frequency: .hourly) { _, _ in }
+    }
+
+    static func stopWorkoutObserver() {
+        guard let workoutObserverQuery else { return }
+        healthStore.stop(workoutObserverQuery)
+        self.workoutObserverQuery = nil
+    }
+
+    static func syncIfEnabled() async {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+
+        let context = ModelContext(TrainingStore.sharedModelContainer)
+        guard
+            let settings = try? TrainingStore.fetchSettings(context: context),
+            settings.hasCompletedOnboarding,
+            settings.healthAutoImportEnabled,
+            authorizationState() == .connected
+        else {
+            stopWorkoutObserver()
+            return
+        }
+
+        startWorkoutObserverIfEnabled()
+        _ = try? await performSync(context: context, settings: settings)
+    }
+
+    static func syncNow() async throws -> String {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            return "Apple Health is not available on this device."
+        }
+
+        let context = ModelContext(TrainingStore.sharedModelContainer)
+        let settings = try TrainingStore.fetchSettings(context: context)
+        guard settings.hasCompletedOnboarding else {
+            return "Finish onboarding before syncing Apple Health."
+        }
+
+        guard authorizationState() == .connected else {
+            return "Connect Apple Health first."
+        }
+
+        let summary = try await performSync(context: context, settings: settings)
+        return summary.message
+    }
+
+    private static func requestAuthorization() async throws {
+        let readTypes: Set<HKObjectType> = [workoutType]
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if success {
+                    continuation.resume(returning: ())
+                } else {
+                    continuation.resume(throwing: CancellationError())
+                }
+            }
+        }
+    }
+
+    private static func performSync(context: ModelContext, settings: AppSettings) async throws -> HealthSyncSummary {
+        let anchor = loadAnchor()
+        let initialWeekStart = TrainingStore.currentWeekInterval(settings: settings).start
+        let predicate = anchor == nil
+            ? HKQuery.predicateForSamples(withStart: initialWeekStart, end: nil, options: .strictStartDate)
+            : nil
+        let (workouts, newAnchor) = try await fetchWorkouts(anchor: anchor, predicate: predicate)
+        let activeStats = try TrainingStore.fetchActiveStats(context: context)
+        let existingRecords = try TrainingStore.fetchImportedHealthWorkouts(context: context)
+        var existingWorkoutIDs = Set(existingRecords.map(\.workoutUUID))
+        var importedCount = 0
+        var duplicateCount = 0
+        var ignoredCount = 0
+
+        for workout in workouts.sorted(by: { $0.startDate < $1.startDate }) {
+            let workoutID = workout.uuid.uuidString
+            if existingWorkoutIDs.contains(workoutID) {
+                duplicateCount += 1
+                continue
+            }
+
+            guard
+                let mapping = mapping(for: workout),
+                let stat = activeStats.first(where: { $0.statKey == mapping.statKey }),
+                let habit = TrainingStore.primaryHabit(for: stat)
+            else {
+                ignoredCount += 1
+                continue
+            }
+
+            let value = loggedValue(for: workout, habit: habit)
+            guard value > 0 else {
+                ignoredCount += 1
+                continue
+            }
+
+            let sourceName = workout.sourceRevision.source.name
+            let note = "Imported from Apple Health\(sourceName.isEmpty ? "" : " via \(sourceName)")"
+            _ = try TrainingStore.log(
+                habit: habit,
+                value: value,
+                date: workout.endDate,
+                sessionType: mapping.sessionType,
+                note: note,
+                source: .health,
+                context: context
+            )
+
+            context.insert(
+                HealthImportedWorkout(
+                    workoutUUID: workoutID,
+                    statKeyRaw: mapping.statKey.rawValue,
+                    habitSystemKey: habit.systemKey,
+                    sourceBundleIdentifier: workout.sourceRevision.source.bundleIdentifier,
+                    activityTypeRaw: Int(workout.workoutActivityType.rawValue),
+                    startDate: workout.startDate,
+                    endDate: workout.endDate,
+                    durationMinutes: workout.duration / 60
+                )
+            )
+            try context.save()
+
+            existingWorkoutIDs.insert(workoutID)
+            importedCount += 1
+        }
+
+        if let newAnchor {
+            saveAnchor(newAnchor)
+        }
+
+        settings.lastHealthSyncAt = .now
+        settings.updatedAt = .now
+        try context.save()
+        try TrainingStore.refreshWidgetSnapshot(context: context)
+        TrainingStore.refreshHomeScreenQuickActions()
+
+        return HealthSyncSummary(
+            importedCount: importedCount,
+            duplicateCount: duplicateCount,
+            ignoredCount: ignoredCount,
+            syncedAt: settings.lastHealthSyncAt ?? .now
+        )
+    }
+
+    private static func fetchWorkouts(
+        anchor: HKQueryAnchor?,
+        predicate: NSPredicate?
+    ) async throws -> ([HKWorkout], HKQueryAnchor?) {
+        try await withCheckedThrowingContinuation { continuation in
+            let query = HKAnchoredObjectQuery(
+                type: workoutType,
+                predicate: predicate,
+                anchor: anchor,
+                limit: HKObjectQueryNoLimit
+            ) { _, samples, _, newAnchor, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let workouts = (samples as? [HKWorkout]) ?? []
+                continuation.resume(returning: (workouts, newAnchor))
+            }
+
+            healthStore.execute(query)
+        }
+    }
+
+    private static func mapping(for workout: HKWorkout) -> WorkoutMapping? {
+        switch workout.workoutActivityType {
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
+            return WorkoutMapping(statKey: .strength, sessionType: "Strength")
+        case .running, .walking, .cycling, .swimming, .rowing, .elliptical, .stairClimbing, .hiking, .mixedCardio, .highIntensityIntervalTraining, .jumpRope:
+            return WorkoutMapping(statKey: .cardio, sessionType: "Cardio")
+        default:
+            return nil
+        }
+    }
+
+    private static func loggedValue(for workout: HKWorkout, habit: Habit) -> Double {
+        switch habit.measurementType {
+        case .booleanSession:
+            return 1
+        case .minutes:
+            return max(1, (workout.duration / 60).rounded())
+        case .count, .customNumber, .pages:
+            return 1
+        }
+    }
+
+    private static func loadAnchor() -> HKQueryAnchor? {
+        guard let data = defaults.data(forKey: AppIdentity.healthWorkoutAnchorKey) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
+    }
+
+    private static func saveAnchor(_ anchor: HKQueryAnchor) {
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) else { return }
+        defaults.set(data, forKey: AppIdentity.healthWorkoutAnchorKey)
+    }
+}
+#endif

@@ -6,6 +6,7 @@ enum RankArtworkStyle: Sendable {
     case tile
     case dashboardCompact
     case dashboardTile
+    case dashboardBare
 }
 
 struct RankArtworkView: View {
@@ -28,53 +29,21 @@ struct RankArtworkView: View {
             dashboardCompactArtwork
         case .dashboardTile:
             dashboardTileArtwork
+        case .dashboardBare:
+            dashboardBareArtwork
         }
     }
 
     private var heroArtwork: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            accent.opacity(0.28),
-                            TrainingTheme.backgroundSecondary,
-                            TrainingTheme.background
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(accent.opacity(0.22), lineWidth: 1.2)
-                )
-
-            backgroundOrnament
-
+        ZStack(alignment: .bottom) {
             if let image {
-                configuredImage(for: image)
+                transparentCharacterImage(for: image)
             } else {
                 placeholderArtwork
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    pill(text: "LEVEL \(level)")
-                    pill(text: habitName.uppercased())
-                }
-
-                Text(title)
-                    .font(.system(.title, design: .rounded).weight(.bold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                    .lineLimit(2)
-            }
-            .padding(20)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 280)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: accent.opacity(0.14), radius: 20, x: 0, y: 10)
+        .frame(height: 340)
     }
 
     private var compactArtwork: some View {
@@ -156,7 +125,7 @@ struct RankArtworkView: View {
             dashboardArtworkShell(cornerRadius: 24)
 
             if let image {
-                dashboardCharacterImage(for: image, scale: 1.16)
+                dashboardCharacterImage(for: image, horizontalPadding: 8, topPadding: 8)
             } else {
                 dashboardCompactPlaceholderArtwork
             }
@@ -174,7 +143,7 @@ struct RankArtworkView: View {
             dashboardArtworkShell(cornerRadius: 26)
 
             if let image {
-                dashboardCharacterImage(for: image, scale: 1.28)
+                dashboardCharacterImage(for: image, horizontalPadding: 8, topPadding: 10)
             } else {
                 dashboardTilePlaceholderArtwork
             }
@@ -183,6 +152,18 @@ struct RankArtworkView: View {
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: accent.opacity(0.24), radius: 16, x: 0, y: 8)
+    }
+
+    private var dashboardBareArtwork: some View {
+        ZStack {
+            if let image {
+                dashboardCharacterImage(for: image, horizontalPadding: 0, topPadding: 0)
+            } else {
+                barePlaceholderArtwork
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 147)
     }
 
     private var backgroundOrnament: some View {
@@ -230,15 +211,9 @@ struct RankArtworkView: View {
             Text("Placeholder Artwork")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(TrainingTheme.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(TrainingTheme.background.opacity(0.58))
-                )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.bottom, 26)
+        .padding(.vertical, 18)
     }
 
     private var compactPlaceholderArtwork: some View {
@@ -298,6 +273,20 @@ struct RankArtworkView: View {
             .padding(.top, 14)
     }
 
+    private var barePlaceholderArtwork: some View {
+        VStack(spacing: 4) {
+            Image(systemName: statFallbackIcon)
+                .font(.system(size: 38, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(accent.opacity(0.88))
+
+            Text(habitInitial)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(TrainingTheme.textMuted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
     @ViewBuilder
     private func configuredImage(for reference: RankImageReference) -> some View {
         switch reference {
@@ -311,15 +300,28 @@ struct RankArtworkView: View {
     }
 
     @ViewBuilder
-    private func dashboardCharacterImage(for reference: RankImageReference, scale: CGFloat) -> some View {
+    private func transparentCharacterImage(for reference: RankImageReference) -> some View {
         switch reference {
         case .asset(let name):
             Image(name)
                 .resizable()
                 .scaledToFit()
-                .scaleEffect(scale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .clipped()
+                .padding(.horizontal, 4)
+                .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCharacterImage(for reference: RankImageReference, horizontalPadding: CGFloat, topPadding: CGFloat) -> some View {
+        switch reference {
+        case .asset(let name):
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.top, topPadding)
         }
     }
 
@@ -330,7 +332,7 @@ struct RankArtworkView: View {
                     colors: [
                         TrainingTheme.card,
                         .white.opacity(0.94),
-                        TrainingTheme.elevatedCard.opacity(0.98)
+                        TrainingTheme.elevatedCard.opacity(0.96)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -338,16 +340,7 @@ struct RankArtworkView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.22), .clear], startPoint: .top, endPoint: .bottom))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(TrainingTheme.borderStrong.opacity(0.24), lineWidth: 1.2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
-                    .padding(2)
+                    .strokeBorder(TrainingTheme.borderStrong.opacity(0.18), lineWidth: 0.9)
             )
     }
 
@@ -416,5 +409,26 @@ struct RankArtworkView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .first
             .map { String($0).uppercased() } ?? "?"
+    }
+
+    private var statFallbackIcon: String {
+        switch habitName.lowercased() {
+        case "strength":
+            return "figure.strengthtraining.traditional"
+        case "intellect":
+            return "book.closed.fill"
+        case "creativity":
+            return "paintbrush.pointed.fill"
+        case "emotional":
+            return "heart.text.square.fill"
+        case "focus":
+            return "scope"
+        case "curiosity":
+            return "sparkles.rectangle.stack.fill"
+        case "cardio":
+            return "figure.run"
+        default:
+            return "person.crop.circle.fill"
+        }
     }
 }

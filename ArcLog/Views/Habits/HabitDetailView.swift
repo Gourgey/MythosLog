@@ -216,19 +216,29 @@ struct LogEntrySheetView: View {
                             .lineLimit(2...4)
                     }
                 }
-
-                Button("Enter") {
-                    save()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
-                .frame(maxWidth: .infinity, alignment: .center)
             }
             .padding(16)
         }
         .scrollContentBackground(.hidden)
         .background(TrainingTheme.background.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.4))
+
+                Button("Enter") {
+                    save()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+            }
+            .background(TrainingTheme.background.opacity(0.96))
+        }
         .navigationTitle(habit.measurementType == .booleanSession ? "Log Session" : "Log Progress")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

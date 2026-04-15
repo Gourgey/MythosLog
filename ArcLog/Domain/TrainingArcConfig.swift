@@ -90,6 +90,7 @@ enum TrainingArcConfig {
     static let focusRankThresholds = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150]
     static let intellectRankThresholds = [0, 10, 20, 30, 45, 60, 80, 100, 130, 170]
     static let cardioRankThresholds = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240]
+    private static let strengthSourceLockedLevels: Set<Int> = Set(2...10)
 
     static let habitDefinitions: [HabitProgressionDefinition] = [
         HabitProgressionDefinition(
@@ -552,10 +553,17 @@ enum TrainingArcConfig {
     private static func bundledProgressionAssetName(for statKey: StatKey, level: Int, isLocked: Bool) -> String? {
         switch statKey {
         case .strength:
-            if isLocked, level == minimumRankLevel {
-                return nil
+            let unlockedName = "Strength_Level_\(level)"
+
+            if isLocked {
+                guard level != minimumRankLevel else { return nil }
+                if strengthSourceLockedLevels.contains(level) {
+                    return "Strength_Level_\(level)_Locked"
+                }
+                return unlockedName
             }
-            return "Strength_Level_\(level)\(isLocked ? "_Locked" : "")"
+
+            return unlockedName
         case .intellect, .creativity, .emotional, .focus, .curiosity, .cardio:
             return nil
         }
@@ -600,6 +608,26 @@ enum TrainingArcConfig {
         return effectiveWeeklyTarget(for: statKey, level: clampedLevel + 1)
     }
 
+    static func previousRankChargeRequirement(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard clampedLevel > minimumRankLevel else { return nil }
+        return effectiveWeeklyTarget(for: statKey, level: clampedLevel - 1)
+    }
+
+    static func positiveChargeStep(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard let nextTarget = nextRankChargeRequirement(for: statKey, level: clampedLevel) else { return nil }
+        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel)
+        return max(nextTarget - currentTarget, 1)
+    }
+
+    static func negativeChargeStep(for statKey: StatKey, level: Int) -> Int? {
+        let clampedLevel = clampedRankLevel(level)
+        guard let lowerTarget = previousRankChargeRequirement(for: statKey, level: clampedLevel) else { return nil }
+        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel)
+        return max(currentTarget - lowerTarget, 1)
+    }
+
     static func progressionBridgeUnits(for statKey: StatKey, fromLevel: Int, toLevel: Int) -> Double {
         let fromTarget = effectiveWeeklyTarget(for: statKey, level: fromLevel)
         let toTarget = effectiveWeeklyTarget(for: statKey, level: toLevel)
@@ -607,21 +635,16 @@ enum TrainingArcConfig {
     }
 
     static func displayedCharge(for statKey: StatKey, bankedUnits: Double, level: Int) -> Int {
-        let target = effectiveWeeklyTarget(for: statKey, level: level)
-        guard target > 0 else { return 0 }
-        return max(0, Int(floor(bankedUnits / Double(target))))
+        DashboardChargeDots.clampedCharge(Int(bankedUnits.rounded(.towardZero)))
     }
 
     static func chargeProgress(for statKey: StatKey, bankedUnits: Double, level: Int) -> Double {
         let clampedLevel = clampedRankLevel(level)
-        guard let nextChargeRequirement = nextRankChargeRequirement(for: statKey, level: clampedLevel), clampedLevel < maximumRankLevel else {
+        guard nextRankChargeRequirement(for: statKey, level: clampedLevel) != nil, clampedLevel < maximumRankLevel else {
             return 1
         }
-
-        let currentTarget = Double(effectiveWeeklyTarget(for: statKey, level: clampedLevel))
-        let requiredUnits = currentTarget * Double(nextChargeRequirement)
-        guard requiredUnits > 0 else { return 0 }
-        return min(max(max(bankedUnits, 0) / requiredUnits, 0), 1)
+        let visibleCharge = max(displayedCharge(for: statKey, bankedUnits: bankedUnits, level: clampedLevel), 0)
+        return min(max(Double(visibleCharge) / Double(defaultChargeMaximum), 0), 1)
     }
 
     static func color(for token: String) -> Color {

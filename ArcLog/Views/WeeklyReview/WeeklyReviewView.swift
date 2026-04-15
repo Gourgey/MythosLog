@@ -7,6 +7,8 @@ struct WeeklyReviewView: View {
     @Query private var settingsRecords: [AppSettings]
     @State private var selectedWeekStart: Date?
 
+    init() {}
+
     private var settings: AppSettings? {
         settingsRecords.first
     }
@@ -104,7 +106,7 @@ struct WeeklyReviewView: View {
                         }
                     } else {
                         SurfaceCard {
-                            Text("No weekly reports yet. Weekly rank checks save themselves here after each Sunday evaluation.")
+                            Text("No weekly reports yet. Weekly rank checks save themselves here after each completed week resolves.")
                                 .foregroundStyle(TrainingTheme.textSecondary)
                         }
                     }

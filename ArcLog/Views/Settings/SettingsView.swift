@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var isExporting = false
     @State private var isImporting = false
     @State private var exportDocument = TrainingExportDocument(bundle: .empty)
+    @State private var healthStatusMessage: String?
+    @State private var isSyncingHealth = false
     let onSettingsMutated: () -> Void
 
     private var settings: AppSettings? {
@@ -53,6 +55,51 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                #if canImport(HealthKit)
+                Section("Apple Health") {
+                    LabeledContent("Status", value: HealthImportService.authorizationState().title)
+                    Toggle("Auto-import workouts", isOn: binding(\.healthAutoImportEnabled))
+
+                    if let lastSync = settings.lastHealthSyncAt {
+                        LabeledContent("Last sync") {
+                            Text(lastSync.formatted(date: .abbreviated, time: .shortened))
+                        }
+                    }
+
+                    Button("Connect Apple Health") {
+                        isSyncingHealth = true
+                        Task {
+                            let message = await HealthImportService.requestAuthorizationAndSync()
+                            await MainActor.run {
+                                healthStatusMessage = message
+                                isSyncingHealth = false
+                                onSettingsMutated()
+                            }
+                        }
+                    }
+
+                    Button(isSyncingHealth ? "Syncing…" : "Sync Now") {
+                        guard !isSyncingHealth else { return }
+                        isSyncingHealth = true
+                        Task {
+                            let message = (try? await HealthImportService.syncNow()) ?? "Apple Health sync could not complete."
+                            await MainActor.run {
+                                healthStatusMessage = message
+                                isSyncingHealth = false
+                                onSettingsMutated()
+                            }
+                        }
+                    }
+                    .disabled(isSyncingHealth)
+
+                    if let healthStatusMessage {
+                        Text(healthStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+                }
+                #endif
 
                 Section("Data") {
                     Button("Export JSON") {

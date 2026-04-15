@@ -6,13 +6,21 @@ struct SkillDetailView: View {
     @Query private var settingsRecords: [AppSettings]
 
     let stat: StatDomain
+    let opensLogSheetOnAppear: Bool
 
     @State private var logDraft: LogEntryDraft?
     @State private var presentedRankChange: PendingRankChange?
     @State private var selectedWeekStart = TrainingStore.progressionWeek(containing: .now).start
+    @State private var selectedDay = TrainingStore.progressionCalendar().startOfDay(for: .now)
     @State private var showingFullHistory = false
     @State private var showingCharacterRoster = false
     @State private var presentedHelpTopic: SkillHelpTopic?
+    @State private var hasOpenedInitialLogSheet = false
+
+    init(stat: StatDomain, opensLogSheetOnAppear: Bool = false) {
+        self.stat = stat
+        self.opensLogSheetOnAppear = opensLogSheetOnAppear
+    }
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -46,11 +54,20 @@ struct SkillDetailView: View {
         TrainingStore.weekSnapshot(for: stat, week: selectedWeek)
     }
 
-    private var recentSnapshots: [SkillLogEntrySnapshot] {
-        TrainingStore.recentLogSnapshots(
-            for: stat,
-            since: Calendar.current.date(byAdding: .day, value: -7, to: .now)
-        )
+    private var effectiveSelectedDay: Date {
+        let calendar = TrainingStore.progressionCalendar()
+        let normalizedSelectedDay = calendar.startOfDay(for: selectedDay)
+
+        if selectedWeekSnapshot.daySummaries.contains(where: { calendar.isDate($0.date, inSameDayAs: normalizedSelectedDay) }) {
+            return normalizedSelectedDay
+        }
+
+        return defaultSelectedDay(for: selectedWeek)
+    }
+
+    private var selectedDayLogs: [SkillLogEntrySnapshot] {
+        let calendar = TrainingStore.progressionCalendar()
+        return selectedWeekSnapshot.logEntries.filter { calendar.isDate($0.date, inSameDayAs: effectiveSelectedDay) }
     }
 
     var body: some View {
@@ -65,7 +82,6 @@ struct SkillDetailView: View {
 
                 linkedHabitsSection
                 weeklyHistorySection
-                recentSessionsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -83,10 +99,15 @@ struct SkillDetailView: View {
         .task {
             _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .skillOpen)
             selectedWeekStart = currentWeek.start
+            selectedDay = defaultSelectedDay(for: currentWeek)
             presentPendingRankChangeIfNeeded()
+            openInitialLogSheetIfNeeded()
         }
         .onChange(of: stat.pendingRankChangeRecordedAt) { _, _ in
             presentPendingRankChangeIfNeeded()
+        }
+        .onChange(of: selectedWeekStart) { _, _ in
+            selectedDay = defaultSelectedDay(for: selectedWeek)
         }
         .sheet(item: $logDraft) { draft in
             NavigationStack {
@@ -109,8 +130,8 @@ struct SkillDetailView: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(item: $presentedHelpTopic) { topic in
-            SkillHelpSheet(topic: topic)
-                .presentationDetents([.height(220)])
+            SkillHelpSheet(title: topic.title, bodyText: helpBody(for: topic))
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingFullHistory) {
@@ -142,80 +163,61 @@ struct SkillDetailView: View {
     }
 
     private var heroSection: some View {
-        SurfaceCard(accent: accent) {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionHeaderRow("Current Form", topic: .currentForm)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(snapshot.rank.title)
+                    .font(.system(.title2, design: .rounded).weight(.black))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                    .lineLimit(2)
 
-                Button {
-                    showingCharacterRoster = true
-                } label: {
-                    RankArtworkView(
-                        habitName: stat.name,
-                        level: snapshot.rank.level,
-                        title: snapshot.rank.title,
-                        image: snapshot.rank.image,
-                        accent: accent
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "person.3.sequence.fill")
-                            Text("Roster")
-                        }
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(.white.opacity(0.94))
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(TrainingTheme.borderStrong.opacity(0.16), lineWidth: 0.9)
-                        )
-                        .padding(16)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(stat.name) character roster")
-                .accessibilityHint("Opens the full progression roster for this skill.")
+                Spacer(minLength: 8)
 
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(snapshot.rank.title)
-                            .font(.system(.title2, design: .rounded).weight(.black))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                Text("LV \(snapshot.rank.level)")
+                    .font(.system(.title2, design: .rounded).weight(.black))
+                    .foregroundStyle(accent)
+            }
 
-                        Text("LV \(snapshot.rank.level)")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(accent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(accent.opacity(0.12))
-                            )
-                    }
+            Button {
+                showingCharacterRoster = true
+            } label: {
+                RankArtworkView(
+                    habitName: stat.name,
+                    level: snapshot.rank.level,
+                    title: snapshot.rank.title,
+                    image: snapshot.rank.image,
+                    accent: accent
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(stat.name) character roster")
+            .accessibilityHint("Opens the full progression roster for this skill.")
 
-                    Spacer(minLength: 12)
+            HStack(spacing: 16) {
+                heroMetric(title: snapshot.weeklyCounterLabel, value: snapshot.weeklyCounterValueLabel, tint: accent)
+                heroMetric(title: "Pace", value: snapshot.pacingStatus.label, tint: paceTint)
+            }
+            .frame(maxWidth: .infinity)
 
-                    summaryPill(title: snapshot.weeklyCounterLabel, value: snapshot.weeklyCounterValueLabel, tint: accent.opacity(0.78))
-                }
+            if let primaryHabit {
+                HStack {
+                    Spacer()
 
-                HStack(spacing: 10) {
-                    summaryPill(title: "Pace", value: snapshot.pacingStatus.label, tint: paceTint)
-                    summaryPill(title: "Target", value: MetricFormatting.shortMetric(Double(snapshot.baseline)), tint: TrainingTheme.backgroundTertiary)
-                }
-
-                if let primaryHabit {
                     Button(primaryHabit.measurementType == .booleanSession ? "Log Session" : "Log Progress") {
                         logDraft = LogEntryDraft(habit: primaryHabit)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accent)
+
+                    Spacer()
                 }
             }
         }
+    }
+
+    private func openInitialLogSheetIfNeeded() {
+        guard opensLogSheetOnAppear, !hasOpenedInitialLogSheet, let primaryHabit else { return }
+        hasOpenedInitialLogSheet = true
+        logDraft = LogEntryDraft(habit: primaryHabit)
     }
 
     private var chargeSection: some View {
@@ -223,19 +225,17 @@ struct SkillDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 sectionHeaderRow("Charge", topic: .charge)
 
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(snapshot.bankedChargeLabel)
-                            .font(.system(.title3, design: .rounded).weight(.heavy))
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                        Text(snapshot.nextActionLabel)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(accent)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    chargeDots
-                }
+                Text(snapshot.bankedChargeLabel)
+                    .font(.system(.title3, design: .rounded).weight(.heavy))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+
+                chargeDots
+                    .frame(maxWidth: .infinity)
+
+                Text(snapshot.nextRankStatusLabel)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(accent)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -286,23 +286,18 @@ struct SkillDetailView: View {
             } else {
                 ForEach(linkedHabits) { habit in
                     SurfaceCard(accent: accent) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(habit.name)
-                                        .font(.headline)
-                                        .foregroundStyle(TrainingTheme.textPrimary)
-                                    Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(habit.unitLabel) this week")
-                                        .font(.caption)
-                                        .foregroundStyle(TrainingTheme.textSecondary)
-                                }
-                                Spacer()
-                                Button("Custom Log") {
-                                    logDraft = LogEntryDraft(habit: habit)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(accent)
+                        VStack(spacing: 12) {
+                            VStack(spacing: 4) {
+                                Text(habit.name)
+                                    .font(.headline)
+                                    .foregroundStyle(TrainingTheme.textPrimary)
+                                    .multilineTextAlignment(.center)
+                                Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(habit.unitLabel) this week")
+                                    .font(.caption)
+                                    .foregroundStyle(TrainingTheme.textSecondary)
+                                    .multilineTextAlignment(.center)
                             }
+                            .frame(maxWidth: .infinity)
 
                             HabitQuickActionButtons(habit: habit, accent: accent) { value in
                                 logDraft = LogEntryDraft(habit: habit, value: value)
@@ -381,40 +376,29 @@ struct SkillDetailView: View {
 
                 HStack(spacing: 8) {
                     ForEach(selectedWeekSnapshot.daySummaries) { day in
-                        WeekDaySummaryView(summary: day, accent: accent)
+                        WeekDaySummaryView(
+                            summary: day,
+                            accent: accent,
+                            isSelected: isSelectedDay(day.date)
+                        ) {
+                            selectedDay = TrainingStore.progressionCalendar().startOfDay(for: day.date)
+                        }
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Selected Week Logs")
+                    Text(selectedDayLogTitle)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(TrainingTheme.textPrimary)
 
-                    if selectedWeekSnapshot.logEntries.isEmpty {
-                        Text("No logs in this week yet.")
+                    if selectedDayLogs.isEmpty {
+                        Text("No logs on this day.")
                             .font(.subheadline)
                             .foregroundStyle(TrainingTheme.textSecondary)
                     } else {
-                        ForEach(selectedWeekSnapshot.logEntries) { entry in
+                        ForEach(selectedDayLogs) { entry in
                             SkillLogEntryRow(entry: entry, accent: accent)
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    private var recentSessionsSection: some View {
-        SurfaceCard(accent: accent) {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeaderRow("Recent Sessions", topic: .recentSessions)
-
-                if recentSnapshots.isEmpty {
-                    Text("No sessions logged in the last 7 days.")
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                } else {
-                    ForEach(recentSnapshots) { entry in
-                        SkillLogEntryRow(entry: entry, accent: accent)
                     }
                 }
             }
@@ -433,42 +417,28 @@ struct SkillDetailView: View {
     }
 
     private var chargeDots: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<DashboardChargeDots.maximumDots, id: \.self) { index in
-                Circle()
-                    .fill(index < DashboardChargeDots.filledDots(from: snapshot.rank.progressToNextLevel) ? TrainingTheme.positive : .clear)
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                index < DashboardChargeDots.filledDots(from: snapshot.rank.progressToNextLevel)
-                                    ? TrainingTheme.positive.opacity(0.34)
-                                    : Color.black.opacity(0.72),
-                                lineWidth: index < DashboardChargeDots.filledDots(from: snapshot.rank.progressToNextLevel) ? 1 : 1.4
-                            )
-                    )
-                    .frame(width: 12, height: 12)
-            }
-        }
+        SignedChargeMeter(charge: snapshot.charge.current, socketSize: 14, spacing: 7)
     }
 
-    private func summaryPill(title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private var selectedDayLogTitle: String {
+        let weekday = effectiveSelectedDay.formatted(.dateTime.weekday(.wide))
+        let date = effectiveSelectedDay.formatted(.dateTime.month(.abbreviated).day())
+        return "\(weekday) Logs · \(date)"
+    }
+
+    private func heroMetric(title: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 4) {
             Text(title.uppercased())
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(TrainingTheme.textSecondary)
+                .foregroundStyle(TrainingTheme.textMuted)
             Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(TrainingTheme.textPrimary)
+                .font(.system(.title3, design: .rounded).weight(.heavy))
+                .foregroundStyle(tint)
                 .lineLimit(3)
                 .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(tint.opacity(0.12))
-        )
+        .frame(maxWidth: .infinity)
     }
 
     private func sectionHeaderRow(_ title: String, topic: SkillHelpTopic?) -> some View {
@@ -516,6 +486,27 @@ struct SkillDetailView: View {
         selectedWeekStart = TrainingStore.progressionWeek(containing: boundedDate).start
     }
 
+    private func isSelectedDay(_ date: Date) -> Bool {
+        TrainingStore.progressionCalendar().isDate(date, inSameDayAs: effectiveSelectedDay)
+    }
+
+    private func defaultSelectedDay(for week: WeekRange) -> Date {
+        let calendar = TrainingStore.progressionCalendar()
+        if calendar.isDate(week.start, inSameDayAs: currentWeek.start) {
+            return calendar.startOfDay(for: .now)
+        }
+        return calendar.startOfDay(for: week.start)
+    }
+
+    private func helpBody(for topic: SkillHelpTopic) -> String {
+        switch topic {
+        case .charge:
+            return snapshot.chargeExplanation
+        default:
+            return topic.body
+        }
+    }
+
     private func presentPendingRankChangeIfNeeded() {
         guard presentedRankChange == nil, let pending = stat.pendingRankChange else { return }
         presentedRankChange = pending
@@ -527,7 +518,6 @@ private enum SkillHelpTopic: String, Identifiable {
     case charge
     case nextRank
     case thisWeek
-    case recentSessions
 
     var id: String { rawValue }
 
@@ -541,8 +531,6 @@ private enum SkillHelpTopic: String, Identifiable {
             return "Next Rank"
         case .thisWeek:
             return "This Week"
-        case .recentSessions:
-            return "Recent Sessions"
         }
     }
 
@@ -551,27 +539,26 @@ private enum SkillHelpTopic: String, Identifiable {
         case .currentForm:
             return "Tap the character art to open the full roster and browse every form in this skill's progression."
         case .charge:
-            return "Strong weeks bank charge toward the next rank. Your visible charge fills as you stack progress, and promotions resolve when the weekly bank checks in."
+            return "Charge runs from -4 to +4. Use the help details here to see exactly how this skill's current rank converts strong or weak weeks into charge."
         case .nextRank:
             return "This preview shows the next form you are building toward. Locked forms stay ahead of you until enough charge is banked."
         case .thisWeek:
-            return "This section shows your current progression week, daily totals, and the exact logs that count toward this week's pace."
-        case .recentSessions:
-            return "Recent Sessions shows a rolling seven-day view of your latest logs for this skill, newest first."
+            return "This section shows your current progression week. Tap any day tile to swap the lower log list to that day while today's border stays visible for orientation."
         }
     }
 }
 
 private struct SkillHelpSheet: View {
-    let topic: SkillHelpTopic
+    let title: String
+    let bodyText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(topic.title)
+            Text(title)
                 .font(.system(.title3, design: .rounded).weight(.black))
                 .foregroundStyle(TrainingTheme.textPrimary)
 
-            Text(topic.body)
+            Text(bodyText)
                 .font(.subheadline)
                 .foregroundStyle(TrainingTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -587,32 +574,48 @@ private struct SkillHelpSheet: View {
 private struct WeekDaySummaryView: View {
     let summary: DayLogSummary
     let accent: Color
+    let isSelected: Bool
+    let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            Text(summary.totalValue > 0 ? summary.totalLabel : "0")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(summary.totalValue > 0 ? accent : TrainingTheme.textSecondary)
-            Text(String(Calendar.current.component(.day, from: summary.date)))
-                .font(.headline.weight(.bold))
-                .foregroundStyle(TrainingTheme.textPrimary)
-            Text(MetricFormatting.weekday(summary.date))
-                .font(.caption2)
-                .foregroundStyle(TrainingTheme.textSecondary)
-            Text(summary.logCount == 0 ? " " : "\(summary.logCount) logs")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(summary.logCount == 0 ? .clear : TrainingTheme.textSecondary)
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(summary.totalValue > 0 ? summary.totalLabel : "0")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle((summary.totalValue > 0 || isSelected) ? accent : TrainingTheme.textSecondary)
+                Text(String(Calendar.current.component(.day, from: summary.date)))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text(MetricFormatting.weekday(summary.date))
+                    .font(.caption2)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.16) : TrainingTheme.card.opacity(0.84))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(borderColor, lineWidth: borderWidth)
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(summary.isToday ? accent.opacity(0.14) : TrainingTheme.card.opacity(0.84))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(summary.isToday ? accent.opacity(0.42) : TrainingTheme.border, lineWidth: summary.isToday ? 1.2 : 1)
-        )
+        .buttonStyle(.plain)
+    }
+
+    private var borderColor: Color {
+        if summary.isToday {
+            return accent.opacity(0.42)
+        }
+        if isSelected {
+            return accent.opacity(0.24)
+        }
+        return TrainingTheme.border
+    }
+
+    private var borderWidth: CGFloat {
+        summary.isToday ? 1.2 : 1
     }
 }
 

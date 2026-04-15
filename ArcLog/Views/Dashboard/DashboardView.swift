@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum DashboardTopMenuState {
     case none
@@ -9,26 +10,45 @@ private enum DashboardTopMenuState {
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \StatDomain.name) private var stats: [StatDomain]
+    @EnvironmentObject private var router: AppRouter
+    @Query private var stats: [StatDomain]
     @Query private var settingsRecords: [AppSettings]
-    @State private var selectedStat: StatDomain?
     @State private var presentedLogDraft: LogEntryDraft?
     @State private var flashedStatID: UUID?
     @State private var topMenuState: DashboardTopMenuState = .none
     @State private var presentedInsight: DashboardInsightOption?
+    @State private var isReordering = false
+    @State private var draggedStatID: UUID?
+    @State private var isSyncingHealth = false
+    @State private var healthStatusMessage = ""
+    @State private var isShowingHealthStatus = false
     private let compactGridColumnCount = 2
     private let compactGridSpacing: CGFloat = 16
+    private let gameGridColumnCount = 3
+    private let gameGridSpacing: CGFloat = 4
+    private let gameGridRowSpacing: CGFloat = 36
 
     private var settings: AppSettings? {
         settingsRecords.first
     }
 
     private var activeStats: [StatDomain] {
-        stats.filter { !$0.isArchived }
+        stats
+            .filter { !$0.isArchived }
+            .sorted {
+                if $0.sortOrder == $1.sortOrder {
+                    return $0.name < $1.name
+                }
+                return $0.sortOrder < $1.sortOrder
+            }
     }
 
     private var dashboardLayoutMode: DashboardLayoutMode {
-        settings?.dashboardLayoutMode ?? .detailedCards
+        settings?.dashboardLayoutMode ?? .compactGrid
+    }
+
+    private var displayedLayoutMode: DashboardLayoutMode {
+        dashboardLayoutMode
     }
 
     private var focusTargetID: UUID? {
@@ -57,14 +77,20 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     commandStrip
 
-                    switch dashboardLayoutMode {
+                    if isReordering {
+                        reorderBanner
+                    }
+
+                    switch displayedLayoutMode {
                     case .detailedCards:
                         detailedDashboard
                     case .compactGrid:
                         compactGridDashboard
+                    case .gameGrid:
+                        gameGridDashboard
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, displayedLayoutMode == .gameGrid ? 2 : 16)
                 .padding(.top, 16)
                 .padding(.bottom, 32)
             }
@@ -73,9 +99,6 @@ struct DashboardView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
-        }
-        .navigationDestination(item: $selectedStat) { stat in
-            SkillDetailView(stat: stat)
         }
         .sheet(item: $presentedLogDraft) { draft in
             NavigationStack {
@@ -113,34 +136,53 @@ struct DashboardView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .alert("Apple Health", isPresented: $isShowingHealthStatus) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(healthStatusMessage)
+        }
     }
 
     private var commandStrip: some View {
         VStack(spacing: 10) {
             HStack(spacing: 28) {
-                commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout) {
+                commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
                     toggleMenu(.layout)
                 }
 
-                commandButton(icon: "sparkles", isActive: topMenuState == .insights) {
+                commandButton(icon: "sparkles", isActive: topMenuState == .insights, accessibilityLabel: "Dashboard insights") {
                     toggleMenu(.insights)
                 }
+
+                #if canImport(HealthKit)
+                commandButton(icon: isSyncingHealth ? "heart.circle.fill" : "heart.fill", isActive: isSyncingHealth, accessibilityLabel: "Sync Apple Health workouts") {
+                    syncHealthWorkouts()
+                }
+                #endif
             }
             .frame(maxWidth: .infinity)
 
             HStack(alignment: .top, spacing: 12) {
                 if topMenuState == .layout {
                     commandMenu {
-                        ForEach(DashboardLayoutMode.allCases) { mode in
+                        ForEach([DashboardLayoutMode.compactGrid, .detailedCards, .gameGrid]) { mode in
                             menuButton(
                                 title: mode.displayName,
-                                icon: mode == .detailedCards ? "rectangle.portrait.on.rectangle.portrait" : "square.grid.3x3.fill",
+                                icon: layoutMenuIcon(for: mode),
                                 isSelected: dashboardLayoutMode == mode
                             ) {
                                 withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
                                     try? TrainingStore.setDashboardLayoutMode(mode, context: modelContext)
+                                    isReordering = false
                                     topMenuState = .none
                                 }
+                            }
+                        }
+
+                        menuButton(title: "Reorder", icon: "arrow.up.arrow.down", isSelected: isReordering) {
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                                isReordering.toggle()
+                                topMenuState = .none
                             }
                         }
                     }
@@ -186,18 +228,17 @@ struct DashboardView: View {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            dashboardChromeAccent.opacity(0.40),
+                            dashboardChromeAccent.opacity(0.28),
                             .white.opacity(0.70),
-                            TrainingTheme.borderStrong.opacity(0.20)
+                            TrainingTheme.borderStrong.opacity(0.18)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1.2
+                    lineWidth: 0.9
                 )
         )
-        .shadow(color: dashboardChromeAccent.opacity(0.14), radius: 20, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+        .shadow(color: dashboardChromeAccent.opacity(0.10), radius: 10, x: 0, y: 5)
     }
 
     private var detailedDashboard: some View {
@@ -221,11 +262,21 @@ struct DashboardView: View {
                         isFocusTarget: stat.id == focusTargetID,
                         showLogFeedback: flashedStatID == stat.id,
                         onOpenDetail: {
-                            selectedStat = stat
+                            openDetail(for: stat)
                         },
                         onQuickLogTap: { habit, value in
                             presentedLogDraft = LogEntryDraft(habit: habit, value: value)
                         }
+                    )
+                    .modifier(ReorderHandleModifier(isVisible: isReordering))
+                    .modifier(
+                        ReorderDragDropModifier(
+                            stat: stat,
+                            isReordering: isReordering,
+                            draggedStatID: $draggedStatID,
+                            orderedStatIDs: activeStats.map(\.id),
+                            moveAction: moveSkill
+                        )
                     )
                 }
             }
@@ -236,15 +287,67 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 0) {
             CenteredDashboardGridLayout(columns: compactGridColumnCount, spacing: compactGridSpacing) {
                 ForEach(activeStats) { stat in
-                    DashboardGridTile(
-                        stat: stat,
-                        snapshot: snapshot(for: stat)
-                    ) {
-                        selectedStat = stat
-                    }
+                    compactGridTile(for: stat)
                 }
             }
         }
+    }
+
+    private var gameGridDashboard: some View {
+        CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
+            ForEach(activeStats) { stat in
+                GameDashboardTile(
+                    stat: stat,
+                    snapshot: snapshot(for: stat),
+                    onOpenDetail: {
+                        openDetail(for: stat)
+                    }
+                )
+                .modifier(ReorderHandleModifier(isVisible: isReordering))
+                .modifier(
+                    ReorderDragDropModifier(
+                        stat: stat,
+                        isReordering: isReordering,
+                        draggedStatID: $draggedStatID,
+                        orderedStatIDs: activeStats.map(\.id),
+                        moveAction: moveSkill
+                    )
+                )
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private var reorderBanner: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Reorder Skills")
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text("Drag cards into the order you want. This order also drives Siri and Home Screen shortcuts.")
+                    .font(.footnote)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+
+            Spacer(minLength: 12)
+
+            Button("Done") {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                    isReordering = false
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(TrainingArcConfig.color(for: "focus"))
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(TrainingTheme.card.opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(TrainingTheme.borderStrong.opacity(0.18), lineWidth: 1)
+        )
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -264,7 +367,7 @@ struct DashboardView: View {
         }
     }
 
-    private func commandButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+    private func commandButton(icon: String, isActive: Bool, accessibilityLabel: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .bold))
@@ -293,6 +396,7 @@ struct DashboardView: View {
                 .shadow(color: (isActive ? dashboardChromeAccent : Color.black).opacity(isActive ? 0.28 : 0.06), radius: isActive ? 14 : 6, x: 0, y: 6)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel ?? icon)
     }
 
     private func commandMenu<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -342,6 +446,17 @@ struct DashboardView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func layoutMenuIcon(for mode: DashboardLayoutMode) -> String {
+        switch mode {
+        case .compactGrid:
+            return "square.grid.3x3.fill"
+        case .detailedCards:
+            return "rectangle.portrait.on.rectangle.portrait"
+        case .gameGrid:
+            return "gamecontroller.fill"
+        }
     }
 
     private func snapshot(for stat: StatDomain) -> SkillProgressSnapshot {
@@ -402,6 +517,100 @@ struct DashboardView: View {
         }
     }
 
+    @ViewBuilder
+    private func compactGridTile(for stat: StatDomain) -> some View {
+        let primaryHabit = TrainingStore.primaryHabit(for: stat)
+        let quickLogTitle = primaryHabit?.measurementType == .booleanSession ? "Log Session" : "Log Progress"
+        let tile = DashboardGridTile(
+            stat: stat,
+            snapshot: snapshot(for: stat),
+            preview: TrainingStore.dashboardCardPreview(for: stat, settings: settings),
+            quickLogTitle: quickLogTitle,
+            isReordering: isReordering,
+            onOpenDetail: {
+                openDetail(for: stat)
+            },
+            onQuickLog: {
+                presentPrimaryLog(for: stat)
+            }
+        )
+
+        if isReordering {
+            tile
+                .modifier(ReorderHandleModifier(isVisible: true))
+                .modifier(
+                    ReorderDragDropModifier(
+                        stat: stat,
+                        isReordering: true,
+                        draggedStatID: $draggedStatID,
+                        orderedStatIDs: activeStats.map(\.id),
+                        moveAction: moveSkill
+                    )
+                )
+        } else {
+            tile
+        }
+    }
+
+    private func openDetail(for stat: StatDomain, opensLogSheetOnAppear: Bool = false) {
+        guard let statKey = stat.statKey else { return }
+        router.open(
+            PendingAppDestination(
+                skillDetail: PendingSkillDestination(
+                    statKeyRaw: statKey.rawValue,
+                    openLogSheet: opensLogSheetOnAppear
+                )
+            )
+        )
+    }
+
+    private func presentPrimaryLog(for stat: StatDomain) {
+        guard let habit = TrainingStore.primaryHabit(for: stat) else { return }
+        presentedLogDraft = LogEntryDraft(habit: habit)
+    }
+
+    #if canImport(HealthKit)
+    private func syncHealthWorkouts() {
+        guard !isSyncingHealth else { return }
+        isSyncingHealth = true
+        topMenuState = .none
+
+        Task {
+            let message: String
+
+            if HealthImportService.authorizationState() == .connected {
+                message = (try? await HealthImportService.syncNow()) ?? "Apple Health sync could not complete."
+            } else {
+                message = await HealthImportService.requestAuthorizationAndSync()
+            }
+            HealthImportService.startWorkoutObserverIfEnabled()
+
+            await MainActor.run {
+                try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
+                healthStatusMessage = message
+                isShowingHealthStatus = true
+                isSyncingHealth = false
+            }
+        }
+    }
+    #endif
+
+    private func moveSkill(_ draggedID: UUID, _ targetID: UUID) {
+        guard draggedID != targetID else { return }
+        var orderedIDs = activeStats.map(\.id)
+        guard
+            let sourceIndex = orderedIDs.firstIndex(of: draggedID),
+            let targetIndex = orderedIDs.firstIndex(of: targetID)
+        else {
+            return
+        }
+
+        let movedID = orderedIDs.remove(at: sourceIndex)
+        let insertionIndex = sourceIndex < targetIndex ? targetIndex : targetIndex
+        orderedIDs.insert(movedID, at: insertionIndex)
+        try? TrainingStore.setSkillOrder(orderedIDs, context: modelContext)
+    }
+
     private var dashboardBackdrop: some View {
         ZStack {
             LinearGradient(
@@ -448,9 +657,141 @@ struct DashboardView: View {
     }
 }
 
+private struct GameDashboardTile: View {
+    let stat: StatDomain
+    let snapshot: SkillProgressSnapshot
+    let onOpenDetail: () -> Void
+
+    private var accent: Color {
+        TrainingArcConfig.color(for: stat.colorToken)
+    }
+
+    var body: some View {
+        Button(action: onOpenDetail) {
+            VStack(spacing: 15) {
+                Text(stat.name)
+                    .font(.footnote.weight(.black))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .frame(maxWidth: .infinity)
+
+                HStack(spacing: 8) {
+                    Image(systemName: stat.iconName)
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(accent)
+                        .frame(width: 22, height: 22)
+
+                    Text("LV \(snapshot.rank.level)")
+                        .font(.footnote.weight(.black))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                }
+                .frame(maxWidth: .infinity)
+
+                RankArtworkView(
+                    habitName: stat.name,
+                    level: snapshot.rank.level,
+                    title: snapshot.rank.title,
+                    image: snapshot.rank.image,
+                    accent: accent,
+                    style: .dashboardBare
+                )
+
+                Text(snapshot.weeklyTargetFractionLabel)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .frame(maxWidth: .infinity)
+
+                DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 15, spacing: 7)
+                    .frame(height: 18)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity, minHeight: 222, alignment: .top)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(stat.name), level \(snapshot.rank.level), \(DashboardChargeDots.summaryLabel(for: snapshot.charge.current))")
+    }
+}
+
+private struct ReorderHandleModifier: ViewModifier {
+    let isVisible: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .topTrailing) {
+                if isVisible {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textMuted)
+                        .padding(12)
+                }
+            }
+    }
+}
+
+private struct ReorderDragDropModifier: ViewModifier {
+    let stat: StatDomain
+    let isReordering: Bool
+    @Binding var draggedStatID: UUID?
+    let orderedStatIDs: [UUID]
+    let moveAction: (UUID, UUID) -> Void
+
+    func body(content: Content) -> some View {
+        if isReordering {
+            content
+                .onDrag {
+                    draggedStatID = stat.id
+                    return NSItemProvider(object: stat.id.uuidString as NSString)
+                }
+                .onDrop(
+                    of: [UTType.text],
+                    delegate: DashboardGridReorderDropDelegate(
+                        targetStatID: stat.id,
+                        draggedStatID: $draggedStatID,
+                        orderedStatIDs: orderedStatIDs,
+                        moveAction: moveAction
+                    )
+                )
+        } else {
+            content
+        }
+    }
+}
+
+private struct DashboardGridReorderDropDelegate: DropDelegate {
+    let targetStatID: UUID
+    @Binding var draggedStatID: UUID?
+    let orderedStatIDs: [UUID]
+    let moveAction: (UUID, UUID) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedStatID, draggedStatID != targetStatID else { return }
+        guard orderedStatIDs.contains(draggedStatID), orderedStatIDs.contains(targetStatID) else { return }
+        moveAction(draggedStatID, targetStatID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedStatID = nil
+        return true
+    }
+}
+
 private struct CenteredDashboardGridLayout: Layout {
     let columns: Int
     let spacing: CGFloat
+    let rowSpacing: CGFloat
+
+    init(columns: Int, spacing: CGFloat, rowSpacing: CGFloat? = nil) {
+        self.columns = columns
+        self.spacing = spacing
+        self.rowSpacing = rowSpacing ?? spacing
+    }
 
     struct CacheData {
         var sizes: [CGSize] = []
@@ -485,7 +826,7 @@ private struct CenteredDashboardGridLayout: Layout {
             sizes[start..<Swift.min(start + columns, sizes.count)].map(\.height).max() ?? 0
         }
 
-        let totalHeight = rowHeights.reduce(0, +) + CGFloat(max(rowHeights.count - 1, 0)) * spacing
+        let totalHeight = rowHeights.reduce(0, +) + CGFloat(max(rowHeights.count - 1, 0)) * rowSpacing
 
         cache = CacheData(
             sizes: sizes,
@@ -526,7 +867,7 @@ private struct CenteredDashboardGridLayout: Layout {
                 )
             }
 
-            y += cache.rowHeights[rowIndex] + spacing
+            y += cache.rowHeights[rowIndex] + rowSpacing
         }
     }
 }

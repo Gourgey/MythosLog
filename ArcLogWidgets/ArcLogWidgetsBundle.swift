@@ -5,5 +5,6 @@ import SwiftUI
 struct ArcLogWidgetsBundle: WidgetBundle {
     var body: some Widget {
         TrainingArcStatusWidget()
+        TrainingArcMotivationWidget()
     }
 }

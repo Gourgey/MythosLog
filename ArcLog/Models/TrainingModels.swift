@@ -103,6 +103,7 @@ enum LogSourceType: String, Codable, CaseIterable, Identifiable, Sendable {
     case manual
     case shortcut
     case widget
+    case health
     case integration
     case debug
 
@@ -113,6 +114,7 @@ enum LogSourceType: String, Codable, CaseIterable, Identifiable, Sendable {
         case .manual: "Manual"
         case .shortcut: "Shortcut"
         case .widget: "Widget"
+        case .health: "Apple Health"
         case .integration: "Integration"
         case .debug: "Debug"
         }
@@ -146,6 +148,7 @@ enum ThemePreference: String, Codable, CaseIterable, Identifiable, Sendable {
 enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case detailedCards
     case compactGrid
+    case gameGrid
 
     var id: String { rawValue }
 
@@ -155,6 +158,8 @@ enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable 
             return "Detailed Cards"
         case .compactGrid:
             return "Compact Grid"
+        case .gameGrid:
+            return "Game Grid"
         }
     }
 }
@@ -180,6 +185,7 @@ final class StatDomain {
     var iconName: String
     var colorToken: String
     var descriptor: String
+    var sortOrder: Int
     var currentLevel: Int
     var currentTierName: String
     var startingBaseline: Int
@@ -206,6 +212,7 @@ final class StatDomain {
         iconName: String,
         colorToken: String,
         descriptor: String,
+        sortOrder: Int = 0,
         currentLevel: Int = 1,
         currentTierName: String,
         startingBaseline: Int,
@@ -229,6 +236,7 @@ final class StatDomain {
         self.iconName = iconName
         self.colorToken = colorToken
         self.descriptor = descriptor
+        self.sortOrder = sortOrder
         self.currentLevel = currentLevel
         self.currentTierName = currentTierName
         self.startingBaseline = startingBaseline
@@ -265,7 +273,7 @@ extension StatDomain {
 
     var chargeValue: Int {
         get { storedCharges }
-        set { storedCharges = max(0, newValue) }
+        set { storedCharges = DashboardChargeDots.clampedCharge(newValue) }
     }
 
     var acknowledgedRankLevel: Int {
@@ -509,6 +517,8 @@ final class AppSettings {
     var weekStartsOnMonday: Bool
     var hapticsEnabled: Bool
     var lockInWeeklyReview: Bool
+    var healthAutoImportEnabled: Bool
+    var lastHealthSyncAt: Date?
     var themePreferenceRaw: String
     var dashboardLayoutModeRaw: String
     var createdAt: Date
@@ -525,8 +535,10 @@ final class AppSettings {
         weekStartsOnMonday: Bool = true,
         hapticsEnabled: Bool = true,
         lockInWeeklyReview: Bool = true,
+        healthAutoImportEnabled: Bool = true,
+        lastHealthSyncAt: Date? = nil,
         themePreference: ThemePreference = .light,
-        dashboardLayoutMode: DashboardLayoutMode = .detailedCards,
+        dashboardLayoutMode: DashboardLayoutMode = .compactGrid,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -540,6 +552,8 @@ final class AppSettings {
         self.weekStartsOnMonday = weekStartsOnMonday
         self.hapticsEnabled = hapticsEnabled
         self.lockInWeeklyReview = lockInWeeklyReview
+        self.healthAutoImportEnabled = healthAutoImportEnabled
+        self.lastHealthSyncAt = lastHealthSyncAt
         self.themePreferenceRaw = themePreference.rawValue
         self.dashboardLayoutModeRaw = dashboardLayoutMode.rawValue
         self.createdAt = createdAt
@@ -552,8 +566,43 @@ final class AppSettings {
     }
 
     var dashboardLayoutMode: DashboardLayoutMode {
-        get { DashboardLayoutMode(rawValue: dashboardLayoutModeRaw) ?? .detailedCards }
+        get { DashboardLayoutMode(rawValue: dashboardLayoutModeRaw) ?? .compactGrid }
         set { dashboardLayoutModeRaw = newValue.rawValue }
+    }
+}
+
+@Model
+final class HealthImportedWorkout {
+    @Attribute(.unique) var workoutUUID: String
+    var statKeyRaw: String
+    var habitSystemKey: String?
+    var sourceBundleIdentifier: String?
+    var activityTypeRaw: Int
+    var startDate: Date
+    var endDate: Date
+    var durationMinutes: Double
+    var createdAt: Date
+
+    init(
+        workoutUUID: String,
+        statKeyRaw: String,
+        habitSystemKey: String?,
+        sourceBundleIdentifier: String?,
+        activityTypeRaw: Int,
+        startDate: Date,
+        endDate: Date,
+        durationMinutes: Double,
+        createdAt: Date = .now
+    ) {
+        self.workoutUUID = workoutUUID
+        self.statKeyRaw = statKeyRaw
+        self.habitSystemKey = habitSystemKey
+        self.sourceBundleIdentifier = sourceBundleIdentifier
+        self.activityTypeRaw = activityTypeRaw
+        self.startDate = startDate
+        self.endDate = endDate
+        self.durationMinutes = durationMinutes
+        self.createdAt = createdAt
     }
 }
 
@@ -714,6 +763,20 @@ struct SkillProgressSnapshot: Sendable {
     var bankCountdownLabel: String
 }
 
+extension SkillProgressSnapshot {
+    var weeklyTargetFractionLabel: String {
+        "\(MetricFormatting.shortMetric(currentWeekActual))/\(MetricFormatting.shortMetric(Double(baseline)))"
+    }
+}
+
+struct DashboardCardPreview: Sendable {
+    var rankSummary: String
+    var bankedChargeSummary: String
+    var stayOnTargetSummary: String
+    var weeklyTargetSummary: String
+    var levelUpSummary: String
+}
+
 enum DashboardInsightOption: String, CaseIterable, Identifiable, Sendable {
     case whatToWorkOn
     case whatImproved
@@ -786,8 +849,10 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
             weekStartsOnMonday: true,
             hapticsEnabled: true,
             lockInWeeklyReview: true,
+            healthAutoImportEnabled: true,
+            lastHealthSyncAt: nil,
             themePreferenceRaw: ThemePreference.dark.rawValue,
-            dashboardLayoutModeRaw: DashboardLayoutMode.detailedCards.rawValue
+            dashboardLayoutModeRaw: DashboardLayoutMode.compactGrid.rawValue
         )
     )
 }
@@ -817,6 +882,7 @@ nonisolated struct StatExport: Codable, Sendable {
     var iconName: String
     var colorToken: String
     var descriptor: String
+    var sortOrder: Int
     var currentLevel: Int
     var currentTierName: String
     var startingBaseline: Int
@@ -899,6 +965,8 @@ nonisolated struct SettingsExport: Codable, Sendable {
     var weekStartsOnMonday: Bool
     var hapticsEnabled: Bool
     var lockInWeeklyReview: Bool
+    var healthAutoImportEnabled: Bool?
+    var lastHealthSyncAt: Date?
     var themePreferenceRaw: String
     var dashboardLayoutModeRaw: String
 }

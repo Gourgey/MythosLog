@@ -11,12 +11,16 @@ struct WeeklyProgressionResult: Sendable {
     var expectedTotal: Double
     var actualTotal: Double
     var weeklyDelta: Double
+    var weeklyChargeDelta: Int
     var bankedUnitsBefore: Double
     var bankedUnitsAfter: Double
     var levelBefore: Int
     var levelAfter: Int
+    var chargeBeforeDecay: Int
+    var chargeAfterDecay: Int
     var didLevelUp: Bool
     var didLevelDown: Bool
+    var didDecayTowardZero: Bool
     var visibleChargesAfter: Int
 }
 
@@ -40,33 +44,35 @@ enum ProgressionEngine {
         let expectedTotal = Double(expectedTargetBefore)
         let weeklyDelta = actualTotal - expectedTotal
         let bankedUnitsBefore = state.bankedProgressUnits
-        var bankedUnitsAfter = bankedUnitsBefore + weeklyDelta
+        let chargeBeforeDecay = TrainingArcConfig.displayedCharge(for: statKey, bankedUnits: bankedUnitsBefore, level: levelBefore)
+        let chargeAfterDecay = decayCharge(chargeBeforeDecay)
+        let weeklyChargeDelta = chargeDelta(
+            statKey: statKey,
+            level: levelBefore,
+            expectedTarget: expectedTargetBefore,
+            actualTotal: actualTotal
+        )
+        var resolvedCharge = DashboardChargeDots.clampedCharge(chargeAfterDecay + weeklyChargeDelta)
         var levelAfter = levelBefore
         var expectedTargetAfter = expectedTargetBefore
         var didLevelUp = false
         var didLevelDown = false
 
-        if levelBefore < TrainingArcConfig.maximumRankLevel {
-            let nextLevel = levelBefore + 1
-            let bridgeUnits = TrainingArcConfig.progressionBridgeUnits(for: statKey, fromLevel: levelBefore, toLevel: nextLevel)
-            if bankedUnitsAfter >= bridgeUnits {
-                levelAfter = nextLevel
-                expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: nextLevel)
-                bankedUnitsAfter -= bridgeUnits
-                didLevelUp = true
-            }
+        if resolvedCharge >= DashboardChargeDots.slotsPerSide, levelBefore < TrainingArcConfig.maximumRankLevel {
+            levelAfter = levelBefore + 1
+            expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: levelAfter)
+            resolvedCharge = 0
+            didLevelUp = true
         }
 
-        if !didLevelUp, levelBefore > TrainingArcConfig.minimumRankLevel {
-            let previousLevel = levelBefore - 1
-            let bridgeUnits = TrainingArcConfig.progressionBridgeUnits(for: statKey, fromLevel: levelBefore, toLevel: previousLevel)
-            if bankedUnitsAfter <= -bridgeUnits {
-                levelAfter = previousLevel
-                expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: previousLevel)
-                bankedUnitsAfter += bridgeUnits
-                didLevelDown = true
-            }
+        if !didLevelUp, resolvedCharge <= -DashboardChargeDots.slotsPerSide, levelBefore > TrainingArcConfig.minimumRankLevel {
+            levelAfter = levelBefore - 1
+            expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: levelAfter)
+            resolvedCharge = 0
+            didLevelDown = true
         }
+
+        let bankedUnitsAfter = Double(DashboardChargeDots.clampedCharge(resolvedCharge))
 
         let finalState = WeeklyProgressionState(
             level: levelAfter,
@@ -79,12 +85,16 @@ enum ProgressionEngine {
             expectedTotal: expectedTotal,
             actualTotal: actualTotal,
             weeklyDelta: weeklyDelta,
+            weeklyChargeDelta: weeklyChargeDelta,
             bankedUnitsBefore: bankedUnitsBefore,
             bankedUnitsAfter: bankedUnitsAfter,
             levelBefore: levelBefore,
             levelAfter: levelAfter,
+            chargeBeforeDecay: chargeBeforeDecay,
+            chargeAfterDecay: chargeAfterDecay,
             didLevelUp: didLevelUp,
             didLevelDown: didLevelDown,
+            didDecayTowardZero: chargeBeforeDecay != chargeAfterDecay,
             visibleChargesAfter: TrainingArcConfig.displayedCharge(
                 for: statKey,
                 bankedUnits: bankedUnitsAfter,
@@ -108,5 +118,35 @@ enum ProgressionEngine {
             bankedUnits: state.bankedProgressUnits,
             level: state.level
         )
+    }
+
+    private static func decayCharge(_ charge: Int) -> Int {
+        switch charge {
+        case let value where value > 0:
+            return value - 1
+        case let value where value < 0:
+            return value + 1
+        default:
+            return 0
+        }
+    }
+
+    private static func chargeDelta(
+        statKey: StatKey,
+        level: Int,
+        expectedTarget: Int,
+        actualTotal: Double
+    ) -> Int {
+        let currentTarget = Double(expectedTarget)
+
+        if actualTotal > currentTarget, let positiveStep = TrainingArcConfig.positiveChargeStep(for: statKey, level: level) {
+            return Int(floor((actualTotal - currentTarget) / Double(positiveStep)))
+        }
+
+        if actualTotal < currentTarget, let negativeStep = TrainingArcConfig.negativeChargeStep(for: statKey, level: level) {
+            return -Int(floor((currentTarget - actualTotal) / Double(negativeStep)))
+        }
+
+        return 0
     }
 }

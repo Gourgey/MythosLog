@@ -6,6 +6,9 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
     var momentumTitle: String
     var momentumSubtitle: String
     var characterSummary: String
+    var motivationTitle: String
+    var motivationMessage: String
+    var motivationColorToken: String
     var pendingWeeklyReview: Bool
     var weakestStat: TrainingWidgetStat?
     var stats: [TrainingWidgetStat]
@@ -17,6 +20,9 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         momentumTitle: "No data yet",
         momentumSubtitle: "Complete onboarding to begin training.",
         characterSummary: "Build the first version of yourself.",
+        motivationTitle: "Start your training",
+        motivationMessage: "Log your first session to build momentum.",
+        motivationColorToken: "focus",
         pendingWeeklyReview: false,
         weakestStat: nil,
         stats: [],
@@ -46,6 +52,10 @@ struct TrainingWidgetHabit: Codable, Identifiable, Sendable {
 }
 
 enum WidgetSnapshotStore {
+    private static var defaults: UserDefaults? {
+        UserDefaults(suiteName: AppIdentity.appGroupIdentifier)
+    }
+
     static func snapshotURL() -> URL? {
         let fm = FileManager.default
         if let container = fm.containerURL(forSecurityApplicationGroupIdentifier: AppIdentity.appGroupIdentifier) {
@@ -57,20 +67,32 @@ enum WidgetSnapshotStore {
     }
 
     static func load() -> TrainingWidgetSnapshot {
-        guard
+        let decoder = JSONDecoder()
+
+        if
             let url = snapshotURL(),
             let data = try? Data(contentsOf: url),
-            let snapshot = try? JSONDecoder().decode(TrainingWidgetSnapshot.self, from: data)
-        else {
-            return .empty
+            let snapshot = try? decoder.decode(TrainingWidgetSnapshot.self, from: data)
+        {
+            return snapshot
         }
-        return snapshot
+
+        if
+            let data = defaults?.data(forKey: AppIdentity.widgetSnapshotDefaultsKey),
+            let snapshot = try? decoder.decode(TrainingWidgetSnapshot.self, from: data)
+        {
+            return snapshot
+        }
+
+        return .empty
     }
 
     static func save(_ snapshot: TrainingWidgetSnapshot) {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        defaults?.set(data, forKey: AppIdentity.widgetSnapshotDefaultsKey)
+
         guard let url = snapshotURL() else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
