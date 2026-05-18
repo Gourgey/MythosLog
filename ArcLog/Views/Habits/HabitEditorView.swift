@@ -117,6 +117,7 @@ struct HabitEditorView: View {
         }
 
         try? modelContext.save()
+        TrainingStore.recordLocalWrite(reason: habit == nil ? "created habit" : "updated habit")
         try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
         dismiss()
     }

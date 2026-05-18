@@ -66,7 +66,9 @@ struct ArcLogTests {
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 1) == "Frail Elder")
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 10) == "Ascended Martial Titan")
         #expect(TrainingArcConfig.rankTitle(for: .cardio, level: 4) == "Conditioned Human")
-        #expect(TrainingArcConfig.defaultHabitTemplates.count == 7)
+        #expect(TrainingArcConfig.defaultHabitTemplates.count == 9)
+        #expect(TrainingArcConfig.rankTitle(for: .cooking, level: 1) == "Take-Out Regular")
+        #expect(TrainingArcConfig.rankTitle(for: .reading, level: 10) == "Living Archive")
     }
 
     @Test func baselineThresholdsMapToExpectedRankLevels() {
@@ -105,6 +107,141 @@ struct ArcLogTests {
         #expect(settings.dashboardLayoutMode == .compactGrid)
     }
 
+    @Test @MainActor func reconcileSyncedDataKeepsNewestSettingsRecord() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        let older = AppSettings(
+            hasCompletedOnboarding: false,
+            createdAt: isoDate("2026-01-01T09:00:00Z"),
+            updatedAt: isoDate("2026-01-01T09:00:00Z")
+        )
+        let newer = AppSettings(
+            hasCompletedOnboarding: true,
+            createdAt: isoDate("2026-01-02T09:00:00Z"),
+            updatedAt: isoDate("2026-01-02T09:00:00Z")
+        )
+
+        context.insert(older)
+        context.insert(newer)
+        try context.save()
+
+        try TrainingStore.reconcileSyncedData(context: context)
+
+        let settings = try context.fetch(FetchDescriptor<AppSettings>())
+        #expect(settings.count == 1)
+        #expect(settings.first?.hasCompletedOnboarding == true)
+    }
+
+    @Test @MainActor func reconcileSyncedDataMergesDuplicateStatsByKey() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let duplicateStat = StatDomain(
+            key: StatKey.strength.rawValue,
+            name: "Duplicate Strength",
+            iconName: "bolt.fill",
+            colorToken: "strength",
+            descriptor: "Duplicate",
+            currentTierName: "Duplicate",
+            startingBaseline: 1,
+            currentBaseline: 1,
+            createdAt: isoDate("2026-01-01T09:00:00Z"),
+            updatedAt: isoDate("2026-01-01T09:00:00Z")
+        )
+        let duplicateHabit = Habit(
+            name: "Duplicate Lift",
+            measurementType: .booleanSession,
+            unitLabel: "session",
+            scheduleType: .weekly,
+            targetPerPeriod: 1,
+            statDomain: duplicateStat
+        )
+
+        fixture.context.insert(duplicateStat)
+        fixture.context.insert(duplicateHabit)
+        try fixture.context.save()
+
+        try TrainingStore.reconcileSyncedData(context: fixture.context)
+
+        let strengthStats = try TrainingStore.fetchStats(context: fixture.context).filter { $0.key == StatKey.strength.rawValue }
+        let duplicateHabitAfterMerge = try #require(try TrainingStore.fetchHabits(context: fixture.context).first { $0.name == "Duplicate Lift" })
+        #expect(strengthStats.count == 1)
+        #expect(duplicateHabitAfterMerge.statDomain?.id == strengthStats.first?.id)
+    }
+
+    @Test @MainActor func reconcileSyncedDataDeduplicatesHealthImportedWorkouts() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let workoutID = UUID().uuidString
+        let workoutEnd = isoDate("2026-03-24T18:00:00Z")
+        let importedRecord = HealthImportedWorkout(
+            workoutUUID: workoutID,
+            statKeyRaw: StatKey.strength.rawValue,
+            habitSystemKey: fixture.habit.systemKey,
+            sourceBundleIdentifier: "com.apple.Health",
+            activityTypeRaw: 50,
+            startDate: isoDate("2026-03-24T17:00:00Z"),
+            endDate: workoutEnd,
+            durationMinutes: 60,
+            wasImported: true,
+            isDuplicate: false,
+            createdAt: isoDate("2026-03-24T18:01:00Z")
+        )
+        let duplicateRecord = HealthImportedWorkout(
+            workoutUUID: workoutID,
+            statKeyRaw: StatKey.strength.rawValue,
+            habitSystemKey: fixture.habit.systemKey,
+            sourceBundleIdentifier: "com.apple.Health",
+            activityTypeRaw: 50,
+            startDate: isoDate("2026-03-24T17:00:00Z"),
+            endDate: workoutEnd,
+            durationMinutes: 60,
+            wasImported: false,
+            isDuplicate: true,
+            createdAt: isoDate("2026-03-24T18:02:00Z")
+        )
+
+        fixture.context.insert(importedRecord)
+        fixture.context.insert(duplicateRecord)
+        try fixture.context.save()
+
+        try TrainingStore.reconcileSyncedData(context: fixture.context)
+
+        let records = try TrainingStore.fetchImportedHealthWorkouts(context: fixture.context)
+        #expect(records.count == 1)
+        #expect(records.first?.workoutUUID == workoutID)
+        #expect(records.first?.wasImported == true)
+    }
+
+    @Test @MainActor func reconcileSyncedDataPreservesDistinctManualLogs() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let loggedAt = isoDate("2026-03-24T18:00:00Z")
+
+        fixture.context.insert(
+            HabitLog(
+                date: loggedAt,
+                numericValue: 1,
+                note: "Same visible entry",
+                sourceType: .manual,
+                createdAt: isoDate("2026-03-24T18:01:00Z"),
+                habit: fixture.habit
+            )
+        )
+        fixture.context.insert(
+            HabitLog(
+                date: loggedAt,
+                numericValue: 1,
+                note: "Same visible entry",
+                sourceType: .manual,
+                createdAt: isoDate("2026-03-24T18:02:00Z"),
+                habit: fixture.habit
+            )
+        )
+        try fixture.context.save()
+
+        try TrainingStore.reconcileSyncedData(context: fixture.context)
+
+        let manualLogs = try TrainingStore.fetchLogs(context: fixture.context).filter { $0.sourceType == .manual }
+        #expect(manualLogs.count == 2)
+    }
+
     @Test func strengthRosterUsesUnlockedAndLockedAssetsByLevel() {
         let entries = TrainingArcConfig.characterRosterEntries(for: .strength, currentLevel: 4)
 
@@ -129,6 +266,33 @@ struct ArcLogTests {
             #expect(fallbackName == "Strength_Level_6_Locked")
         } else {
             Issue.record("Expected future Strength levels to use locked Strength art when it exists.")
+        }
+    }
+
+    @Test func creativityRosterUsesUnlockedAndLockedAssetsByLevel() {
+        let entries = TrainingArcConfig.characterRosterEntries(for: .creativity, currentLevel: 4)
+
+        #expect(entries.count == 10)
+        #expect(entries[0].isLocked == false)
+        #expect(entries[3].isLocked == false)
+        #expect(entries[4].isLocked == true)
+
+        if case .asset(let currentName)? = entries[3].image {
+            #expect(currentName == "Creativity_Level_4")
+        } else {
+            Issue.record("Expected unlocked Creativity art for level 4.")
+        }
+
+        if case .asset(let lockedName)? = entries[4].image {
+            #expect(lockedName == "Creativity_Level_5_Locked")
+        } else {
+            Issue.record("Expected locked Creativity art for level 5.")
+        }
+
+        if case .asset(let futureName)? = entries[9].image {
+            #expect(futureName == "Creativity_Level_10_Locked")
+        } else {
+            Issue.record("Expected future Creativity levels to use locked Creativity art when it exists.")
         }
     }
 
@@ -337,9 +501,9 @@ struct ArcLogTests {
         #expect(fixture.stat.bankedProgressUnits == 0)
         #expect(fixture.stat.chargeValue == 0)
         #expect(fixture.stat.pendingRankChange?.direction == .up)
-        #expect(fixture.stat.weeklyResolutions.count == 1)
+        #expect((fixture.stat.weeklyResolutions ?? []).count == 1)
 
-        let resolution = try #require(fixture.stat.weeklyResolutions.first)
+        let resolution = try #require((fixture.stat.weeklyResolutions ?? []).first)
         #expect(resolution.weekStartDate == completedWeekStart)
         #expect(resolution.expectedTotal == 3)
         #expect(resolution.actualCompletedValue == 12)
@@ -359,7 +523,7 @@ struct ArcLogTests {
         #expect(fixture.stat.bankedProgressUnits == 0)
         #expect(fixture.stat.chargeValue == 0)
         #expect(fixture.stat.pendingRankChange == nil)
-        #expect(fixture.stat.weeklyResolutions.isEmpty)
+        #expect((fixture.stat.weeklyResolutions ?? []).isEmpty)
         #expect(TrainingStore.currentWeekTotal(for: fixture.stat, settings: nil, now: now) == 12)
     }
 

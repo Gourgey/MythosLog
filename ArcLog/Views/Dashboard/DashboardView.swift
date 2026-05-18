@@ -81,6 +81,9 @@ struct DashboardView: View {
                         reorderBanner
                     }
 
+                    trainTodayCard
+                        .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
+
                     switch displayedLayoutMode {
                     case .detailedCards:
                         detailedDashboard
@@ -239,6 +242,80 @@ struct DashboardView: View {
                 )
         )
         .shadow(color: dashboardChromeAccent.opacity(0.10), radius: 10, x: 0, y: 5)
+    }
+
+    private var trainTodayRecommendations: [TrainTodayRecommendation] {
+        (try? TrainingStore.trainTodayRecommendations(context: modelContext, settings: settings)) ?? []
+    }
+
+    @ViewBuilder
+    private var trainTodayCard: some View {
+        let recs = trainTodayRecommendations
+        if !recs.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("TRAIN TODAY")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(TrainingTheme.textMuted)
+
+                VStack(spacing: 10) {
+                    ForEach(recs) { rec in
+                        Button {
+                            handleRecommendationTap(rec)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: rec.iconName)
+                                    .font(.headline.weight(.bold))
+                                    .foregroundStyle(TrainingArcConfig.color(for: rec.colorToken))
+                                    .frame(width: 32, height: 32)
+                                    .background(
+                                        Circle()
+                                            .fill(TrainingArcConfig.color(for: rec.colorToken).opacity(0.14))
+                                    )
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(rec.headline)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(TrainingTheme.textPrimary)
+                                        .multilineTextAlignment(.leading)
+                                    Text(rec.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(TrainingTheme.textSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(TrainingTheme.textMuted)
+                            }
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(TrainingTheme.card)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(TrainingArcConfig.color(for: rec.colorToken).opacity(0.18), lineWidth: 0.8)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleRecommendationTap(_ rec: TrainTodayRecommendation) {
+        if rec.hasReviewReady {
+            router.open(PendingAppDestination(route: .weeklyReview))
+            return
+        }
+        if let statKeyRaw = rec.statKeyRaw, let statKey = StatKey(rawValue: statKeyRaw) {
+            router.open(
+                PendingAppDestination(
+                    skillDetail: PendingSkillDestination(statKeyRaw: statKey.rawValue, openLogSheet: false)
+                )
+            )
+        }
     }
 
     private var detailedDashboard: some View {
@@ -488,7 +565,7 @@ struct DashboardView: View {
     }
 
     private func recentTrend(for stat: StatDomain) -> Double {
-        let recent = stat.weeklyResolutions.sorted { $0.weekStartDate < $1.weekStartDate }.suffix(3)
+        let recent = (stat.weeklyResolutions ?? []).sorted { $0.weekStartDate < $1.weekStartDate }.suffix(3)
         guard recent.count >= 2 else { return 0 }
         let last = recent.last?.actualCompletedValue ?? 0
         let first = recent.first?.actualCompletedValue ?? 0
@@ -662,8 +739,19 @@ private struct GameDashboardTile: View {
     let snapshot: SkillProgressSnapshot
     let onOpenDetail: () -> Void
 
+    @State private var indicatorPulse = false
+
     private var accent: Color {
         TrainingArcConfig.color(for: stat.colorToken)
+    }
+
+    private var ringTint: Color {
+        snapshot.weeklyTargetProgress >= 1 ? TrainingTheme.warning : accent
+    }
+
+    private var rankIndicatorTint: Color {
+        guard let direction = snapshot.pendingRankChange?.direction else { return .clear }
+        return direction == .up ? TrainingTheme.positiveStrong : TrainingTheme.danger
     }
 
     var body: some View {
@@ -690,14 +778,30 @@ private struct GameDashboardTile: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                RankArtworkView(
-                    habitName: stat.name,
-                    level: snapshot.rank.level,
-                    title: snapshot.rank.title,
-                    image: snapshot.rank.image,
-                    accent: accent,
-                    style: .dashboardBare
-                )
+                ZStack {
+                    Circle()
+                        .stroke(TrainingTheme.borderStrong.opacity(0.16), lineWidth: 3)
+                        .padding(2)
+
+                    Circle()
+                        .trim(from: 0, to: snapshot.weeklyTargetProgress)
+                        .stroke(ringTint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(2)
+                        .animation(.spring(response: 0.55, dampingFraction: 0.82), value: snapshot.weeklyTargetProgress)
+
+                    RankArtworkView(
+                        habitName: stat.name,
+                        level: snapshot.rank.level,
+                        title: snapshot.rank.title,
+                        image: snapshot.rank.image,
+                        accent: accent,
+                        style: .dashboardBare
+                    )
+                    .padding(8)
+                }
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
 
                 Text(snapshot.weeklyTargetFractionLabel)
                     .font(.caption.weight(.black))
@@ -715,6 +819,28 @@ private struct GameDashboardTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
+                Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(
+                        Circle()
+                            .fill(rankIndicatorTint)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(.white.opacity(0.85), lineWidth: 1.4)
+                    )
+                    .shadow(color: rankIndicatorTint.opacity(0.55), radius: indicatorPulse ? 10 : 4, x: 0, y: 0)
+                    .scaleEffect(indicatorPulse ? 1.06 : 0.96)
+                    .padding(6)
+                    .accessibilityLabel(direction == .up ? "Rank up available" : "Rank drop pending")
+                    .onAppear { indicatorPulse = true }
+                    .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: indicatorPulse)
+            }
+        }
         .accessibilityLabel("\(stat.name), level \(snapshot.rank.level), \(DashboardChargeDots.summaryLabel(for: snapshot.charge.current))")
     }
 }

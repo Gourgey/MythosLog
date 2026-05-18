@@ -25,14 +25,10 @@ private struct SkillDetailDestinationView: View {
 
 struct AppRootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var settingsRecords: [AppSettings]
     @StateObject private var router = AppRouter()
     @State private var settings: AppSettings?
     @State private var showOnboarding = false
-
-    private var preferredColorScheme: ColorScheme? {
-        guard let settings else { return .light }
-        return settings.themePreference.colorScheme
-    }
 
     var body: some View {
         NavigationStack(path: $router.rootPath) {
@@ -58,6 +54,14 @@ struct AppRootView: View {
                         }
 
                         NavigationStack {
+                            GoalsView()
+                        }
+                        .tag(TrainingRoute.goals)
+                        .tabItem {
+                            Label("Goals", systemImage: "target")
+                        }
+
+                        NavigationStack {
                             MoreView {
                                 reloadSettings()
                             }
@@ -78,10 +82,15 @@ struct AppRootView: View {
         }
         .environmentObject(router)
         .task {
+            TrainingStore.startCloudKitEventObserver()
+            _ = try? TrainingStore.reconcileSyncedData(context: modelContext)
             reloadSettings()
             consumeHomeScreenQuickActionIfNeeded()
             try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
             consumePendingDestinationIfNeeded()
+        }
+        .onChange(of: settingsRecords.map { "\($0.id)|\($0.hasCompletedOnboarding)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
+            reloadSettings()
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             consumePendingDestinationIfNeeded()
@@ -104,11 +113,11 @@ struct AppRootView: View {
                 try? TrainingStore.refreshAllProgress(context: modelContext, reason: .logMutation)
             }
         }
-        .preferredColorScheme(preferredColorScheme)
+        .preferredColorScheme(.light)
     }
 
     private func reloadSettings() {
-        let storedSettings = try? TrainingStore.fetchSettings(context: modelContext)
+        let storedSettings = try? TrainingStore.fetchExistingSettings(context: modelContext)
         settings = storedSettings
         showOnboarding = !(storedSettings?.hasCompletedOnboarding ?? false)
 

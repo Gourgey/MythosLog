@@ -4,6 +4,7 @@ enum TrainingRoute: String, CaseIterable, Identifiable, Codable, Sendable {
     case dashboard
     case weeklyReview
     case more
+    case goals
 
     var id: String { rawValue }
 }

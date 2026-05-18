@@ -1,6 +1,15 @@
 import Foundation
 import SwiftData
 
+// External apps log into ArcLog via the deep-link URL scheme handled by
+// DeepLinkRouter. Examples:
+//   arclog://log?stat=curiosity&value=1&note=Topic
+//   arclog://log?habit=habit.reading.session&value=30&note=Kindre
+//   arclog://log?stat=reading&value=30&note=Book%20title&date=2026-05-12T18:30:00Z
+// Query parameters: habit (Habit.systemKey) OR stat (StatKey.rawValue), value
+// (Double, defaults to 1), note (URL-encoded text), date (ISO8601, defaults to
+// .now). The matched Habit's measurementType determines how value is interpreted.
+
 enum ExternalEventService {
     @MainActor
     static func ingest(_ event: ExternalLogEvent, context: ModelContext) throws {

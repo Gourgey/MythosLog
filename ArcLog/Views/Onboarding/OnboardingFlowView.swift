@@ -9,6 +9,8 @@ struct OnboardingFlowView: View {
     @State private var selectedHabitKeys = Set(TrainingArcConfig.defaultHabitTemplates.map(\.systemKey))
     @State private var baselines = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, $0.defaultBaseline) })
     @State private var baselineDrafts = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, "\($0.defaultBaseline)") })
+    @State private var targetDrafts: [StatKey: String] = [:]
+    @State private var maxDrafts: [StatKey: String] = [:]
     @State private var enableNotifications = false
     let onComplete: () -> Void
 
@@ -26,7 +28,8 @@ struct OnboardingFlowView: View {
                     introStep.tag(0)
                     habitsStep.tag(1)
                     baselineStep.tag(2)
-                    reviewStep.tag(3)
+                    calibrationStep.tag(3)
+                    reviewStep.tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
 
@@ -40,8 +43,8 @@ struct OnboardingFlowView: View {
 
                     Spacer()
 
-                    Button(step == 3 ? "Begin Training" : "Next") {
-                        if step == 3 {
+                    Button(step == 4 ? "Begin Training" : "Next") {
+                        if step == 4 {
                             completeOnboarding()
                         } else {
                             withAnimation { step += 1 }
@@ -75,7 +78,7 @@ struct OnboardingFlowView: View {
             }
 
             SurfaceCard(accent: TrainingArcConfig.color(for: "strength")) {
-                Text("Set the baseline that matches your real current form. Your starting rank comes from that baseline, while charge reflects banked weekly surplus toward the next rank.")
+                Text("Set the baseline that matches your real current form. Your starting rank comes from that baseline. Charge reflects short-term momentum from how each completed week compares to it.")
                     .font(.body)
                     .foregroundStyle(TrainingTheme.textPrimary)
             }
@@ -159,6 +162,95 @@ struct OnboardingFlowView: View {
         )
     }
 
+    private var calibrationStep: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Calibrate (optional)")
+                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text("Tell ArcLog what you’re training toward and your believable maximum in a strong week. Both are optional — skip if you’re only using baseline for now.")
+                    .foregroundStyle(TrainingTheme.textSecondary)
+
+                ForEach(TrainingArcConfig.statTemplates) { template in
+                    calibrationCard(for: template)
+                }
+            }
+            .padding(24)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func calibrationCard(for template: StatTemplate) -> some View {
+        let baseline = baselines[template.key] ?? template.defaultBaseline
+        return SurfaceCard(accent: TrainingArcConfig.color(for: template.colorToken)) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(template.key.displayName)
+                    .font(.headline)
+                    .foregroundStyle(TrainingTheme.textPrimary)
+
+                Text("Baseline: \(baseline)")
+                    .font(.subheadline)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+
+                HStack(spacing: 12) {
+                    Text("Target")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .frame(width: 90, alignment: .leading)
+                    TextField("Optional", text: targetBinding(for: template.key))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(TrainingTheme.background.opacity(0.5)))
+                        .frame(maxWidth: 120)
+                    Spacer()
+                }
+
+                HStack(spacing: 12) {
+                    Text("Personal Max")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .frame(width: 90, alignment: .leading)
+                    TextField("Optional", text: maxBinding(for: template.key))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(TrainingTheme.background.opacity(0.5)))
+                        .frame(maxWidth: 120)
+                    Spacer()
+                }
+
+                Button {
+                    let suggestedTarget = TrainingArcConfig.suggestedTargetValue(for: template.key, baseline: baseline)
+                    let suggestedMax = TrainingArcConfig.suggestedPersonalMaxValue(for: template.key, baseline: baseline, target: suggestedTarget)
+                    targetDrafts[template.key] = "\(suggestedTarget)"
+                    maxDrafts[template.key] = "\(suggestedMax)"
+                } label: {
+                    Label("Suggest", systemImage: "wand.and.stars")
+                        .font(.footnote.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(TrainingArcConfig.color(for: template.colorToken))
+            }
+        }
+    }
+
+    private func targetBinding(for key: StatKey) -> Binding<String> {
+        Binding(
+            get: { targetDrafts[key] ?? "" },
+            set: { targetDrafts[key] = $0.filter(\.isNumber) }
+        )
+    }
+
+    private func maxBinding(for key: StatKey) -> Binding<String> {
+        Binding(
+            get: { maxDrafts[key] ?? "" },
+            set: { maxDrafts[key] = $0.filter(\.isNumber) }
+        )
+    }
+
     private var reviewStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -201,6 +293,24 @@ struct OnboardingFlowView: View {
             completeOnboarding: true
         )
 
+        if let stats = try? TrainingStore.fetchStats(context: modelContext) {
+            for stat in stats {
+                guard let key = stat.statKey else { continue }
+                let target = Int(targetDrafts[key] ?? "")
+                let personalMax = Int(maxDrafts[key] ?? "")
+                let clamped = TrainingArcConfig.clampCalibration(
+                    baseline: stat.currentBaseline,
+                    target: target,
+                    personalMax: personalMax,
+                    maintenance: nil
+                )
+                stat.targetValue = clamped.target
+                stat.personalMaxValue = clamped.max
+                stat.maintenanceFloor = clamped.maintenance
+            }
+            try? modelContext.save()
+        }
+
         if enableNotifications {
             Task {
                 await NotificationService.requestAuthorization()
@@ -209,6 +319,7 @@ struct OnboardingFlowView: View {
                     settings.eveningReminderEnabled = true
                     settings.weeklyReviewReminderEnabled = true
                     try? modelContext.save()
+                    TrainingStore.recordLocalWrite(reason: "enabled onboarding notifications")
                     NotificationService.refreshNotifications(using: settings)
                 }
             }

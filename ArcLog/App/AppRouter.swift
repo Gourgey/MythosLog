@@ -5,11 +5,11 @@ import SwiftUI
 @MainActor
 final class AppRouter: ObservableObject {
     @Published var selectedRoute: TrainingRoute = .dashboard
-    @Published var rootPath = NavigationPath()
+    @Published var rootPath: [DashboardNavigationDestination] = []
 
     func open(_ route: TrainingRoute) {
         selectedRoute = route
-        rootPath = NavigationPath()
+        rootPath = []
     }
 
     func open(_ destination: PendingAppDestination) {
@@ -23,10 +23,7 @@ final class AppRouter: ObservableObject {
             }
 
             selectedRoute = .dashboard
-            rootPath = NavigationPath()
-            DispatchQueue.main.async { [weak self] in
-                self?.rootPath.append(DashboardNavigationDestination.skillDetail(skill))
-            }
+            rootPath = [.skillDetail(skill)]
         }
     }
 }

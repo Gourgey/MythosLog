@@ -16,6 +16,9 @@ struct SkillDetailView: View {
     @State private var showingCharacterRoster = false
     @State private var presentedHelpTopic: SkillHelpTopic?
     @State private var hasOpenedInitialLogSheet = false
+    @State private var showingCalibrationSheet = false
+    @State private var showingGoalEditorForNew = false
+    @State private var editingGoal: Goal?
 
     init(stat: StatDomain, opensLogSheetOnAppear: Bool = false) {
         self.stat = stat
@@ -74,12 +77,14 @@ struct SkillDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 heroSection
+                calibrationSection
                 chargeSection
 
                 if let nextTitle = snapshot.rank.nextTitle, !snapshot.rank.isAtMaximumRank {
                     nextRankSection(nextTitle: nextTitle)
                 }
 
+                goalsSection
                 linkedHabitsSection
                 weeklyHistorySection
             }
@@ -100,6 +105,7 @@ struct SkillDetailView: View {
             _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .skillOpen)
             selectedWeekStart = currentWeek.start
             selectedDay = defaultSelectedDay(for: currentWeek)
+            try? TrainingStore.markRankChangeSeen(for: stat, context: modelContext)
             presentPendingRankChangeIfNeeded()
             openInitialLogSheetIfNeeded()
         }
@@ -140,6 +146,24 @@ struct SkillDetailView: View {
             }
             .presentationDetents([.large])
         }
+        .sheet(isPresented: $showingCalibrationSheet) {
+            NavigationStack {
+                SkillCalibrationSheet(stat: stat)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingGoalEditorForNew) {
+            NavigationStack {
+                GoalEditorView(goal: nil, initialStatKey: stat.statKey)
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $editingGoal) { goal in
+            NavigationStack {
+                GoalEditorView(goal: goal, initialStatKey: stat.statKey)
+            }
+            .presentationDetents([.large])
+        }
         .navigationDestination(isPresented: $showingCharacterRoster) {
             SkillCharacterRosterView(stat: stat)
         }
@@ -150,8 +174,10 @@ struct SkillDetailView: View {
             if let presentedRankChange {
                 RankChangeRevealView(
                     statName: stat.name,
+                    statKey: stat.statKey ?? .strength,
                     change: presentedRankChange,
-                    image: TrainingArcConfig.rankDefinition(for: stat.statKey ?? .strength, level: presentedRankChange.toLevel).image,
+                    resolution: TrainingStore.latestRankChangeResolution(for: stat),
+                    weeklyUnitLabel: TrainingStore.weeklyUnitLabel(for: stat),
                     accent: accent,
                     hapticsEnabled: settings?.hapticsEnabled ?? true
                 ) {
@@ -218,6 +244,110 @@ struct SkillDetailView: View {
         guard opensLogSheetOnAppear, !hasOpenedInitialLogSheet, let primaryHabit else { return }
         hasOpenedInitialLogSheet = true
         logDraft = LogEntryDraft(habit: primaryHabit)
+    }
+
+    private var skillGoals: [Goal] {
+        guard let statKey = stat.statKey else { return [] }
+        return (try? TrainingStore.fetchGoals(for: statKey, context: modelContext)) ?? []
+    }
+
+    private var calibrationSection: some View {
+        SurfaceCard(accent: accent) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    sectionKicker("Calibration")
+                    Spacer()
+                    Button {
+                        showingCalibrationSheet = true
+                    } label: {
+                        Label("Recalibrate", systemImage: "slider.horizontal.3")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(accent)
+                }
+
+                HStack(spacing: 0) {
+                    calibrationCell(title: "Baseline", value: "\(stat.currentBaseline)")
+                    Divider().frame(height: 36)
+                    calibrationCell(title: "Target", value: stat.targetValue.map { "\($0)" } ?? "—")
+                    Divider().frame(height: 36)
+                    calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
+                }
+
+                Text(calibrationStatusLabel)
+                    .font(.caption)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+        }
+    }
+
+    private func calibrationCell(title: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(TrainingTheme.textMuted)
+            Text(value)
+                .font(.system(.title3, design: .rounded).weight(.heavy))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var calibrationStatusLabel: String {
+        let actual = TrainingStore.currentWeekTotal(for: stat, settings: settings)
+        let baseline = Double(stat.currentBaseline)
+        let target = stat.targetValue.map(Double.init)
+        let unit = TrainingStore.weeklyUnitLabel(for: stat)
+
+        if let target {
+            if actual >= target { return "Goal target met this week. Strong work." }
+            if actual >= baseline { return "Maintained baseline. Goal still short by \(MetricFormatting.shortMetric(target - actual)) \(unit)." }
+            return "Below baseline. Focus here to hold form."
+        }
+
+        if baseline > 0, actual >= baseline { return "Maintained baseline this week." }
+        if baseline > 0 { return "Below baseline. \(MetricFormatting.shortMetric(baseline - actual)) \(unit) to maintain." }
+        return "No baseline set yet."
+    }
+
+    private var goalsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionHeader("Goals")
+                Spacer()
+                Button {
+                    showingGoalEditorForNew = true
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .font(.footnote.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(accent)
+            }
+
+            if skillGoals.isEmpty {
+                SurfaceCard(accent: accent) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("This skill is training from baseline only.")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                        Text("Create a goal when you want to push beyond your current weekly normal.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+                }
+            } else {
+                ForEach(skillGoals) { goal in
+                    SkillGoalRow(goal: goal, accent: accent) {
+                        editingGoal = goal
+                    }
+                }
+            }
+        }
     }
 
     private var chargeSection: some View {
@@ -417,7 +547,7 @@ struct SkillDetailView: View {
     }
 
     private var chargeDots: some View {
-        SignedChargeMeter(charge: snapshot.charge.current, socketSize: 14, spacing: 7)
+        SignedChargeMeter(charge: snapshot.charge.current, pendingProgress: snapshot.weeklyTargetProgress, socketSize: 14, spacing: 7)
     }
 
     private var selectedDayLogTitle: String {
@@ -541,7 +671,7 @@ private enum SkillHelpTopic: String, Identifiable {
         case .charge:
             return "Charge runs from -4 to +4. Use the help details here to see exactly how this skill's current rank converts strong or weak weeks into charge."
         case .nextRank:
-            return "This preview shows the next form you are building toward. Locked forms stay ahead of you until enough charge is banked."
+            return "This preview shows the next form you are building toward. Locked forms stay ahead of you until you gain enough Charge."
         case .thisWeek:
             return "This section shows your current progression week. Tap any day tile to swap the lower log list to that day while today's border stays visible for orientation."
         }
@@ -724,164 +854,265 @@ private struct SkillHistorySheetView: View {
     }
 }
 
+private enum RankRevealPhase {
+    case summary
+    case revealing
+    case resolved
+}
+
 private struct RankChangeRevealView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let statName: String
+    let statKey: StatKey
     let change: PendingRankChange
-    let image: RankImageReference?
+    let resolution: WeeklyResolution?
+    let weeklyUnitLabel: String
     let accent: Color
     let hapticsEnabled: Bool
     let dismiss: () -> Void
-    @State private var pulseScale: CGFloat = 0.9
-    @State private var flashOpacity = 0.16
-    @State private var contentOpacity = 0.0
-    @State private var contentOffset: CGFloat = 24
+
+    @State private var phase: RankRevealPhase = .summary
+    @State private var burstToken = 0
+    @State private var showNewEmblem = false
+
+    private var fromImage: RankImageReference? {
+        TrainingArcConfig.rankDefinition(for: statKey, level: change.fromLevel).image
+    }
+
+    private var toImage: RankImageReference? {
+        TrainingArcConfig.rankDefinition(for: statKey, level: change.toLevel).image
+    }
 
     private var highlight: Color {
-        change.direction == .up ? .orange : .blue
+        change.direction == .up ? TrainingTheme.positiveStrong : TrainingTheme.danger
     }
 
     private var titleText: String {
-        change.direction == .up ? "Rank Increased" : "Rank Reduced"
+        switch phase {
+        case .summary:
+            return change.direction == .up ? "Rank Up Pending" : "Rank Drop Pending"
+        case .revealing:
+            return change.direction == .up ? "Rank Increased" : "Rank Reduced"
+        case .resolved:
+            return change.direction == .up ? "Rank Increased" : "Rank Reduced"
+        }
     }
 
     private var subtitleText: String {
-        change.direction == .up
-            ? "Your weekly surplus pushed this skill into a stronger form."
-            : "Recent weekly debt pulled this skill down. Keep going and build it back."
+        switch phase {
+        case .summary:
+            return change.direction == .up
+                ? "Your past week pushed this skill above its current rank. Tap Reveal to see the new form."
+                : "Your past week pulled this skill below its rank target. Tap Reveal to see the new form."
+        case .revealing, .resolved:
+            return change.direction == .up
+                ? "Your weekly surplus pushed this skill into a stronger form."
+                : "Recent weekly debt pulled this skill down. Keep going and build it back."
+        }
     }
 
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    highlight.opacity(change.direction == .up ? 0.95 : 0.72),
+                    highlight.opacity(change.direction == .up ? 0.78 : 0.65),
                     TrainingTheme.background,
                     TrainingTheme.backgroundSecondary
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            .overlay(
-                Color.white
-                    .opacity(flashOpacity)
-                    .ignoresSafeArea()
-            )
             .ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                Spacer(minLength: 24)
+            ScrollView {
+                VStack(spacing: 22) {
+                    Spacer(minLength: 12)
 
-                AuraView(color: highlight, size: 250)
-                    .scaleEffect(pulseScale)
-                    .overlay(alignment: .center) {
-                        Image(systemName: change.direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                            .font(.system(size: 52, weight: .bold))
-                            .foregroundStyle(.white)
-                            .shadow(color: highlight.opacity(0.45), radius: 18, x: 0, y: 6)
+                    emblemStack
+                        .frame(height: 280)
+
+                    titleBlock
+
+                    if phase == .summary, let resolution {
+                        weeklySummaryCard(resolution: resolution)
                     }
 
-                VStack(spacing: 18) {
-                    VStack(alignment: .center, spacing: 8) {
-                        Text(titleText)
-                            .font(.system(.largeTitle, design: .rounded).weight(.heavy))
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                        Text(subtitleText)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(TrainingTheme.textSecondary)
+                    if phase == .resolved {
+                        deltaPills
                     }
 
-                    RankArtworkView(
-                        habitName: statName,
-                        level: change.toLevel,
-                        title: change.toTitle,
-                        image: image,
-                        accent: highlight
-                    )
-                    .frame(maxHeight: 280)
-
-                    HStack(spacing: 12) {
-                        rankDeltaPill(title: "From", value: "Lv \(change.fromLevel) · \(change.fromTitle)")
-                        rankDeltaPill(title: "To", value: "Lv \(change.toLevel) · \(change.toTitle)")
-                    }
-
-                    Button("Continue") {
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(highlight)
+                    actionRow
                 }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .fill(TrainingTheme.card.opacity(0.96))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-                )
-                .shadow(color: highlight.opacity(0.24), radius: 24, x: 0, y: 14)
-                .opacity(contentOpacity)
-                .offset(y: contentOffset)
-
-                Spacer()
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-        }
-        .task {
-            await runRevealSequence()
         }
     }
 
-    private func runRevealSequence() async {
-        guard !reduceMotion else {
-            pulseScale = 1
-            flashOpacity = change.direction == .up ? 0.24 : 0.12
-            contentOpacity = 1
-            contentOffset = 0
-            return
-        }
+    private var emblemStack: some View {
+        ZStack {
+            AuraView(color: highlight, size: 240)
+                .opacity(phase == .revealing ? 0.85 : 0.55)
 
-        let pulseValues: [CGFloat] = change.direction == .up ? [1.03, 1.08, 1.14] : [1.01, 1.04]
-        let flashValues: [Double] = change.direction == .up ? [0.22, 0.34, 0.6] : [0.18, 0.28]
-
-        for (index, scale) in pulseValues.enumerated() {
-            withAnimation(.easeInOut(duration: change.direction == .up ? 0.22 : 0.3)) {
-                pulseScale = scale
-                flashOpacity = flashValues[min(index, flashValues.count - 1)]
+            if phase == .revealing || phase == .resolved {
+                ParticleBurstView(
+                    style: change.direction == .up ? .confetti : .smoke,
+                    tint: change.direction == .up ? .yellow : .gray,
+                    triggerToken: burstToken
+                )
+                .frame(width: 320, height: 320)
             }
-            if hapticsEnabled {
-                if change.direction == .up {
-                    HapticsService.rankPulse(intensity: index)
-                } else {
-                    HapticsService.rankDropPulse(intensity: index)
+
+            if phase == .summary {
+                RankArtworkView(
+                    habitName: statName,
+                    level: change.fromLevel,
+                    title: change.fromTitle,
+                    image: fromImage,
+                    accent: highlight,
+                    style: .compact
+                )
+                .overlay(alignment: .top) {
+                    Image(systemName: change.direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                        .font(.system(size: 44, weight: .black))
+                        .foregroundStyle(highlight)
+                        .background(
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 50, height: 50)
+                        )
+                        .offset(y: -22)
                 }
+                .transition(.opacity)
             }
-            try? await Task.sleep(for: .milliseconds(change.direction == .up ? 220 : 300))
-            withAnimation(.easeInOut(duration: change.direction == .up ? 0.18 : 0.24)) {
-                pulseScale = 0.96
-                flashOpacity = change.direction == .up ? 0.14 : 0.1
-            }
-            try? await Task.sleep(for: .milliseconds(change.direction == .up ? 120 : 180))
-        }
 
-        withAnimation(.easeOut(duration: 0.34)) {
-            flashOpacity = change.direction == .up ? 0.82 : 0.42
-        }
-        if hapticsEnabled {
-            if change.direction == .up {
-                HapticsService.success()
-            } else {
-                HapticsService.rankDropPulse(intensity: 1)
+            if phase == .revealing || phase == .resolved {
+                RankArtworkView(
+                    habitName: statName,
+                    level: change.toLevel,
+                    title: change.toTitle,
+                    image: toImage,
+                    accent: highlight,
+                    style: .compact
+                )
+                .scaleEffect(showNewEmblem ? 1 : 0.4)
+                .opacity(showNewEmblem ? 1 : 0)
+                .animation(.spring(response: 0.62, dampingFraction: 0.78), value: showNewEmblem)
             }
         }
-        try? await Task.sleep(for: .milliseconds(change.direction == .up ? 260 : 320))
-        withAnimation(.spring(response: 0.58, dampingFraction: 0.84)) {
-            flashOpacity = change.direction == .up ? 0.08 : 0.06
-            pulseScale = 1
-            contentOpacity = 1
-            contentOffset = 0
+    }
+
+    private var titleBlock: some View {
+        VStack(spacing: 8) {
+            Text(titleText)
+                .font(.system(.title, design: .rounded).weight(.heavy))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .multilineTextAlignment(.center)
+            Text(subtitleText)
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(TrainingTheme.textSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var actionRow: some View {
+        switch phase {
+        case .summary:
+            Button {
+                triggerReveal()
+            } label: {
+                Label("Reveal", systemImage: change.direction == .up ? "sparkles" : "cloud.fill")
+                    .font(.headline.weight(.bold))
+                    .frame(maxWidth: 280)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(highlight)
+            .controlSize(.large)
+        case .revealing:
+            ProgressView()
+                .controlSize(.regular)
+                .tint(highlight)
+                .padding(.vertical, 4)
+        case .resolved:
+            Button("Continue") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(highlight)
+            .controlSize(.large)
+            .frame(maxWidth: 280)
+        }
+    }
+
+    private var deltaPills: some View {
+        HStack(spacing: 10) {
+            rankDeltaPill(title: "From", value: "Lv \(change.fromLevel)\n\(change.fromTitle)")
+            Image(systemName: change.direction == .up ? "arrow.right" : "arrow.right")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(highlight)
+            rankDeltaPill(title: "To", value: "Lv \(change.toLevel)\n\(change.toTitle)")
+        }
+    }
+
+    private func weeklySummaryCard(resolution: WeeklyResolution) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Last Week")
+                .font(.caption.weight(.black))
+                .foregroundStyle(TrainingTheme.textMuted)
+
+            HStack {
+                summaryStat(
+                    label: "Logged",
+                    value: "\(MetricFormatting.shortMetric(resolution.actualCompletedValue)) \(weeklyUnitLabel)"
+                )
+                Spacer(minLength: 8)
+                summaryStat(
+                    label: "Target",
+                    value: "\(MetricFormatting.shortMetric(resolution.expectedTotal)) \(weeklyUnitLabel)"
+                )
+            }
+
+            HStack {
+                summaryStat(
+                    label: "Charges Earned",
+                    value: resolution.chargesEarned > 0 ? "+\(resolution.chargesEarned)" : "\(resolution.chargesEarned)"
+                )
+                Spacer(minLength: 8)
+                summaryStat(
+                    label: "Final Charge",
+                    value: DashboardChargeDots.summaryLabel(for: resolution.storedChargesAfter)
+                )
+            }
+
+            if !resolution.summaryText.isEmpty {
+                Text(resolution.summaryText)
+                    .font(.footnote)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(TrainingTheme.card.opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(highlight.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    private func summaryStat(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.black))
+                .foregroundStyle(TrainingTheme.textMuted)
+            Text(value)
+                .font(.headline.weight(.heavy))
+                .foregroundStyle(TrainingTheme.textPrimary)
         }
     }
 
@@ -893,14 +1124,248 @@ private struct RankChangeRevealView: View {
             Text(value)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(TrainingTheme.textPrimary)
-                .lineLimit(2)
+                .multilineTextAlignment(.leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(highlight.opacity(0.12))
         )
+    }
+
+    private func triggerReveal() {
+        if hapticsEnabled {
+            if change.direction == .up {
+                HapticsService.success()
+            } else {
+                HapticsService.rankDropPulse(intensity: 2)
+            }
+        }
+
+        withAnimation(.easeInOut(duration: 0.32)) {
+            phase = .revealing
+        }
+        burstToken += 1
+
+        Task { @MainActor in
+            if reduceMotion {
+                showNewEmblem = true
+            } else {
+                try? await Task.sleep(for: .milliseconds(380))
+                withAnimation { showNewEmblem = true }
+                if hapticsEnabled {
+                    HapticsService.impact(style: .medium)
+                }
+            }
+
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 200 : 1300))
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+                phase = .resolved
+            }
+        }
+    }
+}
+
+struct SkillGoalRow: View {
+    @Environment(\.modelContext) private var modelContext
+    let goal: Goal
+    let accent: Color
+    let onTap: () -> Void
+
+    private var progress: GoalProgressSnapshot {
+        TrainingStore.goalProgress(for: goal, context: modelContext)
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            SurfaceCard(accent: accent) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(goal.title.isEmpty ? "Untitled goal" : goal.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                        Spacer()
+                        Text(progress.statusLabel)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(statusColor))
+                    }
+
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(TrainingTheme.backgroundTertiary.opacity(0.4))
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(accent)
+                                .frame(width: proxy.size.width * progress.progressRatio)
+                        }
+                    }
+                    .frame(height: 6)
+
+                    HStack {
+                        Text("\(MetricFormatting.shortMetric(progress.currentValue)) / \(MetricFormatting.shortMetric(progress.targetValue))")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                            .monospacedDigit()
+                        Spacer()
+                        Text(progress.timeRemainingLabel)
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var statusColor: Color {
+        switch goal.status {
+        case .completed: return TrainingTheme.positive
+        case .paused: return TrainingTheme.textMuted
+        case .archived, .failed: return TrainingTheme.textSecondary
+        case .active:
+            switch progress.paceStatus {
+            case .complete, .ahead: return TrainingTheme.positive
+            case .onPace: return accent
+            case .atRisk: return TrainingTheme.warning
+            case .behind: return TrainingTheme.danger
+            }
+        }
+    }
+}
+
+struct SkillCalibrationSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let stat: StatDomain
+
+    @State private var baselineText: String
+    @State private var targetText: String
+    @State private var maxText: String
+    @State private var maintenanceText: String
+
+    init(stat: StatDomain) {
+        self.stat = stat
+        _baselineText = State(initialValue: "\(stat.currentBaseline)")
+        _targetText = State(initialValue: stat.targetValue.map { "\($0)" } ?? "")
+        _maxText = State(initialValue: stat.personalMaxValue.map { "\($0)" } ?? "")
+        _maintenanceText = State(initialValue: stat.maintenanceFloor.map { "\($0)" } ?? "")
+    }
+
+    private var accent: Color {
+        TrainingArcConfig.color(for: stat.colorToken)
+    }
+
+    private var statKey: StatKey {
+        stat.statKey ?? .strength
+    }
+
+    private var unitLabel: String {
+        TrainingStore.weeklyUnitLabel(for: stat)
+    }
+
+    private var suggestedBaselineSummary: String {
+        let recent = (stat.weeklyResolutions ?? []).sorted { $0.weekStartDate > $1.weekStartDate }.prefix(4)
+        guard !recent.isEmpty else { return "Not enough history yet for a suggestion." }
+        let average = recent.map(\.actualCompletedValue).reduce(0, +) / Double(recent.count)
+        return "Last \(recent.count) weeks averaged \(MetricFormatting.shortMetric(average)) \(unitLabel)."
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Text(suggestedBaselineSummary)
+                    .font(.footnote)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            } header: {
+                Text("Recent Performance")
+            }
+
+            Section {
+                calibrationField(title: "Baseline", text: $baselineText, hint: "What you honestly do in a normal week.")
+            } header: {
+                Text("Baseline (required)")
+            }
+
+            Section {
+                calibrationField(title: "Target", text: $targetText, hint: "What you’re training toward. Leave blank if none.")
+                calibrationField(title: "Personal Max", text: $maxText, hint: "Your believable maximum in a strong week.")
+                calibrationField(title: "Maintenance Floor", text: $maintenanceText, hint: "Lowest acceptable maintenance level (optional).")
+            } header: {
+                Text("Optional Calibration")
+            } footer: {
+                Text("Goals don’t replace your baseline. Missing an ambitious target while still meeting baseline counts as ‘maintained’.")
+                    .font(.caption)
+            }
+
+            Section {
+                Button {
+                    let suggestedTarget = TrainingArcConfig.suggestedTargetValue(for: statKey, baseline: parsedBaseline)
+                    targetText = "\(suggestedTarget)"
+                    let suggestedMax = TrainingArcConfig.suggestedPersonalMaxValue(for: statKey, baseline: parsedBaseline, target: suggestedTarget)
+                    maxText = "\(suggestedMax)"
+                } label: {
+                    Label("Suggest values for me", systemImage: "wand.and.stars")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(TrainingTheme.background.ignoresSafeArea())
+        .navigationTitle("Recalibrate \(stat.name)")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
+        }
+    }
+
+    private func calibrationField(title: String, text: Binding<String>, hint: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                Spacer()
+                TextField(title, text: text)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
+                Text(unitLabel)
+                    .font(.caption)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+            Text(hint)
+                .font(.caption2)
+                .foregroundStyle(TrainingTheme.textMuted)
+        }
+    }
+
+    private var parsedBaseline: Int {
+        Int(baselineText) ?? stat.currentBaseline
+    }
+
+    private func save() {
+        let baseline = max(0, parsedBaseline)
+        let target = Int(targetText)
+        let personalMax = Int(maxText)
+        let maintenance = Int(maintenanceText)
+        let clamped = TrainingArcConfig.clampCalibration(
+            baseline: baseline,
+            target: target,
+            personalMax: personalMax,
+            maintenance: maintenance
+        )
+
+        stat.currentBaseline = baseline
+        stat.targetValue = clamped.target
+        stat.personalMaxValue = clamped.max
+        stat.maintenanceFloor = clamped.maintenance
+        stat.updatedAt = .now
+        try? modelContext.save()
+        try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .appRefresh)
+        dismiss()
     }
 }

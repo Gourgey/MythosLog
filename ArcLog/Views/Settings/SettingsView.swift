@@ -1,6 +1,150 @@
+import CloudKit
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+
+enum CloudSyncState: Equatable {
+    case checking
+    case active
+    case signedOut
+    case restricted
+    case unavailable
+    case unknown
+
+    var title: String {
+        switch self {
+        case .checking:
+            return "Checking..."
+        case .active:
+            return "iCloud sync active"
+        case .signedOut:
+            return "Sign in to iCloud"
+        case .restricted:
+            return "iCloud restricted"
+        case .unavailable:
+            return "iCloud unavailable"
+        case .unknown:
+            return "Sync status unknown"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .checking:
+            return "ArcLog is checking your iCloud account."
+        case .active:
+            return "ArcLog data syncs across devices on this iCloud account."
+        case .signedOut:
+            return "ArcLog saves locally and syncs when iCloud is available."
+        case .restricted:
+            return "ArcLog saves locally because this account cannot use iCloud sync."
+        case .unavailable:
+            return "ArcLog saves locally and will retry iCloud sync later."
+        case .unknown:
+            return "ArcLog saves locally while iCloud status cannot be confirmed."
+        }
+    }
+}
+
+enum CloudSyncStatusService {
+    static func currentState() async -> CloudSyncState {
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            return .signedOut
+        }
+        guard TrainingStore.canAttemptCloudKitPersistence() else {
+            return .unknown
+        }
+
+        let container = CKContainer(identifier: AppIdentity.iCloudContainerIdentifier)
+
+        do {
+            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CKAccountStatus, Error>) in
+                container.accountStatus { status, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: status)
+                    }
+                }
+            }
+
+            switch status {
+            case .available:
+                return .active
+            case .noAccount:
+                return .signedOut
+            case .restricted:
+                return .restricted
+            case .temporarilyUnavailable:
+                return .unavailable
+            case .couldNotDetermine:
+                return .unknown
+            @unknown default:
+                return .unknown
+            }
+        } catch {
+            return .unknown
+        }
+    }
+
+    static func accountStatusDescription() async -> String {
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            return "No ubiquity identity token"
+        }
+
+        let container = CKContainer(identifier: AppIdentity.iCloudContainerIdentifier)
+        do {
+            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CKAccountStatus, Error>) in
+                container.accountStatus { status, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: status)
+                    }
+                }
+            }
+
+            switch status {
+            case .available:
+                return "available"
+            case .noAccount:
+                return "noAccount"
+            case .restricted:
+                return "restricted"
+            case .temporarilyUnavailable:
+                return "temporarilyUnavailable"
+            case .couldNotDetermine:
+                return "couldNotDetermine"
+            @unknown default:
+                return "unknown"
+            }
+        } catch {
+            return "error: \(error.localizedDescription)"
+        }
+    }
+}
+
+#if DEBUG
+private struct SyncDiagnosticsSnapshot: Equatable {
+    var storeURL: String
+    var iCloudSignedInState: String
+    var cloudKitAccountStatus: String
+    var containerIdentifier: String
+    var lastLocalWrite: String
+    var lastCloudKitEvent: String
+    var modelCounts: TrainingStore.ModelCounts
+
+    static let empty = SyncDiagnosticsSnapshot(
+        storeURL: "Checking...",
+        iCloudSignedInState: "Checking...",
+        cloudKitAccountStatus: "Checking...",
+        containerIdentifier: AppIdentity.iCloudContainerIdentifier,
+        lastLocalWrite: "None observed",
+        lastCloudKitEvent: "None observed",
+        modelCounts: TrainingStore.ModelCounts(stats: 0, habits: 0, logs: 0, weeklyResolutions: 0, settings: 0, healthImports: 0)
+    )
+}
+#endif
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -10,6 +154,10 @@ struct SettingsView: View {
     @State private var exportDocument = TrainingExportDocument(bundle: .empty)
     @State private var healthStatusMessage: String?
     @State private var isSyncingHealth = false
+    @State private var cloudSyncState: CloudSyncState = .checking
+    #if DEBUG
+    @State private var syncDiagnostics = SyncDiagnosticsSnapshot.empty
+    #endif
     let onSettingsMutated: () -> Void
 
     private var settings: AppSettings? {
@@ -43,17 +191,6 @@ struct SettingsView: View {
 
                 Section("Experience") {
                     Toggle("Haptics", isOn: binding(\.hapticsEnabled))
-                    Picker("Theme", selection: Binding(
-                        get: { settings.themePreference },
-                        set: {
-                            settings.themePreference = $0
-                            saveSettings()
-                        }
-                    )) {
-                        ForEach(ThemePreference.allCases) { preference in
-                            Text(preference.displayName).tag(preference)
-                        }
-                    }
                 }
 
                 #if canImport(HealthKit)
@@ -99,9 +236,59 @@ struct SettingsView: View {
                             .foregroundStyle(TrainingTheme.textSecondary)
                     }
                 }
+
+                Section("Workout Types") {
+                    Text("Choose which Apple Health workouts ArcLog imports. Disable a type to skip future workouts of that kind.")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+
+                    ForEach(SupportedWorkoutType.Category.allCases, id: \.self) { category in
+                        DisclosureGroup(category.title) {
+                            ForEach(SupportedWorkoutType.all.filter { $0.category == category }) { type in
+                                Toggle(type.displayName, isOn: workoutTypeBinding(for: type.key))
+                            }
+                        }
+                    }
+                }
                 #endif
 
+                Section("Connect Apps") {
+                    DisclosureGroup("Reading via iOS Shortcut") {
+                        Text("ArcLog cannot read directly from Kindle. After a reading session, run an iOS Shortcut that opens the URL below to log against your Reading skill.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Text("arclog://log?stat=reading&value=30&note=Kindle")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                            .textSelection(.enabled)
+                    }
+
+                    DisclosureGroup("Curiosity Tracker") {
+                        Text("Your Curiosity Tracker app can mirror each research log into ArcLog using the deep-link below.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Text("arclog://log?stat=curiosity&value=1&note=Topic")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                            .textSelection(.enabled)
+                    }
+                }
+
                 Section("Data") {
+                    LabeledContent("iCloud Sync") {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(cloudSyncState.title)
+                            Text(cloudSyncState.detail)
+                                .font(.caption)
+                                .foregroundStyle(TrainingTheme.textSecondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    Button("Refresh iCloud Status") {
+                        Task { await refreshCloudSyncStatus() }
+                    }
+
                     Button("Export JSON") {
                         exportDocument = TrainingExportDocument(
                             bundle: (try? TrainingStore.exportBundle(context: modelContext)) ?? .empty
@@ -133,6 +320,25 @@ struct SettingsView: View {
                         onSettingsMutated()
                     }
                 }
+
+                #if DEBUG
+                Section("Sync Diagnostics") {
+                    LabeledContent("Store URL", value: syncDiagnostics.storeURL)
+                    LabeledContent("iCloud Token", value: syncDiagnostics.iCloudSignedInState)
+                    LabeledContent("CloudKit Account", value: syncDiagnostics.cloudKitAccountStatus)
+                    LabeledContent("Container", value: syncDiagnostics.containerIdentifier)
+                    LabeledContent("Last Local Write", value: syncDiagnostics.lastLocalWrite)
+                    LabeledContent("Last Import/Export", value: syncDiagnostics.lastCloudKitEvent)
+                    LabeledContent("Counts") {
+                        Text("Stats \(syncDiagnostics.modelCounts.stats), habits \(syncDiagnostics.modelCounts.habits), logs \(syncDiagnostics.modelCounts.logs), settings \(syncDiagnostics.modelCounts.settings), resolutions \(syncDiagnostics.modelCounts.weeklyResolutions), health \(syncDiagnostics.modelCounts.healthImports)")
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    Button("Refresh Sync Diagnostics") {
+                        Task { await refreshSyncDiagnostics() }
+                    }
+                }
+                #endif
             }
         }
         .scrollContentBackground(.hidden)
@@ -140,6 +346,10 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .task {
             _ = try? TrainingStore.fetchSettings(context: modelContext)
+            await refreshCloudSyncStatus()
+            #if DEBUG
+            await refreshSyncDiagnostics()
+            #endif
         }
         .fileExporter(
             isPresented: $isExporting,
@@ -168,12 +378,66 @@ struct SettingsView: View {
         )
     }
 
+    private func workoutTypeBinding(for key: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                guard let settings else { return true }
+                return !settings.disabledHealthWorkoutTypeKeys.contains(key)
+            },
+            set: { enabled in
+                guard let settings else { return }
+                var disabled = settings.disabledHealthWorkoutTypeKeys
+                if enabled {
+                    disabled.remove(key)
+                } else {
+                    disabled.insert(key)
+                }
+                settings.disabledHealthWorkoutTypeKeys = disabled
+                saveSettings()
+            }
+        )
+    }
+
     private func saveSettings() {
         settings?.updatedAt = .now
         try? modelContext.save()
+        TrainingStore.recordLocalWrite(reason: "updated settings")
         if let settings {
             NotificationService.refreshNotifications(using: settings)
         }
         onSettingsMutated()
     }
+
+    @MainActor
+    private func refreshCloudSyncStatus() async {
+        cloudSyncState = .checking
+        cloudSyncState = await CloudSyncStatusService.currentState()
+    }
+
+    #if DEBUG
+    @MainActor
+    private func refreshSyncDiagnostics() async {
+        let runtimeInfo = TrainingStore.runtimeStoreInfo
+        let lastLocalWrite = TrainingStore.lastLocalWriteAt.map {
+            let reason = TrainingStore.lastLocalWriteReason.map { " (\($0))" } ?? ""
+            return $0.formatted(date: .abbreviated, time: .standard) + reason
+        } ?? "None observed"
+        let lastCloudKitEvent = TrainingStore.lastCloudKitEventSummary.map { summary in
+            if let date = TrainingStore.lastCloudKitEventAt {
+                return "\(summary) [observed \(date.formatted(date: .abbreviated, time: .standard))]"
+            }
+            return summary
+        } ?? "None observed"
+
+        syncDiagnostics = SyncDiagnosticsSnapshot(
+            storeURL: runtimeInfo.storeURL?.path ?? (runtimeInfo.isInMemory ? "In-memory" : "Unknown"),
+            iCloudSignedInState: FileManager.default.ubiquityIdentityToken == nil ? "missing" : "present",
+            cloudKitAccountStatus: await CloudSyncStatusService.accountStatusDescription(),
+            containerIdentifier: runtimeInfo.cloudKitContainerIdentifier ?? "\(AppIdentity.iCloudContainerIdentifier) (not selected by active store)",
+            lastLocalWrite: lastLocalWrite,
+            lastCloudKitEvent: lastCloudKitEvent,
+            modelCounts: TrainingStore.modelCounts(context: modelContext)
+        )
+    }
+    #endif
 }

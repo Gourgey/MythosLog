@@ -10,6 +10,8 @@ enum StatKey: String, Codable, CaseIterable, Identifiable, Sendable {
     case focus
     case curiosity
     case cardio
+    case cooking
+    case reading
 
     var id: String { rawValue }
 
@@ -22,6 +24,8 @@ enum StatKey: String, Codable, CaseIterable, Identifiable, Sendable {
         case .focus: "Focus"
         case .curiosity: "Curiosity"
         case .cardio: "Cardio"
+        case .cooking: "Cooking"
+        case .reading: "Reading"
         }
     }
 }
@@ -121,30 +125,6 @@ enum LogSourceType: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum ThemePreference: String, Codable, CaseIterable, Identifiable, Sendable {
-    case system
-    case dark
-    case light
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .system: "System"
-        case .dark: "Dark"
-        case .light: "Light"
-        }
-    }
-
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: nil
-        case .dark: .dark
-        case .light: .light
-        }
-    }
-}
-
 enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case detailedCards
     case compactGrid
@@ -179,31 +159,35 @@ enum RankChangeReason: String, Codable, Sendable {
 
 @Model
 final class StatDomain {
-    @Attribute(.unique) var id: UUID
-    var key: String
-    var name: String
-    var iconName: String
-    var colorToken: String
-    var descriptor: String
-    var sortOrder: Int
-    var currentLevel: Int
-    var currentTierName: String
-    var startingBaseline: Int
-    var currentBaseline: Int
-    var storedCharges: Int
-    var bankedProgressUnits: Double
+    var id: UUID = UUID()
+    var key: String = ""
+    var name: String = ""
+    var iconName: String = ""
+    var colorToken: String = ""
+    var descriptor: String = ""
+    var sortOrder: Int = 0
+    var currentLevel: Int = 1
+    var currentTierName: String = ""
+    var startingBaseline: Int = 0
+    var currentBaseline: Int = 0
+    var targetValue: Int?
+    var personalMaxValue: Int?
+    var maintenanceFloor: Int?
+    var storedCharges: Int = 0
+    var bankedProgressUnits: Double = 0
     var lastResolvedWeekStart: Date?
-    var lastAcknowledgedLevel: Int
+    var lastAcknowledgedLevel: Int = 1
     var pendingRankChangeDirectionRaw: String?
     var pendingRankChangeFromLevel: Int?
     var pendingRankChangeToLevel: Int?
     var pendingRankChangeRecordedAt: Date?
     var pendingRankChangeReasonRaw: String?
-    var createdAt: Date
-    var updatedAt: Date
-    var isArchived: Bool
-    @Relationship(deleteRule: .cascade, inverse: \Habit.statDomain) var habits: [Habit] = []
-    @Relationship(deleteRule: .cascade, inverse: \WeeklyResolution.statDomain) var weeklyResolutions: [WeeklyResolution] = []
+    var pendingRankChangeViewedAt: Date?
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    var isArchived: Bool = false
+    @Relationship(deleteRule: .cascade, inverse: \Habit.statDomain) var habits: [Habit]? = []
+    @Relationship(deleteRule: .cascade, inverse: \WeeklyResolution.statDomain) var weeklyResolutions: [WeeklyResolution]? = []
 
     init(
         id: UUID = UUID(),
@@ -217,6 +201,9 @@ final class StatDomain {
         currentTierName: String,
         startingBaseline: Int,
         currentBaseline: Int,
+        targetValue: Int? = nil,
+        personalMaxValue: Int? = nil,
+        maintenanceFloor: Int? = nil,
         storedCharges: Int = 0,
         bankedProgressUnits: Double = 0,
         lastResolvedWeekStart: Date? = nil,
@@ -226,6 +213,7 @@ final class StatDomain {
         pendingRankChangeToLevel: Int? = nil,
         pendingRankChangeRecordedAt: Date? = nil,
         pendingRankChangeReasonRaw: String? = nil,
+        pendingRankChangeViewedAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         isArchived: Bool = false
@@ -241,6 +229,9 @@ final class StatDomain {
         self.currentTierName = currentTierName
         self.startingBaseline = startingBaseline
         self.currentBaseline = currentBaseline
+        self.targetValue = targetValue
+        self.personalMaxValue = personalMaxValue
+        self.maintenanceFloor = maintenanceFloor
         self.storedCharges = storedCharges
         self.bankedProgressUnits = bankedProgressUnits
         self.lastResolvedWeekStart = lastResolvedWeekStart
@@ -250,6 +241,7 @@ final class StatDomain {
         self.pendingRankChangeToLevel = pendingRankChangeToLevel
         self.pendingRankChangeRecordedAt = pendingRankChangeRecordedAt
         self.pendingRankChangeReasonRaw = pendingRankChangeReasonRaw
+        self.pendingRankChangeViewedAt = pendingRankChangeViewedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isArchived = isArchived
@@ -314,11 +306,20 @@ extension StatDomain {
     }
 
     func setPendingRankChange(from fromLevel: Int, to toLevel: Int, direction: RankChangeDirection, reason: RankChangeReason, recordedAt: Date) {
+        let isNewChange =
+            pendingRankChangeRecordedAt != recordedAt ||
+            pendingRankChangeFromLevel != TrainingArcConfig.clampedRankLevel(fromLevel) ||
+            pendingRankChangeToLevel != TrainingArcConfig.clampedRankLevel(toLevel) ||
+            pendingRankChangeDirection != direction
+
         pendingRankChangeFromLevel = TrainingArcConfig.clampedRankLevel(fromLevel)
         pendingRankChangeToLevel = TrainingArcConfig.clampedRankLevel(toLevel)
         pendingRankChangeDirection = direction
         pendingRankChangeReason = reason
         pendingRankChangeRecordedAt = recordedAt
+        if isNewChange {
+            pendingRankChangeViewedAt = nil
+        }
     }
 
     func clearPendingRankChange() {
@@ -327,25 +328,26 @@ extension StatDomain {
         pendingRankChangeDirection = nil
         pendingRankChangeReason = nil
         pendingRankChangeRecordedAt = nil
+        pendingRankChangeViewedAt = nil
     }
 }
 
 @Model
 final class Habit {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     var systemKey: String?
-    var name: String
-    var notes: String
-    var measurementTypeRaw: String
-    var unitLabel: String
-    var scheduleTypeRaw: String
-    var targetPerPeriod: Double
-    var active: Bool
-    var sortOrder: Int
-    var createdAt: Date
-    var updatedAt: Date
+    var name: String = ""
+    var notes: String = ""
+    var measurementTypeRaw: String = MeasurementType.booleanSession.rawValue
+    var unitLabel: String = ""
+    var scheduleTypeRaw: String = ScheduleType.weekly.rawValue
+    var targetPerPeriod: Double = 0
+    var active: Bool = true
+    var sortOrder: Int = 0
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
     @Relationship(deleteRule: .nullify) var statDomain: StatDomain?
-    @Relationship(deleteRule: .cascade, inverse: \HabitLog.habit) var logs: [HabitLog] = []
+    @Relationship(deleteRule: .cascade, inverse: \HabitLog.habit) var logs: [HabitLog]? = []
 
     init(
         id: UUID = UUID(),
@@ -390,13 +392,13 @@ final class Habit {
 
 @Model
 final class HabitLog {
-    @Attribute(.unique) var id: UUID
-    var date: Date
-    var numericValue: Double
+    var id: UUID = UUID()
+    var date: Date = Date.now
+    var numericValue: Double = 0
     var sessionType: String?
-    var note: String
-    var sourceTypeRaw: String
-    var createdAt: Date
+    var note: String = ""
+    var sourceTypeRaw: String = LogSourceType.manual.rawValue
+    var createdAt: Date = Date.now
     @Relationship(deleteRule: .nullify) var habit: Habit?
 
     init(
@@ -427,29 +429,29 @@ final class HabitLog {
 
 @Model
 final class WeeklyResolution {
-    @Attribute(.unique) var id: UUID
-    var statKey: String
-    var statName: String
-    var weekStartDate: Date
-    var weekEndDate: Date
-    var baselineAtStart: Int
-    var expectedTotal: Double
-    var actualCompletedValue: Double
-    var weeklyDelta: Double
-    var excessValue: Double
-    var chargesEarned: Int
-    var chargesSpentOnLevelUp: Int
-    var bankedUnitsBefore: Double
-    var bankedUnitsAfter: Double
-    var levelBefore: Int
-    var levelAfter: Int
-    var storedChargesAfter: Int
-    var didDecay: Bool
-    var didLevelUp: Bool
-    var didStagnate: Bool
-    var didRegress: Bool
-    var summaryText: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var statKey: String = ""
+    var statName: String = ""
+    var weekStartDate: Date = Date.now
+    var weekEndDate: Date = Date.now
+    var baselineAtStart: Int = 0
+    var expectedTotal: Double = 0
+    var actualCompletedValue: Double = 0
+    var weeklyDelta: Double = 0
+    var excessValue: Double = 0
+    var chargesEarned: Int = 0
+    var chargesSpentOnLevelUp: Int = 0
+    var bankedUnitsBefore: Double = 0
+    var bankedUnitsAfter: Double = 0
+    var levelBefore: Int = 1
+    var levelAfter: Int = 1
+    var storedChargesAfter: Int = 0
+    var didDecay: Bool = false
+    var didLevelUp: Bool = false
+    var didStagnate: Bool = false
+    var didRegress: Bool = false
+    var summaryText: String = ""
+    var createdAt: Date = Date.now
     @Relationship(deleteRule: .nullify) var statDomain: StatDomain?
 
     init(
@@ -507,22 +509,23 @@ final class WeeklyResolution {
 
 @Model
 final class AppSettings {
-    @Attribute(.unique) var id: String
-    var hasCompletedOnboarding: Bool
-    var enableDecay: Bool
-    var decaySensitivity: Double
-    var dailyReminderEnabled: Bool
-    var eveningReminderEnabled: Bool
-    var weeklyReviewReminderEnabled: Bool
-    var weekStartsOnMonday: Bool
-    var hapticsEnabled: Bool
-    var lockInWeeklyReview: Bool
-    var healthAutoImportEnabled: Bool
+    var id: String = "app-settings"
+    var hasCompletedOnboarding: Bool = false
+    var enableDecay: Bool = true
+    var decaySensitivity: Double = 1.0
+    var dailyReminderEnabled: Bool = false
+    var eveningReminderEnabled: Bool = true
+    var weeklyReviewReminderEnabled: Bool = true
+    var weekStartsOnMonday: Bool = true
+    var hapticsEnabled: Bool = true
+    var lockInWeeklyReview: Bool = true
+    var healthAutoImportEnabled: Bool = true
     var lastHealthSyncAt: Date?
-    var themePreferenceRaw: String
-    var dashboardLayoutModeRaw: String
-    var createdAt: Date
-    var updatedAt: Date
+    var themePreferenceRaw: String = "light"
+    var dashboardLayoutModeRaw: String = DashboardLayoutMode.compactGrid.rawValue
+    var disabledHealthWorkoutTypeKeysRaw: String = ""
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
 
     init(
         id: String = "app-settings",
@@ -537,8 +540,8 @@ final class AppSettings {
         lockInWeeklyReview: Bool = true,
         healthAutoImportEnabled: Bool = true,
         lastHealthSyncAt: Date? = nil,
-        themePreference: ThemePreference = .light,
         dashboardLayoutMode: DashboardLayoutMode = .compactGrid,
+        disabledHealthWorkoutTypeKeys: [String] = [],
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -554,55 +557,252 @@ final class AppSettings {
         self.lockInWeeklyReview = lockInWeeklyReview
         self.healthAutoImportEnabled = healthAutoImportEnabled
         self.lastHealthSyncAt = lastHealthSyncAt
-        self.themePreferenceRaw = themePreference.rawValue
+        self.themePreferenceRaw = "light"
         self.dashboardLayoutModeRaw = dashboardLayoutMode.rawValue
+        self.disabledHealthWorkoutTypeKeysRaw = AppSettings.encodeWorkoutTypeKeys(disabledHealthWorkoutTypeKeys)
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-    }
-
-    var themePreference: ThemePreference {
-        get { ThemePreference(rawValue: themePreferenceRaw) ?? .dark }
-        set { themePreferenceRaw = newValue.rawValue }
     }
 
     var dashboardLayoutMode: DashboardLayoutMode {
         get { DashboardLayoutMode(rawValue: dashboardLayoutModeRaw) ?? .compactGrid }
         set { dashboardLayoutModeRaw = newValue.rawValue }
     }
+
+    var disabledHealthWorkoutTypeKeys: Set<String> {
+        get {
+            Set(disabledHealthWorkoutTypeKeysRaw
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map { String($0) })
+        }
+        set { disabledHealthWorkoutTypeKeysRaw = AppSettings.encodeWorkoutTypeKeys(Array(newValue)) }
+    }
+
+    fileprivate static func encodeWorkoutTypeKeys(_ keys: [String]) -> String {
+        keys.filter { !$0.isEmpty }.sorted().joined(separator: ",")
+    }
 }
 
 @Model
 final class HealthImportedWorkout {
-    @Attribute(.unique) var workoutUUID: String
-    var statKeyRaw: String
+    var workoutUUID: String = ""
+    var statKeyRaw: String = ""
     var habitSystemKey: String?
+    var sourceName: String?
     var sourceBundleIdentifier: String?
-    var activityTypeRaw: Int
-    var startDate: Date
-    var endDate: Date
-    var durationMinutes: Double
-    var createdAt: Date
+    var activityTypeRaw: Int = 0
+    var startDate: Date = Date.now
+    var endDate: Date = Date.now
+    var durationMinutes: Double = 0
+    var wasImported: Bool = true
+    var isDuplicate: Bool = false
+    var overlapsImportedWorkout: Bool = false
+    var relatedWorkoutUUID: String?
+    var createdAt: Date = Date.now
 
     init(
         workoutUUID: String,
         statKeyRaw: String,
         habitSystemKey: String?,
+        sourceName: String? = nil,
         sourceBundleIdentifier: String?,
         activityTypeRaw: Int,
         startDate: Date,
         endDate: Date,
         durationMinutes: Double,
+        wasImported: Bool = true,
+        isDuplicate: Bool = false,
+        overlapsImportedWorkout: Bool = false,
+        relatedWorkoutUUID: String? = nil,
         createdAt: Date = .now
     ) {
         self.workoutUUID = workoutUUID
         self.statKeyRaw = statKeyRaw
         self.habitSystemKey = habitSystemKey
+        self.sourceName = sourceName
         self.sourceBundleIdentifier = sourceBundleIdentifier
         self.activityTypeRaw = activityTypeRaw
         self.startDate = startDate
         self.endDate = endDate
         self.durationMinutes = durationMinutes
+        self.wasImported = wasImported
+        self.isDuplicate = isDuplicate
+        self.overlapsImportedWorkout = overlapsImportedWorkout
+        self.relatedWorkoutUUID = relatedWorkoutUUID
         self.createdAt = createdAt
+    }
+}
+
+enum GoalScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case skill
+    case overall
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .skill: "Skill"
+        case .overall: "Overall"
+        }
+    }
+}
+
+enum GoalType: String, Codable, CaseIterable, Identifiable, Sendable {
+    case weeklyTarget
+    case monthlyTotal
+    case consistency
+    case reachLevel
+    case reachRank
+    case maintainBaseline
+    case improveBalance
+    case custom
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .weeklyTarget: "Weekly target"
+        case .monthlyTotal: "Monthly total"
+        case .consistency: "Consistency"
+        case .reachLevel: "Reach level"
+        case .reachRank: "Reach rank"
+        case .maintainBaseline: "Maintain baseline"
+        case .improveBalance: "Improve balance"
+        case .custom: "Custom"
+        }
+    }
+}
+
+enum GoalStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+    case active
+    case completed
+    case paused
+    case failed
+    case archived
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .active: "Active"
+        case .completed: "Completed"
+        case .paused: "Paused"
+        case .failed: "Failed"
+        case .archived: "Archived"
+        }
+    }
+}
+
+enum GoalPriority: String, Codable, CaseIterable, Identifiable, Sendable {
+    case low
+    case normal
+    case high
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .low: "Low"
+        case .normal: "Normal"
+        case .high: "High"
+        }
+    }
+}
+
+@Model
+final class Goal {
+    var id: UUID = UUID()
+    var title: String = ""
+    var notes: String = ""
+    var goalScopeRaw: String = GoalScope.skill.rawValue
+    var linkedStatKeyRaw: String?
+    var linkedHabitIDRaw: String?
+    var goalTypeRaw: String = GoalType.weeklyTarget.rawValue
+    var measurementTypeRaw: String = MeasurementType.count.rawValue
+    var targetValue: Double = 0
+    var startDate: Date = Date.now
+    var endDate: Date?
+    var statusRaw: String = GoalStatus.active.rawValue
+    var priorityRaw: String = GoalPriority.normal.rawValue
+    var affectsMetrics: Bool = false
+    var affectsProgression: Bool = false
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    var completedAt: Date?
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        notes: String = "",
+        scope: GoalScope = .skill,
+        linkedStatKey: StatKey? = nil,
+        linkedHabitID: UUID? = nil,
+        type: GoalType = .weeklyTarget,
+        measurementType: MeasurementType = .count,
+        targetValue: Double = 0,
+        startDate: Date = .now,
+        endDate: Date? = nil,
+        status: GoalStatus = .active,
+        priority: GoalPriority = .normal,
+        affectsMetrics: Bool = false,
+        affectsProgression: Bool = false,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        completedAt: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.notes = notes
+        self.goalScopeRaw = scope.rawValue
+        self.linkedStatKeyRaw = linkedStatKey?.rawValue
+        self.linkedHabitIDRaw = linkedHabitID?.uuidString
+        self.goalTypeRaw = type.rawValue
+        self.measurementTypeRaw = measurementType.rawValue
+        self.targetValue = targetValue
+        self.startDate = startDate
+        self.endDate = endDate
+        self.statusRaw = status.rawValue
+        self.priorityRaw = priority.rawValue
+        self.affectsMetrics = affectsMetrics
+        self.affectsProgression = affectsProgression
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.completedAt = completedAt
+    }
+
+    var scope: GoalScope {
+        get { GoalScope(rawValue: goalScopeRaw) ?? .skill }
+        set { goalScopeRaw = newValue.rawValue }
+    }
+
+    var type: GoalType {
+        get { GoalType(rawValue: goalTypeRaw) ?? .weeklyTarget }
+        set { goalTypeRaw = newValue.rawValue }
+    }
+
+    var measurementType: MeasurementType {
+        get { MeasurementType(rawValue: measurementTypeRaw) ?? .count }
+        set { measurementTypeRaw = newValue.rawValue }
+    }
+
+    var status: GoalStatus {
+        get { GoalStatus(rawValue: statusRaw) ?? .active }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var priority: GoalPriority {
+        get { GoalPriority(rawValue: priorityRaw) ?? .normal }
+        set { priorityRaw = newValue.rawValue }
+    }
+
+    var linkedStatKey: StatKey? {
+        get { linkedStatKeyRaw.flatMap(StatKey.init(rawValue:)) }
+        set { linkedStatKeyRaw = newValue?.rawValue }
+    }
+
+    var linkedHabitID: UUID? {
+        get { linkedHabitIDRaw.flatMap(UUID.init(uuidString:)) }
+        set { linkedHabitIDRaw = newValue?.uuidString }
     }
 }
 
@@ -750,6 +950,8 @@ struct SkillProgressSnapshot: Sendable {
     var bankedProgressUnits: Double
     var nextEvaluationDate: Date
     var pendingRankChange: PendingRankChange?
+    var rankChangeIndicatorVisible: Bool
+    var weeklyTargetProgress: Double
     var weeklyCounterLabel: String
     var weeklyCounterValueLabel: String
     var chargeExplanation: String
@@ -807,6 +1009,59 @@ enum DashboardInsightOption: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum GoalPaceStatus: String, Sendable {
+    case onPace
+    case ahead
+    case atRisk
+    case behind
+    case complete
+
+    var label: String {
+        switch self {
+        case .onPace: "On pace"
+        case .ahead: "Ahead"
+        case .atRisk: "At risk"
+        case .behind: "Behind"
+        case .complete: "Complete"
+        }
+    }
+}
+
+enum TrainTodayReason: String, Sendable {
+    case behindBaseline
+    case noLogsThisWeek
+    case lowCharge
+    case goalAtRisk
+    case reviewReady
+    case nearRankUp
+    case staleSkill
+}
+
+struct TrainTodayRecommendation: Identifiable, Sendable {
+    var id: String
+    var statKeyRaw: String?
+    var statName: String
+    var colorToken: String
+    var iconName: String
+    var headline: String
+    var detail: String
+    var reason: TrainTodayReason
+    var priority: Int
+    var hasReviewReady: Bool
+}
+
+struct GoalProgressSnapshot: Identifiable, Sendable {
+    var id: UUID
+    var goal: Goal
+    var currentValue: Double
+    var targetValue: Double
+    var progressRatio: Double
+    var remainingValue: Double
+    var paceStatus: GoalPaceStatus
+    var timeRemainingLabel: String
+    var statusLabel: String
+}
+
 struct WorkFocusAnalysis: Sendable {
     var headline: String
     var focusSkillName: String
@@ -832,6 +1087,40 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
     var logs: [HabitLogExport]
     var resolutions: [WeeklyResolutionExport]
     var settings: SettingsExport
+    var goals: [GoalExport]?
+
+    enum CodingKeys: String, CodingKey {
+        case exportedAt, stats, habits, logs, resolutions, settings, goals
+    }
+
+    init(
+        exportedAt: Date,
+        stats: [StatExport],
+        habits: [HabitExport],
+        logs: [HabitLogExport],
+        resolutions: [WeeklyResolutionExport],
+        settings: SettingsExport,
+        goals: [GoalExport]? = nil
+    ) {
+        self.exportedAt = exportedAt
+        self.stats = stats
+        self.habits = habits
+        self.logs = logs
+        self.resolutions = resolutions
+        self.settings = settings
+        self.goals = goals
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        stats = try container.decode([StatExport].self, forKey: .stats)
+        habits = try container.decode([HabitExport].self, forKey: .habits)
+        logs = try container.decode([HabitLogExport].self, forKey: .logs)
+        resolutions = try container.decode([WeeklyResolutionExport].self, forKey: .resolutions)
+        settings = try container.decode(SettingsExport.self, forKey: .settings)
+        goals = try container.decodeIfPresent([GoalExport].self, forKey: .goals)
+    }
 
     static let empty = TrainingExportBundle(
         exportedAt: .now,
@@ -851,8 +1140,9 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
             lockInWeeklyReview: true,
             healthAutoImportEnabled: true,
             lastHealthSyncAt: nil,
-            themePreferenceRaw: ThemePreference.dark.rawValue,
-            dashboardLayoutModeRaw: DashboardLayoutMode.compactGrid.rawValue
+            themePreferenceRaw: "light",
+            dashboardLayoutModeRaw: DashboardLayoutMode.compactGrid.rawValue,
+            disabledHealthWorkoutTypeKeysRaw: ""
         )
     )
 }
@@ -887,6 +1177,9 @@ nonisolated struct StatExport: Codable, Sendable {
     var currentTierName: String
     var startingBaseline: Int
     var currentBaseline: Int
+    var targetValue: Int?
+    var personalMaxValue: Int?
+    var maintenanceFloor: Int?
     var storedCharges: Int
     var bankedProgressUnits: Double
     var lastResolvedWeekStart: Date?
@@ -896,9 +1189,130 @@ nonisolated struct StatExport: Codable, Sendable {
     var pendingRankChangeToLevel: Int?
     var pendingRankChangeRecordedAt: Date?
     var pendingRankChangeReasonRaw: String?
+    var pendingRankChangeViewedAt: Date?
     var createdAt: Date
     var updatedAt: Date
     var isArchived: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, key, name, iconName, colorToken, descriptor, sortOrder,
+             currentLevel, currentTierName, startingBaseline, currentBaseline,
+             targetValue, personalMaxValue, maintenanceFloor,
+             storedCharges, bankedProgressUnits, lastResolvedWeekStart, lastAcknowledgedLevel,
+             pendingRankChangeDirectionRaw, pendingRankChangeFromLevel, pendingRankChangeToLevel,
+             pendingRankChangeRecordedAt, pendingRankChangeReasonRaw, pendingRankChangeViewedAt,
+             createdAt, updatedAt, isArchived
+    }
+
+    init(
+        id: UUID,
+        key: String,
+        name: String,
+        iconName: String,
+        colorToken: String,
+        descriptor: String,
+        sortOrder: Int,
+        currentLevel: Int,
+        currentTierName: String,
+        startingBaseline: Int,
+        currentBaseline: Int,
+        targetValue: Int? = nil,
+        personalMaxValue: Int? = nil,
+        maintenanceFloor: Int? = nil,
+        storedCharges: Int,
+        bankedProgressUnits: Double,
+        lastResolvedWeekStart: Date?,
+        lastAcknowledgedLevel: Int,
+        pendingRankChangeDirectionRaw: String?,
+        pendingRankChangeFromLevel: Int?,
+        pendingRankChangeToLevel: Int?,
+        pendingRankChangeRecordedAt: Date?,
+        pendingRankChangeReasonRaw: String?,
+        pendingRankChangeViewedAt: Date?,
+        createdAt: Date,
+        updatedAt: Date,
+        isArchived: Bool
+    ) {
+        self.id = id
+        self.key = key
+        self.name = name
+        self.iconName = iconName
+        self.colorToken = colorToken
+        self.descriptor = descriptor
+        self.sortOrder = sortOrder
+        self.currentLevel = currentLevel
+        self.currentTierName = currentTierName
+        self.startingBaseline = startingBaseline
+        self.currentBaseline = currentBaseline
+        self.targetValue = targetValue
+        self.personalMaxValue = personalMaxValue
+        self.maintenanceFloor = maintenanceFloor
+        self.storedCharges = storedCharges
+        self.bankedProgressUnits = bankedProgressUnits
+        self.lastResolvedWeekStart = lastResolvedWeekStart
+        self.lastAcknowledgedLevel = lastAcknowledgedLevel
+        self.pendingRankChangeDirectionRaw = pendingRankChangeDirectionRaw
+        self.pendingRankChangeFromLevel = pendingRankChangeFromLevel
+        self.pendingRankChangeToLevel = pendingRankChangeToLevel
+        self.pendingRankChangeRecordedAt = pendingRankChangeRecordedAt
+        self.pendingRankChangeReasonRaw = pendingRankChangeReasonRaw
+        self.pendingRankChangeViewedAt = pendingRankChangeViewedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isArchived = isArchived
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        key = try c.decode(String.self, forKey: .key)
+        name = try c.decode(String.self, forKey: .name)
+        iconName = try c.decode(String.self, forKey: .iconName)
+        colorToken = try c.decode(String.self, forKey: .colorToken)
+        descriptor = try c.decode(String.self, forKey: .descriptor)
+        sortOrder = try c.decode(Int.self, forKey: .sortOrder)
+        currentLevel = try c.decode(Int.self, forKey: .currentLevel)
+        currentTierName = try c.decode(String.self, forKey: .currentTierName)
+        startingBaseline = try c.decode(Int.self, forKey: .startingBaseline)
+        currentBaseline = try c.decode(Int.self, forKey: .currentBaseline)
+        targetValue = try c.decodeIfPresent(Int.self, forKey: .targetValue)
+        personalMaxValue = try c.decodeIfPresent(Int.self, forKey: .personalMaxValue)
+        maintenanceFloor = try c.decodeIfPresent(Int.self, forKey: .maintenanceFloor)
+        storedCharges = try c.decode(Int.self, forKey: .storedCharges)
+        bankedProgressUnits = try c.decode(Double.self, forKey: .bankedProgressUnits)
+        lastResolvedWeekStart = try c.decodeIfPresent(Date.self, forKey: .lastResolvedWeekStart)
+        lastAcknowledgedLevel = try c.decode(Int.self, forKey: .lastAcknowledgedLevel)
+        pendingRankChangeDirectionRaw = try c.decodeIfPresent(String.self, forKey: .pendingRankChangeDirectionRaw)
+        pendingRankChangeFromLevel = try c.decodeIfPresent(Int.self, forKey: .pendingRankChangeFromLevel)
+        pendingRankChangeToLevel = try c.decodeIfPresent(Int.self, forKey: .pendingRankChangeToLevel)
+        pendingRankChangeRecordedAt = try c.decodeIfPresent(Date.self, forKey: .pendingRankChangeRecordedAt)
+        pendingRankChangeReasonRaw = try c.decodeIfPresent(String.self, forKey: .pendingRankChangeReasonRaw)
+        pendingRankChangeViewedAt = try c.decodeIfPresent(Date.self, forKey: .pendingRankChangeViewedAt)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        isArchived = try c.decode(Bool.self, forKey: .isArchived)
+    }
+}
+
+nonisolated struct GoalExport: Codable, Sendable {
+    var id: UUID
+    var title: String
+    var notes: String
+    var goalScopeRaw: String
+    var linkedStatKeyRaw: String?
+    var linkedHabitIDRaw: String?
+    var goalTypeRaw: String
+    var measurementTypeRaw: String
+    var targetValue: Double
+    var startDate: Date
+    var endDate: Date?
+    var statusRaw: String
+    var priorityRaw: String
+    var affectsMetrics: Bool
+    var affectsProgression: Bool
+    var createdAt: Date
+    var updatedAt: Date
+    var completedAt: Date?
 }
 
 nonisolated struct HabitExport: Codable, Sendable {
@@ -969,4 +1383,5 @@ nonisolated struct SettingsExport: Codable, Sendable {
     var lastHealthSyncAt: Date?
     var themePreferenceRaw: String
     var dashboardLayoutModeRaw: String
+    var disabledHealthWorkoutTypeKeysRaw: String?
 }

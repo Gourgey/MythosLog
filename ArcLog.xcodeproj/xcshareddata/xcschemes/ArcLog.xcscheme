@@ -14,7 +14,7 @@
             buildForArchiving = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "13AA2B55274AF982230D3FD2"
+               BlueprintIdentifier = "38B737E316FED683347D3868"
                BuildableName = "ArcLog.app"
                BlueprintName = "ArcLog"
                ReferencedContainer = "container:ArcLog.xcodeproj">
@@ -28,7 +28,7 @@
             buildForArchiving = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BF926E0679768D4C716C65EF"
+               BlueprintIdentifier = "93E2EA7B4CCFCE6F62C37BE4"
                BuildableName = "ArcLogTests.xctest"
                BlueprintName = "ArcLogTests"
                ReferencedContainer = "container:ArcLog.xcodeproj">
@@ -48,7 +48,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BF926E0679768D4C716C65EF"
+               BlueprintIdentifier = "93E2EA7B4CCFCE6F62C37BE4"
                BuildableName = "ArcLogTests.xctest"
                BlueprintName = "ArcLogTests"
                ReferencedContainer = "container:ArcLog.xcodeproj">
@@ -58,7 +58,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "13AA2B55274AF982230D3FD2"
+            BlueprintIdentifier = "38B737E316FED683347D3868"
             BuildableName = "ArcLog.app"
             BlueprintName = "ArcLog"
             ReferencedContainer = "container:ArcLog.xcodeproj">
@@ -81,7 +81,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "13AA2B55274AF982230D3FD2"
+            BlueprintIdentifier = "38B737E316FED683347D3868"
             BuildableName = "ArcLog.app"
             BlueprintName = "ArcLog"
             ReferencedContainer = "container:ArcLog.xcodeproj">
@@ -97,7 +97,7 @@
       <BuildableProductRunnable>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "13AA2B55274AF982230D3FD2"
+            BlueprintIdentifier = "38B737E316FED683347D3868"
             BuildableName = "ArcLog.app"
             BlueprintName = "ArcLog"
             ReferencedContainer = "container:ArcLog.xcodeproj">

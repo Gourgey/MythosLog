@@ -1,4 +1,7 @@
 import Foundation
+import CoreData
+import CloudKit
+import OSLog
 import SwiftData
 #if canImport(HealthKit)
 import HealthKit
@@ -10,10 +13,53 @@ import WidgetKit
 
 @MainActor
 enum TrainingStore {
+    private static let syncLogger = Logger(subsystem: "studio.curateddesign.ArcLog", category: "SwiftDataCloudKit")
+    private static let lastLocalWriteDefaultsKey = "arclog.syncDiagnostics.lastLocalWriteAt"
+    private static let lastLocalWriteReasonDefaultsKey = "arclog.syncDiagnostics.lastLocalWriteReason"
+    private static let lastCloudKitEventDefaultsKey = "arclog.syncDiagnostics.lastCloudKitEvent"
+    private static let lastCloudKitEventDateDefaultsKey = "arclog.syncDiagnostics.lastCloudKitEventDate"
+    private static var cloudKitEventObserver: NSObjectProtocol?
+
     private struct PersistentStoreCandidate {
         let configuration: ModelConfiguration
         let storeURL: URL?
+        let usesCloudKit: Bool
+        let usesAppGroup: Bool
+        let isInMemory: Bool
+        let allowsStoreReset: Bool
     }
+
+    struct RuntimeStoreInfo: Equatable {
+        var storeURL: URL?
+        var cloudKitContainerIdentifier: String?
+        var usesCloudKit: Bool
+        var usesAppGroup: Bool
+        var isInMemory: Bool
+        var allowsStoreReset: Bool
+        var createdAt: Date
+        var fallbackReason: String?
+    }
+
+    struct ModelCounts: Equatable {
+        var stats: Int
+        var habits: Int
+        var logs: Int
+        var weeklyResolutions: Int
+        var settings: Int
+        var healthImports: Int
+        var goals: Int = 0
+    }
+
+    private(set) static var runtimeStoreInfo = RuntimeStoreInfo(
+        storeURL: nil,
+        cloudKitContainerIdentifier: nil,
+        usesCloudKit: false,
+        usesAppGroup: false,
+        isInMemory: false,
+        allowsStoreReset: false,
+        createdAt: .now,
+        fallbackReason: "ModelContainer has not been created yet."
+    )
 
     static let schema = Schema([
         StatDomain.self,
@@ -21,7 +67,8 @@ enum TrainingStore {
         HabitLog.self,
         WeeklyResolution.self,
         AppSettings.self,
-        HealthImportedWorkout.self
+        HealthImportedWorkout.self,
+        Goal.self
     ])
 
     static let sharedModelContainer = makeModelContainer()
@@ -32,27 +79,46 @@ enum TrainingStore {
             forSecurityApplicationGroupIdentifier: AppIdentity.appGroupIdentifier
         ) != nil
 
-        let candidates: [PersistentStoreCandidate] = [
-            makeConfigurationCandidate(inMemory: inMemory, useAppGroup: canUseAppGroup),
-            makeConfigurationCandidate(inMemory: inMemory, useAppGroup: false)
-        ]
+        let candidates: [PersistentStoreCandidate]
+        if inMemory {
+            candidates = [
+                makeConfigurationCandidate(inMemory: true, useAppGroup: false, useCloudKit: false, allowsStoreReset: false)
+            ]
+        } else {
+            let canUseCloudKit = canAttemptCloudKitPersistence()
+            candidates = [
+                canUseCloudKit ? makeConfigurationCandidate(inMemory: false, useAppGroup: canUseAppGroup, useCloudKit: true, allowsStoreReset: false) : nil,
+                canUseCloudKit ? makeConfigurationCandidate(inMemory: false, useAppGroup: false, useCloudKit: true, allowsStoreReset: false) : nil,
+                makeConfigurationCandidate(inMemory: false, useAppGroup: canUseAppGroup, useCloudKit: false, allowsStoreReset: true),
+                makeConfigurationCandidate(inMemory: false, useAppGroup: false, useCloudKit: false, allowsStoreReset: true)
+            ].compactMap(\.self)
+        }
         var lastError: Error?
 
         for candidate in candidates {
+            logStoreCandidate(candidate)
             do {
-                return try ModelContainer(for: schema, configurations: candidate.configuration)
+                let container = try ModelContainer(for: schema, configurations: candidate.configuration)
+                recordRuntimeStoreInfo(candidate: candidate, fallbackReason: fallbackReason(for: candidate, lastError: lastError))
+                logICloudAccountState()
+                return container
             } catch {
                 lastError = error
+                logStoreCandidateFailure(candidate, error: error)
 
-                guard !inMemory, let storeURL = candidate.storeURL else {
+                guard candidate.allowsStoreReset, let storeURL = candidate.storeURL else {
                     continue
                 }
 
                 do {
                     try resetPersistentStore(at: storeURL)
-                    return try ModelContainer(for: schema, configurations: candidate.configuration)
+                    let container = try ModelContainer(for: schema, configurations: candidate.configuration)
+                    recordRuntimeStoreInfo(candidate: candidate, fallbackReason: "Created after local store reset. Previous error: \(String(describing: error))")
+                    logICloudAccountState()
+                    return container
                 } catch {
                     lastError = error
+                    logStoreCandidateFailure(candidate, error: error)
                     continue
                 }
             }
@@ -62,7 +128,21 @@ enum TrainingStore {
         fatalError("Unable to create ModelContainer. \(message)")
     }
 
-    private static func makeConfigurationCandidate(inMemory: Bool, useAppGroup: Bool) -> PersistentStoreCandidate {
+    nonisolated static func canAttemptCloudKitPersistence() -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["XCTestConfigurationFilePath"] != nil || environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return false
+        }
+
+        return true
+    }
+
+    private static func makeConfigurationCandidate(
+        inMemory: Bool,
+        useAppGroup: Bool,
+        useCloudKit: Bool,
+        allowsStoreReset: Bool
+    ) -> PersistentStoreCandidate {
         if inMemory {
             return PersistentStoreCandidate(
                 configuration: ModelConfiguration(
@@ -71,7 +151,11 @@ enum TrainingStore {
                     isStoredInMemoryOnly: true,
                     cloudKitDatabase: .none
                 ),
-                storeURL: nil
+                storeURL: nil,
+                usesCloudKit: false,
+                usesAppGroup: false,
+                isInMemory: true,
+                allowsStoreReset: allowsStoreReset
             )
         }
 
@@ -83,10 +167,156 @@ enum TrainingStore {
                 AppIdentity.displayName,
                 schema: schema,
                 url: storeURL,
-                cloudKitDatabase: .none
+                cloudKitDatabase: useCloudKit ? .private(AppIdentity.iCloudContainerIdentifier) : .none
             ),
-            storeURL: storeURL
+            storeURL: storeURL,
+            usesCloudKit: useCloudKit,
+            usesAppGroup: useAppGroup,
+            isInMemory: false,
+            allowsStoreReset: allowsStoreReset
         )
+    }
+
+    private static func fallbackReason(for candidate: PersistentStoreCandidate, lastError: Error?) -> String? {
+        guard !candidate.usesCloudKit, let lastError else { return nil }
+        return "CloudKit store candidate failed before falling back to local-only persistence: \(String(describing: lastError))"
+    }
+
+    private static func recordRuntimeStoreInfo(candidate: PersistentStoreCandidate, fallbackReason: String?) {
+        runtimeStoreInfo = RuntimeStoreInfo(
+            storeURL: candidate.storeURL,
+            cloudKitContainerIdentifier: candidate.usesCloudKit ? AppIdentity.iCloudContainerIdentifier : nil,
+            usesCloudKit: candidate.usesCloudKit,
+            usesAppGroup: candidate.usesAppGroup,
+            isInMemory: candidate.isInMemory,
+            allowsStoreReset: candidate.allowsStoreReset,
+            createdAt: .now,
+            fallbackReason: fallbackReason
+        )
+
+        #if DEBUG
+        syncLogger.info("""
+        ModelContainer created. storeURL=\(candidate.storeURL?.path ?? "in-memory", privacy: .public) \
+        cloudKit=\(candidate.usesCloudKit ? "private(\(AppIdentity.iCloudContainerIdentifier))" : "none", privacy: .public) \
+        appGroup=\(candidate.usesAppGroup) resetAllowed=\(candidate.allowsStoreReset) \
+        ubiquityTokenPresent=\(FileManager.default.ubiquityIdentityToken != nil)
+        """)
+        if let fallbackReason {
+            syncLogger.error("\(fallbackReason, privacy: .public)")
+        }
+        #endif
+    }
+
+    private static func logStoreCandidate(_ candidate: PersistentStoreCandidate) {
+        #if DEBUG
+        syncLogger.info("""
+        Trying ModelContainer candidate. storeURL=\(candidate.storeURL?.path ?? "in-memory", privacy: .public) \
+        cloudKit=\(candidate.usesCloudKit ? "private(\(AppIdentity.iCloudContainerIdentifier))" : "none", privacy: .public) \
+        appGroup=\(candidate.usesAppGroup) inMemory=\(candidate.isInMemory)
+        """)
+        #endif
+    }
+
+    private static func logStoreCandidateFailure(_ candidate: PersistentStoreCandidate, error: Error) {
+        #if DEBUG
+        syncLogger.error("""
+        ModelContainer candidate failed. storeURL=\(candidate.storeURL?.path ?? "in-memory", privacy: .public) \
+        cloudKit=\(candidate.usesCloudKit ? "private(\(AppIdentity.iCloudContainerIdentifier))" : "none", privacy: .public) \
+        error=\(String(describing: error), privacy: .public)
+        """)
+        #endif
+    }
+
+    private static func logICloudAccountState() {
+        #if DEBUG
+        syncLogger.info("ubiquityIdentityToken present: \(FileManager.default.ubiquityIdentityToken != nil)")
+        CKContainer(identifier: AppIdentity.iCloudContainerIdentifier).accountStatus { status, error in
+            Task { @MainActor in
+                if let error {
+                    syncLogger.error("CloudKit accountStatus error: \(String(describing: error), privacy: .public)")
+                    return
+                }
+                syncLogger.info("CloudKit accountStatus for \(AppIdentity.iCloudContainerIdentifier, privacy: .public): \(String(describing: status), privacy: .public)")
+            }
+        }
+        #endif
+    }
+
+    static func startCloudKitEventObserver() {
+        guard cloudKitEventObserver == nil else { return }
+        cloudKitEventObserver = NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard
+                let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event
+            else {
+                return
+            }
+
+            Task { @MainActor in
+                recordCloudKitEvent(event)
+            }
+        }
+    }
+
+    private static func recordCloudKitEvent(_ event: NSPersistentCloudKitContainer.Event) {
+        let type: String
+        switch event.type {
+        case .setup:
+            type = "setup"
+        case .import:
+            type = "import"
+        case .export:
+            type = "export"
+        @unknown default:
+            type = "unknown"
+        }
+
+        var summary = "\(type) \(event.succeeded ? "succeeded" : "failed")"
+        if let endDate = event.endDate {
+            summary += " at \(endDate.formatted(date: .abbreviated, time: .standard))"
+        }
+        if let error = event.error {
+            summary += " error=\(error.localizedDescription)"
+        }
+
+        diagnosticDefaults.set(summary, forKey: lastCloudKitEventDefaultsKey)
+        diagnosticDefaults.set(Date(), forKey: lastCloudKitEventDateDefaultsKey)
+
+        #if DEBUG
+        syncLogger.info("CloudKit event: \(summary, privacy: .public)")
+        #endif
+    }
+
+    static func recordLocalWrite(reason: String) {
+        diagnosticDefaults.set(Date(), forKey: lastLocalWriteDefaultsKey)
+        diagnosticDefaults.set(reason, forKey: lastLocalWriteReasonDefaultsKey)
+
+        #if DEBUG
+        syncLogger.info("Local SwiftData write: \(reason, privacy: .public)")
+        #endif
+    }
+
+    static var lastLocalWriteAt: Date? {
+        diagnosticDefaults.object(forKey: lastLocalWriteDefaultsKey) as? Date
+    }
+
+    static var lastLocalWriteReason: String? {
+        diagnosticDefaults.string(forKey: lastLocalWriteReasonDefaultsKey)
+    }
+
+    static var lastCloudKitEventSummary: String? {
+        diagnosticDefaults.string(forKey: lastCloudKitEventDefaultsKey)
+    }
+
+    static var lastCloudKitEventAt: Date? {
+        diagnosticDefaults.object(forKey: lastCloudKitEventDateDefaultsKey) as? Date
+    }
+
+    private static var diagnosticDefaults: UserDefaults {
+        UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
     }
 
     private static func persistentStoreURL(useAppGroup: Bool) -> URL {
@@ -126,6 +356,7 @@ enum TrainingStore {
 
     static func refreshAppState() {
         let context = ModelContext(sharedModelContainer)
+        _ = try? reconcileSyncedData(context: context)
         try? synchronizeCatalog(context: context)
         try? refreshAllProgress(context: context, reason: .appRefresh)
         try? refreshWidgetSnapshot(context: context)
@@ -133,14 +364,25 @@ enum TrainingStore {
     }
 
     static func fetchSettings(context: ModelContext) throws -> AppSettings {
-        if let settings = try context.fetch(FetchDescriptor<AppSettings>()).first {
+        let descriptor = FetchDescriptor<AppSettings>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        if let settings = try context.fetch(descriptor).first {
             return settings
         }
 
         let settings = AppSettings()
         context.insert(settings)
         try context.save()
+        recordLocalWrite(reason: "created default AppSettings")
         return settings
+    }
+
+    static func fetchExistingSettings(context: ModelContext) throws -> AppSettings? {
+        let descriptor = FetchDescriptor<AppSettings>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor).first
     }
 
     static func fetchStats(context: ModelContext) throws -> [StatDomain] {
@@ -176,6 +418,407 @@ enum TrainingStore {
         return try context.fetch(descriptor)
     }
 
+    static func fetchGoals(context: ModelContext) throws -> [Goal] {
+        let descriptor = FetchDescriptor<Goal>(sortBy: [
+            SortDescriptor(\.statusRaw),
+            SortDescriptor(\.createdAt, order: .reverse)
+        ])
+        return try context.fetch(descriptor)
+    }
+
+    static func fetchActiveGoals(context: ModelContext) throws -> [Goal] {
+        try fetchGoals(context: context).filter { $0.status == .active }
+    }
+
+    static func fetchGoals(for statKey: StatKey, context: ModelContext) throws -> [Goal] {
+        try fetchGoals(context: context).filter { $0.linkedStatKey == statKey }
+    }
+
+    @discardableResult
+    static func createGoal(
+        title: String,
+        notes: String = "",
+        scope: GoalScope,
+        linkedStatKey: StatKey? = nil,
+        linkedHabitID: UUID? = nil,
+        type: GoalType,
+        measurementType: MeasurementType,
+        targetValue: Double,
+        startDate: Date = .now,
+        endDate: Date? = nil,
+        priority: GoalPriority = .normal,
+        affectsMetrics: Bool = false,
+        affectsProgression: Bool = false,
+        context: ModelContext
+    ) throws -> Goal {
+        let goal = Goal(
+            title: title,
+            notes: notes,
+            scope: scope,
+            linkedStatKey: linkedStatKey,
+            linkedHabitID: linkedHabitID,
+            type: type,
+            measurementType: measurementType,
+            targetValue: targetValue,
+            startDate: startDate,
+            endDate: endDate,
+            status: .active,
+            priority: priority,
+            affectsMetrics: affectsMetrics,
+            affectsProgression: affectsProgression
+        )
+        context.insert(goal)
+        try context.save()
+        recordLocalWrite(reason: "created goal")
+        return goal
+    }
+
+    static func updateGoal(_ goal: Goal, context: ModelContext) throws {
+        goal.updatedAt = .now
+        try context.save()
+        recordLocalWrite(reason: "updated goal")
+    }
+
+    static func setGoalStatus(_ goal: Goal, status: GoalStatus, context: ModelContext) throws {
+        let previous = goal.status
+        goal.status = status
+        if status == .completed, goal.completedAt == nil {
+            goal.completedAt = .now
+        }
+        if status != .completed, previous == .completed {
+            goal.completedAt = nil
+        }
+        goal.updatedAt = .now
+        try context.save()
+        recordLocalWrite(reason: "changed goal status to \(status.rawValue)")
+    }
+
+    static func deleteGoal(_ goal: Goal, context: ModelContext) throws {
+        context.delete(goal)
+        try context.save()
+        recordLocalWrite(reason: "deleted goal")
+    }
+
+    static func goalProgress(for goal: Goal, context: ModelContext, now: Date = .now) -> GoalProgressSnapshot {
+        let currentValue = computeGoalCurrentValue(for: goal, context: context, now: now)
+        let target = max(goal.targetValue, 0)
+        let ratio: Double
+        if target > 0 {
+            ratio = min(max(currentValue / target, 0), 1)
+        } else {
+            ratio = goal.status == .completed ? 1 : 0
+        }
+        let remaining = max(target - currentValue, 0)
+
+        let paceStatus = goalPaceStatus(
+            goal: goal,
+            currentValue: currentValue,
+            target: target,
+            now: now
+        )
+
+        return GoalProgressSnapshot(
+            id: goal.id,
+            goal: goal,
+            currentValue: currentValue,
+            targetValue: target,
+            progressRatio: ratio,
+            remainingValue: remaining,
+            paceStatus: paceStatus,
+            timeRemainingLabel: goalTimeRemainingLabel(for: goal, now: now),
+            statusLabel: goalStatusLabel(goal: goal, currentValue: currentValue, target: target, paceStatus: paceStatus)
+        )
+    }
+
+    static func goalProgressSnapshots(context: ModelContext, now: Date = .now) throws -> [GoalProgressSnapshot] {
+        try fetchGoals(context: context).map { goal in
+            goalProgress(for: goal, context: context, now: now)
+        }
+    }
+
+    static func trainTodayRecommendations(
+        context: ModelContext,
+        settings: AppSettings?,
+        now: Date = .now,
+        limit: Int = 3
+    ) throws -> [TrainTodayRecommendation] {
+        var output: [TrainTodayRecommendation] = []
+
+        if let _ = try pendingWeek(context: context, now: now) {
+            output.append(
+                TrainTodayRecommendation(
+                    id: "review-ready",
+                    statKeyRaw: nil,
+                    statName: "Weekly Review",
+                    colorToken: "focus",
+                    iconName: "calendar.badge.clock",
+                    headline: "Weekly review ready",
+                    detail: "Resolve last week to lock in rank changes.",
+                    reason: .reviewReady,
+                    priority: 100,
+                    hasReviewReady: true
+                )
+            )
+        }
+
+        let stats = try fetchActiveStats(context: context)
+        let goalSnapshots = (try? goalProgressSnapshots(context: context, now: now)) ?? []
+        let activeGoalsByStat: [String: [GoalProgressSnapshot]] = Dictionary(
+            grouping: goalSnapshots.filter { $0.goal.status == .active && $0.goal.linkedStatKeyRaw != nil },
+            by: { $0.goal.linkedStatKeyRaw ?? "" }
+        )
+
+        for stat in stats {
+            guard let statKey = stat.statKey else { continue }
+            let actual = currentWeekTotal(for: stat, settings: settings, now: now)
+            let baseline = Double(stat.currentBaseline)
+            let pace = pacingStatus(for: stat, settings: settings, now: now)
+            let charge = stat.chargeValue
+            let lastLog = recentLogs(for: stat).first?.date
+            let unit = weeklyUnitLabel(for: stat)
+
+            if let goalsForStat = activeGoalsByStat[statKey.rawValue] {
+                for snapshot in goalsForStat where snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind {
+                    let remaining = max(snapshot.targetValue - snapshot.currentValue, 0)
+                    let remainingLabel = MetricFormatting.shortMetric(remaining)
+                    output.append(
+                        TrainTodayRecommendation(
+                            id: "goal-\(snapshot.goal.id.uuidString)",
+                            statKeyRaw: statKey.rawValue,
+                            statName: stat.name,
+                            colorToken: stat.colorToken,
+                            iconName: stat.iconName,
+                            headline: "\(stat.name) goal at risk",
+                            detail: "\(remainingLabel) more needed for: \(snapshot.goal.title)",
+                            reason: .goalAtRisk,
+                            priority: 80,
+                            hasReviewReady: false
+                        )
+                    )
+                }
+            }
+
+            if baseline > 0, actual == 0 {
+                output.append(
+                    TrainTodayRecommendation(
+                        id: "nolog-\(statKey.rawValue)",
+                        statKeyRaw: statKey.rawValue,
+                        statName: stat.name,
+                        colorToken: stat.colorToken,
+                        iconName: stat.iconName,
+                        headline: "\(stat.name) has no logs this week",
+                        detail: "Add the first entry to keep momentum.",
+                        reason: .noLogsThisWeek,
+                        priority: 70,
+                        hasReviewReady: false
+                    )
+                )
+                continue
+            }
+
+            if pace == .behind, baseline > 0 {
+                let remaining = max(baseline - actual, 0)
+                let remainingLabel = MetricFormatting.shortMetric(remaining)
+                output.append(
+                    TrainTodayRecommendation(
+                        id: "behind-\(statKey.rawValue)",
+                        statKeyRaw: statKey.rawValue,
+                        statName: stat.name,
+                        colorToken: stat.colorToken,
+                        iconName: stat.iconName,
+                        headline: "\(stat.name) behind pace",
+                        detail: "\(remainingLabel) \(unit) needed to stay on baseline.",
+                        reason: .behindBaseline,
+                        priority: 60,
+                        hasReviewReady: false
+                    )
+                )
+                continue
+            }
+
+            if charge <= -2 {
+                output.append(
+                    TrainTodayRecommendation(
+                        id: "lowcharge-\(statKey.rawValue)",
+                        statKeyRaw: statKey.rawValue,
+                        statName: stat.name,
+                        colorToken: stat.colorToken,
+                        iconName: stat.iconName,
+                        headline: "\(stat.name) losing momentum",
+                        detail: "Charge is at \(charge). One strong week resets the trend.",
+                        reason: .lowCharge,
+                        priority: 55,
+                        hasReviewReady: false
+                    )
+                )
+                continue
+            }
+
+            if charge >= 3, stat.rankLevel < TrainingArcConfig.maximumRankLevel {
+                output.append(
+                    TrainTodayRecommendation(
+                        id: "ranking-\(statKey.rawValue)",
+                        statKeyRaw: statKey.rawValue,
+                        statName: stat.name,
+                        colorToken: stat.colorToken,
+                        iconName: stat.iconName,
+                        headline: "\(stat.name) close to rank up",
+                        detail: "Hold this week to lock in the new rank.",
+                        reason: .nearRankUp,
+                        priority: 30,
+                        hasReviewReady: false
+                    )
+                )
+                continue
+            }
+
+            if let lastLog, now.timeIntervalSince(lastLog) > 14 * 86_400 {
+                let days = Int(now.timeIntervalSince(lastLog) / 86_400)
+                output.append(
+                    TrainTodayRecommendation(
+                        id: "stale-\(statKey.rawValue)",
+                        statKeyRaw: statKey.rawValue,
+                        statName: stat.name,
+                        colorToken: stat.colorToken,
+                        iconName: stat.iconName,
+                        headline: "\(stat.name) hasn't been logged in \(days) days",
+                        detail: "Even a small session restarts the trend.",
+                        reason: .staleSkill,
+                        priority: 40,
+                        hasReviewReady: false
+                    )
+                )
+            }
+        }
+
+        let sorted = output.sorted { $0.priority > $1.priority }
+        return Array(sorted.prefix(limit))
+    }
+
+    private static func computeGoalCurrentValue(for goal: Goal, context: ModelContext, now: Date) -> Double {
+        switch goal.type {
+        case .reachLevel, .reachRank:
+            guard
+                let statKey = goal.linkedStatKey,
+                let stat = try? fetchStats(context: context).first(where: { $0.statKey == statKey })
+            else {
+                return 0
+            }
+            return Double(stat.rankLevel)
+        case .weeklyTarget:
+            return totalForGoal(goal, in: progressionWeekInterval(containing: now), context: context)
+        case .monthlyTotal:
+            return totalForGoal(goal, in: monthInterval(containing: now), context: context)
+        case .consistency, .maintainBaseline, .improveBalance, .custom:
+            let interval = goalDateInterval(for: goal, now: now)
+            return totalForGoal(goal, in: interval, context: context)
+        }
+    }
+
+    private static func totalForGoal(_ goal: Goal, in interval: DateInterval, context: ModelContext) -> Double {
+        let allLogs = (try? fetchLogs(context: context)) ?? []
+        let filtered = allLogs.filter { log in
+            guard interval.contains(log.date) else { return false }
+            if let habitID = goal.linkedHabitID {
+                return log.habit?.id == habitID
+            }
+            if let statKey = goal.linkedStatKey {
+                return log.habit?.statDomain?.statKey == statKey
+            }
+            return true
+        }
+        return filtered.reduce(0) { $0 + $1.numericValue }
+    }
+
+    private static func goalDateInterval(for goal: Goal, now: Date) -> DateInterval {
+        let start = goal.startDate
+        let end = goal.endDate ?? now
+        if end <= start {
+            return DateInterval(start: start, end: max(now, start))
+        }
+        return DateInterval(start: start, end: end)
+    }
+
+    private static func monthInterval(containing date: Date) -> DateInterval {
+        let calendar = progressionCalendar()
+        let comps = calendar.dateComponents([.year, .month], from: date)
+        let start = calendar.date(from: comps) ?? date
+        let endExclusive = calendar.date(byAdding: .month, value: 1, to: start) ?? date
+        return DateInterval(start: start, end: endExclusive)
+    }
+
+    private static func goalPaceStatus(goal: Goal, currentValue: Double, target: Double, now: Date) -> GoalPaceStatus {
+        if goal.status == .completed || (target > 0 && currentValue >= target) {
+            return .complete
+        }
+        guard target > 0 else { return .onPace }
+
+        let interval = goalDateInterval(for: goal, now: now)
+        let totalDuration = interval.duration
+        guard totalDuration > 0 else { return .onPace }
+
+        let elapsed = max(min(now.timeIntervalSince(interval.start), totalDuration), 0)
+        let expectedRatio = elapsed / totalDuration
+        let actualRatio = currentValue / target
+
+        if actualRatio >= expectedRatio + 0.15 {
+            return .ahead
+        }
+        if actualRatio >= expectedRatio - 0.05 {
+            return .onPace
+        }
+        if actualRatio >= expectedRatio - 0.20 {
+            return .atRisk
+        }
+        return .behind
+    }
+
+    private static func goalTimeRemainingLabel(for goal: Goal, now: Date) -> String {
+        guard let endDate = goal.endDate else { return "Ongoing" }
+        let remaining = endDate.timeIntervalSince(now)
+        if remaining <= 0 { return "Ended" }
+        let days = Int(remaining / 86_400)
+        if days >= 14 {
+            let weeks = days / 7
+            return "\(weeks) weeks left"
+        }
+        if days >= 1 {
+            return "\(days)d left"
+        }
+        let hours = Int(remaining / 3_600)
+        return "\(max(hours, 1))h left"
+    }
+
+    private static func goalStatusLabel(goal: Goal, currentValue: Double, target: Double, paceStatus: GoalPaceStatus) -> String {
+        switch goal.status {
+        case .completed:
+            return "Completed"
+        case .paused:
+            return "Paused"
+        case .archived:
+            return "Archived"
+        case .failed:
+            return "Missed"
+        case .active:
+            if target > 0, currentValue >= target {
+                return "Target met"
+            }
+            return paceStatus.label
+        }
+    }
+
+    static func modelCounts(context: ModelContext) -> ModelCounts {
+        ModelCounts(
+            stats: ((try? context.fetch(FetchDescriptor<StatDomain>())) ?? []).count,
+            habits: ((try? context.fetch(FetchDescriptor<Habit>())) ?? []).count,
+            logs: ((try? context.fetch(FetchDescriptor<HabitLog>())) ?? []).count,
+            weeklyResolutions: ((try? context.fetch(FetchDescriptor<WeeklyResolution>())) ?? []).count,
+            settings: ((try? context.fetch(FetchDescriptor<AppSettings>())) ?? []).count,
+            healthImports: ((try? context.fetch(FetchDescriptor<HealthImportedWorkout>())) ?? []).count,
+            goals: ((try? context.fetch(FetchDescriptor<Goal>())) ?? []).count
+        )
+    }
+
     static func seedDefaultProfile(
         context: ModelContext,
         baselines: [StatKey: Int] = [:],
@@ -188,6 +831,7 @@ enum TrainingStore {
             settings.hasCompletedOnboarding = completeOnboarding
             settings.updatedAt = .now
             try context.save()
+            recordLocalWrite(reason: "updated existing default profile during onboarding")
             try refreshWidgetSnapshot(context: context)
             return
         }
@@ -238,6 +882,7 @@ enum TrainingStore {
         settings.hasCompletedOnboarding = completeOnboarding
         settings.updatedAt = .now
         try context.save()
+        recordLocalWrite(reason: "seeded default onboarding profile")
         try refreshAllProgress(context: context, reason: .onboarding)
         try refreshWidgetSnapshot(context: context)
     }
@@ -246,13 +891,251 @@ enum TrainingStore {
         for item in try fetchImportedHealthWorkouts(context: context) { context.delete(item) }
         for item in try fetchLogs(context: context) { context.delete(item) }
         for item in try fetchResolutions(context: context) { context.delete(item) }
+        for item in try fetchGoals(context: context) { context.delete(item) }
         for item in try fetchHabits(context: context) { context.delete(item) }
         for item in try fetchStats(context: context) { context.delete(item) }
         for item in try context.fetch(FetchDescriptor<AppSettings>()) { context.delete(item) }
         try context.save()
+        recordLocalWrite(reason: "cleared all local SwiftData records")
         let defaults = UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
         defaults.removeObject(forKey: AppIdentity.healthWorkoutAnchorKey)
+        defaults.removeObject(forKey: "training.arc.health.lastYearBackfillAt")
         try refreshWidgetSnapshot(context: context)
+    }
+
+    @discardableResult
+    static func reconcileSyncedData(context: ModelContext) throws -> Bool {
+        var didMutate = false
+        didMutate = try reconcileSettings(context: context) || didMutate
+        didMutate = try reconcileStats(context: context) || didMutate
+        didMutate = try reconcileHabits(context: context) || didMutate
+        didMutate = try reconcileLogs(context: context) || didMutate
+        didMutate = try reconcileHealthImports(context: context) || didMutate
+        didMutate = try reconcileWeeklyResolutions(context: context) || didMutate
+        didMutate = try reconcileGoals(context: context) || didMutate
+
+        if didMutate || context.hasChanges {
+            try context.save()
+            recordLocalWrite(reason: "reconciled synced duplicate records")
+        }
+
+        return didMutate
+    }
+
+    private static func reconcileSettings(context: ModelContext) throws -> Bool {
+        let settings = try context.fetch(FetchDescriptor<AppSettings>())
+        guard settings.count > 1 else { return false }
+
+        let keeper = settings.max {
+            if $0.updatedAt == $1.updatedAt {
+                return $0.createdAt < $1.createdAt
+            }
+            return $0.updatedAt < $1.updatedAt
+        }
+
+        guard let keeper else { return false }
+
+        for duplicate in settings where duplicate !== keeper {
+            context.delete(duplicate)
+        }
+
+        return true
+    }
+
+    private static func reconcileStats(context: ModelContext) throws -> Bool {
+        var didMutate = false
+        let groupedStats = Dictionary(grouping: try fetchStats(context: context), by: \.key)
+
+        for stats in groupedStats.values where stats.count > 1 {
+            let keeper = stats.max {
+                if $0.updatedAt == $1.updatedAt {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.updatedAt < $1.updatedAt
+            }
+
+            guard let keeper else { continue }
+
+            for duplicate in stats where duplicate !== keeper {
+                for habit in duplicate.habits ?? [] {
+                    habit.statDomain = keeper
+                }
+                for resolution in duplicate.weeklyResolutions ?? [] {
+                    resolution.statDomain = keeper
+                    resolution.statKey = keeper.key
+                    resolution.statName = keeper.name
+                }
+                context.delete(duplicate)
+                didMutate = true
+            }
+        }
+
+        return didMutate
+    }
+
+    private static func reconcileHabits(context: ModelContext) throws -> Bool {
+        var didMutate = false
+
+        for habits in Dictionary(grouping: try fetchHabits(context: context), by: \.id).values where habits.count > 1 {
+            didMutate = mergeDuplicateHabits(habits, context: context) || didMutate
+        }
+
+        let systemHabits = try fetchHabits(context: context).filter { $0.systemKey != nil }
+        for habits in Dictionary(grouping: systemHabits, by: { $0.systemKey ?? "" }).values where habits.count > 1 {
+            didMutate = mergeDuplicateHabits(habits, context: context) || didMutate
+        }
+
+        return didMutate
+    }
+
+    private static func mergeDuplicateHabits(_ habits: [Habit], context: ModelContext) -> Bool {
+        guard habits.count > 1 else { return false }
+
+        let keeper = habits.max {
+            if $0.updatedAt == $1.updatedAt {
+                return $0.createdAt < $1.createdAt
+            }
+            return $0.updatedAt < $1.updatedAt
+        }
+
+        guard let keeper else { return false }
+
+        for duplicate in habits where duplicate !== keeper {
+            for log in duplicate.logs ?? [] {
+                log.habit = keeper
+            }
+            if keeper.statDomain == nil {
+                keeper.statDomain = duplicate.statDomain
+            }
+            context.delete(duplicate)
+        }
+
+        return true
+    }
+
+    private static func reconcileLogs(context: ModelContext) throws -> Bool {
+        var didMutate = false
+
+        for logs in Dictionary(grouping: try fetchLogs(context: context), by: \.id).values where logs.count > 1 {
+            let keeper = logs.max {
+                if $0.createdAt == $1.createdAt {
+                    return $0.date < $1.date
+                }
+                return $0.createdAt < $1.createdAt
+            }
+
+            guard let keeper else { continue }
+
+            for duplicate in logs where duplicate !== keeper {
+                if keeper.habit == nil {
+                    keeper.habit = duplicate.habit
+                }
+                context.delete(duplicate)
+                didMutate = true
+            }
+        }
+
+        return didMutate
+    }
+
+    private static func reconcileHealthImports(context: ModelContext) throws -> Bool {
+        var didMutate = false
+
+        for records in Dictionary(grouping: try fetchImportedHealthWorkouts(context: context), by: \.workoutUUID).values where records.count > 1 {
+            let keeper = records.max {
+                let lhs = healthImportSortKey($0)
+                let rhs = healthImportSortKey($1)
+                if lhs.priority == rhs.priority {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.priority < rhs.priority
+            }
+
+            guard let keeper else { continue }
+
+            for duplicate in records where duplicate !== keeper {
+                removeDuplicateHealthLog(for: duplicate, keeping: keeper, context: context)
+                context.delete(duplicate)
+                didMutate = true
+            }
+        }
+
+        return didMutate
+    }
+
+    private static func healthImportSortKey(_ record: HealthImportedWorkout) -> (priority: Int, createdAt: Date) {
+        let priority: Int
+        if record.wasImported && !record.isDuplicate {
+            priority = 2
+        } else if record.wasImported {
+            priority = 1
+        } else {
+            priority = 0
+        }
+        return (priority, record.createdAt)
+    }
+
+    private static func removeDuplicateHealthLog(for duplicate: HealthImportedWorkout, keeping keeper: HealthImportedWorkout, context: ModelContext) {
+        guard duplicate.wasImported, duplicate !== keeper else { return }
+        guard let habitSystemKey = duplicate.habitSystemKey else { return }
+
+        let matchingLogs = ((try? fetchLogs(context: context)) ?? [])
+            .filter { log in
+                log.sourceType == .health &&
+                log.habit?.systemKey == habitSystemKey &&
+                abs(log.date.timeIntervalSince(duplicate.endDate)) < 120
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.date > rhs.date
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+
+        if matchingLogs.count > 1, let newestDuplicateLog = matchingLogs.first {
+            context.delete(newestDuplicateLog)
+        }
+    }
+
+    private static func reconcileWeeklyResolutions(context: ModelContext) throws -> Bool {
+        var didMutate = false
+        let resolutions = try fetchResolutions(context: context)
+        let grouped = Dictionary(grouping: resolutions) {
+            "\($0.statKey)|\($0.weekStartDate.timeIntervalSinceReferenceDate)"
+        }
+
+        for resolutions in grouped.values where resolutions.count > 1 {
+            let keeper = resolutions.max { $0.createdAt < $1.createdAt }
+            guard let keeper else { continue }
+
+            for duplicate in resolutions where duplicate !== keeper {
+                if keeper.statDomain == nil {
+                    keeper.statDomain = duplicate.statDomain
+                }
+                context.delete(duplicate)
+                didMutate = true
+            }
+        }
+
+        return didMutate
+    }
+
+    private static func reconcileGoals(context: ModelContext) throws -> Bool {
+        var didMutate = false
+        for goals in Dictionary(grouping: try fetchGoals(context: context), by: \.id).values where goals.count > 1 {
+            let keeper = goals.max {
+                if $0.updatedAt == $1.updatedAt {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.updatedAt < $1.updatedAt
+            }
+            guard let keeper else { continue }
+            for duplicate in goals where duplicate !== keeper {
+                context.delete(duplicate)
+                didMutate = true
+            }
+        }
+        return didMutate
     }
 
     static func updateDerivedFields(for stat: StatDomain) {
@@ -286,7 +1169,7 @@ enum TrainingStore {
             return (key, stat)
         })
 
-        for (offset, template) in TrainingArcConfig.statTemplates.enumerated() {
+        for template in TrainingArcConfig.statTemplates {
             if let existing = statLookup[template.key] {
                 let didChange =
                     existing.name != template.key.displayName ||
@@ -342,6 +1225,7 @@ enum TrainingStore {
 
         if didMutate {
             try context.save()
+            recordLocalWrite(reason: "synchronized catalog")
             try refreshAllProgress(context: context, reason: .appRefresh)
         }
     }
@@ -368,6 +1252,7 @@ enum TrainingStore {
         habit.updatedAt = .now
         context.insert(log)
         try context.save()
+        recordLocalWrite(reason: "logged habit entry")
         if let stat = habit.statDomain {
             try refreshProgress(for: stat, context: context, reason: .logMutation, now: max(date, .now))
         }
@@ -380,6 +1265,7 @@ enum TrainingStore {
         let affectedDate = log.date
         context.delete(log)
         try context.save()
+        recordLocalWrite(reason: "deleted habit entry")
         if let stat {
             try refreshProgress(for: stat, context: context, reason: .deleteMutation, now: max(affectedDate, .now))
         }
@@ -387,13 +1273,13 @@ enum TrainingStore {
     }
 
     static func total(for habit: Habit, in interval: DateInterval) -> Double {
-        habit.logs
+        (habit.logs ?? [])
             .filter { interval.contains($0.date) }
             .reduce(0) { $0 + $1.numericValue }
     }
 
     static func total(for stat: StatDomain, in interval: DateInterval) -> Double {
-        stat.habits
+        (stat.habits ?? [])
             .filter(\.active)
             .reduce(0) { total, habit in
                 total + self.total(for: habit, in: interval)
@@ -401,7 +1287,7 @@ enum TrainingStore {
     }
 
     static func activeHabits(for stat: StatDomain) -> [Habit] {
-        stat.habits
+        (stat.habits ?? [])
             .filter(\.active)
             .sorted {
                 if $0.sortOrder == $1.sortOrder {
@@ -417,7 +1303,7 @@ enum TrainingStore {
 
     static func recentLogs(for stat: StatDomain) -> [HabitLog] {
         activeHabits(for: stat)
-            .flatMap(\.logs)
+            .flatMap { $0.logs ?? [] }
             .sorted { lhs, rhs in
                 if lhs.date == rhs.date {
                     return lhs.createdAt > rhs.createdAt
@@ -518,7 +1404,7 @@ enum TrainingStore {
     static func nextEvaluationLabel(now: Date = .now) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE 'at' HH:mm"
-        return "Banks \(formatter.string(from: nextWeeklyEvaluationDate(now: now)))"
+        return "Resolves \(formatter.string(from: nextWeeklyEvaluationDate(now: now)))"
     }
 
     static func bankCountdownLabel(now: Date = .now) -> String {
@@ -529,12 +1415,12 @@ enum TrainingStore {
         let minutes = (remaining % 3_600) / 60
 
         if days > 0 {
-            return "Banking in \(days)d \(hours)h"
+            return "Resolves in \(days)d \(hours)h"
         }
         if hours > 0 {
-            return "Banking in \(hours)h \(minutes)m"
+            return "Resolves in \(hours)h \(minutes)m"
         }
-        return "Banking in \(max(minutes, 1))m"
+        return "Resolves in \(max(minutes, 1))m"
     }
 
     static func nextWeeklyEvaluationDate(now: Date = .now) -> Date {
@@ -725,7 +1611,7 @@ enum TrainingStore {
         let calendar = progressionCalendar()
         let interval = WeekMath.dateInterval(for: week, calendar: calendar)
         let logs = activeHabits(for: stat)
-            .flatMap(\.logs)
+            .flatMap { $0.logs ?? [] }
             .filter { interval.contains($0.date) }
             .sorted { lhs, rhs in
                 if lhs.date == rhs.date {
@@ -772,6 +1658,9 @@ enum TrainingStore {
         let pacing = pacingStatus(for: stat, settings: settings, now: now)
         let chargeMaximum = DashboardChargeDots.slotsPerSide
         let focusState = focusState(for: stat, settings: settings, chargeProgress: chargeProgress, now: now)
+        let weeklyTarget = max(Double(stat.currentBaseline), 1)
+        let weeklyTargetProgress = min(max(currentWeekActual / weeklyTarget, 0), 1)
+        let rankChangeIndicatorVisible = stat.pendingRankChange != nil && stat.pendingRankChangeViewedAt == nil
 
         return SkillProgressSnapshot(
             rank: RankSnapshot(
@@ -798,6 +1687,8 @@ enum TrainingStore {
             bankedProgressUnits: stat.bankedProgressUnits,
             nextEvaluationDate: nextWeeklyEvaluationDate(now: now),
             pendingRankChange: stat.pendingRankChange,
+            rankChangeIndicatorVisible: rankChangeIndicatorVisible,
+            weeklyTargetProgress: weeklyTargetProgress,
             weeklyCounterLabel: weeklyCounterLabel(for: stat),
             weeklyCounterValueLabel: weeklyCounterValueLabel(for: stat, settings: settings, now: now),
             chargeExplanation: chargeExplanation(
@@ -880,6 +1771,7 @@ enum TrainingStore {
 
         if didChange || context.hasChanges {
             try context.save()
+            recordLocalWrite(reason: "refreshed all progress")
         }
     }
 
@@ -899,9 +1791,10 @@ enum TrainingStore {
         let previousBankedUnits = stat.bankedProgressUnits
         let previousResolvedWeek = stat.lastResolvedWeekStart
         let previousPending = stat.pendingRankChange
-        let hadExistingResolutions = !stat.weeklyResolutions.isEmpty
+        let existingResolutions = stat.weeklyResolutions ?? []
+        let hadExistingResolutions = !existingResolutions.isEmpty
 
-        for resolution in stat.weeklyResolutions {
+        for resolution in existingResolutions {
             context.delete(resolution)
         }
 
@@ -975,6 +1868,7 @@ enum TrainingStore {
 
         if autosave, (didChange || context.hasChanges) {
             try context.save()
+            recordLocalWrite(reason: "refreshed skill progress")
         }
 
         return didChange || context.hasChanges
@@ -985,12 +1879,33 @@ enum TrainingStore {
         stat.clearPendingRankChange()
         updateDerivedFields(for: stat)
         try context.save()
+        recordLocalWrite(reason: "acknowledged rank change")
         try refreshWidgetSnapshot(context: context)
+    }
+
+    static func markRankChangeSeen(for stat: StatDomain, context: ModelContext, now: Date = .now) throws {
+        guard stat.pendingRankChange != nil, stat.pendingRankChangeViewedAt == nil else { return }
+        stat.pendingRankChangeViewedAt = now
+        stat.updatedAt = now
+        try context.save()
+        recordLocalWrite(reason: "marked rank change seen on dashboard tile")
+        try refreshWidgetSnapshot(context: context)
+    }
+
+    static func latestRankChangeResolution(for stat: StatDomain) -> WeeklyResolution? {
+        guard let pending = stat.pendingRankChange else { return nil }
+        let resolutions = (stat.weeklyResolutions ?? []).sorted { $0.weekStartDate > $1.weekStartDate }
+        switch pending.direction {
+        case .up:
+            return resolutions.first(where: { $0.didLevelUp }) ?? resolutions.first
+        case .down:
+            return resolutions.first(where: { $0.didRegress }) ?? resolutions.first
+        }
     }
 
     static func completedProgressionWeeks(for stat: StatDomain, now: Date = .now) -> [WeekRange] {
         guard let lastCompletedWeek = lastCompletedProgressionWeek(before: now) else { return [] }
-        let earliestLogDate = activeHabits(for: stat).flatMap(\.logs).map(\.date).min()
+        let earliestLogDate = activeHabits(for: stat).flatMap { $0.logs ?? [] }.map(\.date).min()
         let earliestRelevantDate = min(earliestLogDate ?? stat.createdAt, stat.createdAt)
         var week = progressionWeek(containing: earliestRelevantDate)
 
@@ -1128,6 +2043,7 @@ enum TrainingStore {
         settings.dashboardLayoutMode = mode
         settings.updatedAt = .now
         try context.save()
+        recordLocalWrite(reason: "updated dashboard layout mode")
         refreshHomeScreenQuickActions()
     }
 
@@ -1146,6 +2062,7 @@ enum TrainingStore {
         }
 
         try context.save()
+        recordLocalWrite(reason: "updated skill order")
         try refreshWidgetSnapshot(context: context)
         refreshHomeScreenQuickActions()
     }
@@ -1289,24 +2206,8 @@ enum TrainingStore {
 
     static func selfSummary(from stats: [StatDomain]) -> String {
         let summary = stats.reduce(into: [String]()) { items, stat in
-            switch stat.statKey {
-            case .strength:
-                items.append("Strength: \(stat.rankTitle)")
-            case .intellect:
-                items.append("Intellect: \(stat.rankTitle)")
-            case .creativity:
-                items.append("Creativity: \(stat.rankTitle)")
-            case .emotional:
-                items.append("Emotional: \(stat.rankTitle)")
-            case .focus:
-                items.append("Focus: \(stat.rankTitle)")
-            case .curiosity:
-                items.append("Curiosity: \(stat.rankTitle)")
-            case .cardio:
-                items.append("Cardio: \(stat.rankTitle)")
-            case .none:
-                break
-            }
+            guard let key = stat.statKey else { return }
+            items.append("\(key.displayName): \(stat.rankTitle)")
         }
         return summary.joined(separator: ". ") + "."
     }
@@ -1406,6 +2307,7 @@ enum TrainingStore {
         let logs = try fetchLogs(context: context)
         let resolutions = try fetchResolutions(context: context)
         let settings = try fetchSettings(context: context)
+        let goals = try fetchGoals(context: context)
 
         return TrainingExportBundle(
             exportedAt: .now,
@@ -1422,6 +2324,9 @@ enum TrainingStore {
                     currentTierName: $0.currentTierName,
                     startingBaseline: $0.startingBaseline,
                     currentBaseline: $0.currentBaseline,
+                    targetValue: $0.targetValue,
+                    personalMaxValue: $0.personalMaxValue,
+                    maintenanceFloor: $0.maintenanceFloor,
                     storedCharges: $0.storedCharges,
                     bankedProgressUnits: $0.bankedProgressUnits,
                     lastResolvedWeekStart: $0.lastResolvedWeekStart,
@@ -1431,6 +2336,7 @@ enum TrainingStore {
                     pendingRankChangeToLevel: $0.pendingRankChangeToLevel,
                     pendingRankChangeRecordedAt: $0.pendingRankChangeRecordedAt,
                     pendingRankChangeReasonRaw: $0.pendingRankChangeReasonRaw,
+                    pendingRankChangeViewedAt: $0.pendingRankChangeViewedAt,
                     createdAt: $0.createdAt,
                     updatedAt: $0.updatedAt,
                     isArchived: $0.isArchived
@@ -1506,8 +2412,31 @@ enum TrainingStore {
                 healthAutoImportEnabled: settings.healthAutoImportEnabled,
                 lastHealthSyncAt: settings.lastHealthSyncAt,
                 themePreferenceRaw: settings.themePreferenceRaw,
-                dashboardLayoutModeRaw: settings.dashboardLayoutModeRaw
-            )
+                dashboardLayoutModeRaw: settings.dashboardLayoutModeRaw,
+                disabledHealthWorkoutTypeKeysRaw: settings.disabledHealthWorkoutTypeKeysRaw
+            ),
+            goals: goals.map {
+                GoalExport(
+                    id: $0.id,
+                    title: $0.title,
+                    notes: $0.notes,
+                    goalScopeRaw: $0.goalScopeRaw,
+                    linkedStatKeyRaw: $0.linkedStatKeyRaw,
+                    linkedHabitIDRaw: $0.linkedHabitIDRaw,
+                    goalTypeRaw: $0.goalTypeRaw,
+                    measurementTypeRaw: $0.measurementTypeRaw,
+                    targetValue: $0.targetValue,
+                    startDate: $0.startDate,
+                    endDate: $0.endDate,
+                    statusRaw: $0.statusRaw,
+                    priorityRaw: $0.priorityRaw,
+                    affectsMetrics: $0.affectsMetrics,
+                    affectsProgression: $0.affectsProgression,
+                    createdAt: $0.createdAt,
+                    updatedAt: $0.updatedAt,
+                    completedAt: $0.completedAt
+                )
+            }
         )
     }
 
@@ -1528,6 +2457,9 @@ enum TrainingStore {
                 currentTierName: exported.currentTierName,
                 startingBaseline: exported.startingBaseline,
                 currentBaseline: exported.currentBaseline,
+                targetValue: exported.targetValue,
+                personalMaxValue: exported.personalMaxValue,
+                maintenanceFloor: exported.maintenanceFloor,
                 storedCharges: exported.storedCharges,
                 bankedProgressUnits: exported.bankedProgressUnits,
                 lastResolvedWeekStart: exported.lastResolvedWeekStart,
@@ -1537,6 +2469,7 @@ enum TrainingStore {
                 pendingRankChangeToLevel: exported.pendingRankChangeToLevel,
                 pendingRankChangeRecordedAt: exported.pendingRankChangeRecordedAt,
                 pendingRankChangeReasonRaw: exported.pendingRankChangeReasonRaw,
+                pendingRankChangeViewedAt: exported.pendingRankChangeViewedAt,
                 createdAt: exported.createdAt,
                 updatedAt: exported.updatedAt,
                 isArchived: exported.isArchived
@@ -1623,12 +2556,39 @@ enum TrainingStore {
             lockInWeeklyReview: bundle.settings.lockInWeeklyReview,
             healthAutoImportEnabled: bundle.settings.healthAutoImportEnabled ?? true,
             lastHealthSyncAt: bundle.settings.lastHealthSyncAt,
-            themePreference: ThemePreference(rawValue: bundle.settings.themePreferenceRaw) ?? .dark,
-            dashboardLayoutMode: DashboardLayoutMode(rawValue: bundle.settings.dashboardLayoutModeRaw) ?? .compactGrid
+            dashboardLayoutMode: DashboardLayoutMode(rawValue: bundle.settings.dashboardLayoutModeRaw) ?? .compactGrid,
+            disabledHealthWorkoutTypeKeys: (bundle.settings.disabledHealthWorkoutTypeKeysRaw ?? "")
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map(String.init)
         )
         context.insert(settings)
 
+        for exported in bundle.goals ?? [] {
+            let goal = Goal(
+                id: exported.id,
+                title: exported.title,
+                notes: exported.notes,
+                scope: GoalScope(rawValue: exported.goalScopeRaw) ?? .skill,
+                linkedStatKey: exported.linkedStatKeyRaw.flatMap(StatKey.init(rawValue:)),
+                linkedHabitID: exported.linkedHabitIDRaw.flatMap(UUID.init(uuidString:)),
+                type: GoalType(rawValue: exported.goalTypeRaw) ?? .weeklyTarget,
+                measurementType: MeasurementType(rawValue: exported.measurementTypeRaw) ?? .count,
+                targetValue: exported.targetValue,
+                startDate: exported.startDate,
+                endDate: exported.endDate,
+                status: GoalStatus(rawValue: exported.statusRaw) ?? .active,
+                priority: GoalPriority(rawValue: exported.priorityRaw) ?? .normal,
+                affectsMetrics: exported.affectsMetrics,
+                affectsProgression: exported.affectsProgression,
+                createdAt: exported.createdAt,
+                updatedAt: exported.updatedAt,
+                completedAt: exported.completedAt
+            )
+            context.insert(goal)
+        }
+
         try context.save()
+        recordLocalWrite(reason: "imported JSON bundle")
         try synchronizeCatalog(context: context)
         try refreshAllProgress(context: context, reason: .appRefresh)
         try refreshWidgetSnapshot(context: context)
@@ -1704,6 +2664,7 @@ enum TrainingStore {
         }
 
         try context.save()
+        recordLocalWrite(reason: "seeded historical sample progress")
         try refreshAllProgress(context: context, reason: .appRefresh, now: now)
         try refreshWidgetSnapshot(context: context)
     }
@@ -1751,31 +2712,134 @@ enum HealthAuthorizationState: Sendable {
 struct HealthSyncSummary: Sendable {
     var importedCount: Int
     var duplicateCount: Int
+    var overlapCount: Int
     var ignoredCount: Int
     var syncedAt: Date
 
     var message: String {
+        var parts: [String] = []
+
         if importedCount > 0 {
-            return "Imported \(importedCount) workout\(importedCount == 1 ? "" : "s") from Apple Health."
+            parts.append("Imported \(importedCount) workout\(importedCount == 1 ? "" : "s") from Apple Health.")
         }
 
-        if duplicateCount > 0 && ignoredCount == 0 {
-            return "Apple Health is up to date. No new workouts were imported."
+        if duplicateCount > 0 {
+            parts.append("Skipped \(duplicateCount) duplicate workout\(duplicateCount == 1 ? "" : "s").")
         }
 
-        return "No new eligible Apple Health workouts were found."
+        if overlapCount > 0 {
+            parts.append("Flagged \(overlapCount) overlapping workout\(overlapCount == 1 ? "" : "s") on Review.")
+        }
+
+        if !parts.isEmpty {
+            return parts.joined(separator: " ")
+        }
+
+        return ignoredCount > 0 ? "No new eligible Apple Health workouts were found." : "Apple Health is up to date. No new workouts were imported."
     }
+}
+
+struct SupportedWorkoutType: Identifiable, Sendable {
+    enum Category: String, Sendable, CaseIterable {
+        case strength
+        case cardio
+        case sport
+        case mindBody
+
+        var title: String {
+            switch self {
+            case .strength: "Strength"
+            case .cardio: "Cardio"
+            case .sport: "Sports"
+            case .mindBody: "Mind & Body"
+            }
+        }
+    }
+
+    let activityType: HKWorkoutActivityType
+    let displayName: String
+    let category: Category
+    let statKey: StatKey
+    let sessionType: String
+
+    var id: UInt { activityType.rawValue }
+    var key: String { String(activityType.rawValue) }
+
+    static let all: [SupportedWorkoutType] = [
+        SupportedWorkoutType(activityType: .traditionalStrengthTraining, displayName: "Strength Training", category: .strength, statKey: .strength, sessionType: "Strength"),
+        SupportedWorkoutType(activityType: .functionalStrengthTraining, displayName: "Functional Strength", category: .strength, statKey: .strength, sessionType: "Strength"),
+        SupportedWorkoutType(activityType: .coreTraining, displayName: "Core Training", category: .strength, statKey: .strength, sessionType: "Strength"),
+
+        SupportedWorkoutType(activityType: .running, displayName: "Running", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .walking, displayName: "Walking", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .cycling, displayName: "Cycling", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .swimming, displayName: "Swimming", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .rowing, displayName: "Rowing", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .elliptical, displayName: "Elliptical", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .stairClimbing, displayName: "Stair Climbing", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .hiking, displayName: "Hiking", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .mixedCardio, displayName: "Mixed Cardio", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .highIntensityIntervalTraining, displayName: "HIIT", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .jumpRope, displayName: "Jump Rope", category: .cardio, statKey: .cardio, sessionType: "Cardio"),
+
+        SupportedWorkoutType(activityType: .tennis, displayName: "Tennis", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .badminton, displayName: "Badminton", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .basketball, displayName: "Basketball", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .soccer, displayName: "Soccer", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .volleyball, displayName: "Volleyball", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .tableTennis, displayName: "Table Tennis", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .racquetball, displayName: "Racquetball", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .squash, displayName: "Squash", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .pickleball, displayName: "Pickleball", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .boxing, displayName: "Boxing", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .kickboxing, displayName: "Kickboxing", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .martialArts, displayName: "Martial Arts", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .climbing, displayName: "Climbing", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .surfingSports, displayName: "Surfing", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .paddleSports, displayName: "Paddle Sports", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+        SupportedWorkoutType(activityType: .snowSports, displayName: "Snow Sports", category: .sport, statKey: .cardio, sessionType: "Cardio"),
+
+        SupportedWorkoutType(activityType: .yoga, displayName: "Yoga", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .pilates, displayName: "Pilates", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .mindAndBody, displayName: "Mind & Body", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .flexibility, displayName: "Flexibility", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .barre, displayName: "Barre", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .dance, displayName: "Dance", category: .mindBody, statKey: .focus, sessionType: "Focus")
+    ]
+
+    static func key(for activityType: HKWorkoutActivityType) -> String {
+        String(activityType.rawValue)
+    }
+
+    static func mapping(for activityType: HKWorkoutActivityType) -> WorkoutMapping? {
+        guard let entry = all.first(where: { $0.activityType == activityType }) else { return nil }
+        return WorkoutMapping(statKey: entry.statKey, sessionType: entry.sessionType)
+    }
+}
+
+struct WorkoutMapping: Sendable {
+    var statKey: StatKey
+    var sessionType: String
 }
 
 @MainActor
 enum HealthImportService {
-    private struct WorkoutMapping {
-        var statKey: StatKey
-        var sessionType: String
+
+    private struct HealthWorkoutCandidate {
+        var workout: HKWorkout
+        var mapping: WorkoutMapping
+        var habit: Habit
+        var value: Double
+    }
+
+    private enum SyncScope {
+        case anchored
+        case yearBackfill
     }
 
     private static let healthStore = HKHealthStore()
     private static let connectedDefaultsKey = "training.arc.health.connected"
+    private static let lastYearBackfillDefaultsKey = "training.arc.health.lastYearBackfillAt"
     private static var workoutObserverQuery: HKObserverQuery?
 
     private static var defaults: UserDefaults {
@@ -1863,7 +2927,8 @@ enum HealthImportService {
         }
 
         startWorkoutObserverIfEnabled()
-        _ = try? await performSync(context: context, settings: settings)
+        let scope: SyncScope = shouldRunYearBackfill() ? .yearBackfill : .anchored
+        _ = try? await performSync(context: context, settings: settings, scope: scope)
     }
 
     static func syncNow() async throws -> String {
@@ -1881,7 +2946,7 @@ enum HealthImportService {
             return "Connect Apple Health first."
         }
 
-        let summary = try await performSync(context: context, settings: settings)
+        let summary = try await performSync(context: context, settings: settings, scope: .yearBackfill)
         return summary.message
     }
 
@@ -1901,88 +2966,291 @@ enum HealthImportService {
         }
     }
 
-    private static func performSync(context: ModelContext, settings: AppSettings) async throws -> HealthSyncSummary {
-        let anchor = loadAnchor()
-        let initialWeekStart = TrainingStore.currentWeekInterval(settings: settings).start
-        let predicate = anchor == nil
-            ? HKQuery.predicateForSamples(withStart: initialWeekStart, end: nil, options: .strictStartDate)
+    private static func performSync(context: ModelContext, settings: AppSettings, scope: SyncScope) async throws -> HealthSyncSummary {
+        let anchor = scope == .anchored ? loadAnchor() : nil
+        let predicate: NSPredicate? = anchor == nil
+            ? HKQuery.predicateForSamples(withStart: yearBackfillStartDate(), end: nil, options: .strictStartDate)
             : nil
         let (workouts, newAnchor) = try await fetchWorkouts(anchor: anchor, predicate: predicate)
         let activeStats = try TrainingStore.fetchActiveStats(context: context)
-        let existingRecords = try TrainingStore.fetchImportedHealthWorkouts(context: context)
+        let existingRecords = try normalizeExistingHealthImports(context: context)
         var existingWorkoutIDs = Set(existingRecords.map(\.workoutUUID))
+        var processedRecords = existingRecords
+            .filter { $0.wasImported || $0.isDuplicate }
+            .sorted { $0.startDate < $1.startDate }
         var importedCount = 0
         var duplicateCount = 0
+        var overlapCount = 0
         var ignoredCount = 0
 
-        for workout in workouts.sorted(by: { $0.startDate < $1.startDate }) {
+        let disabledTypeKeys = settings.disabledHealthWorkoutTypeKeys
+        let candidates = workouts
+            .compactMap { candidate(for: $0, activeStats: activeStats, disabledTypeKeys: disabledTypeKeys) }
+            .sorted { $0.workout.startDate < $1.workout.startDate }
+
+        for candidate in candidates {
+            let workout = candidate.workout
             let workoutID = workout.uuid.uuidString
             if existingWorkoutIDs.contains(workoutID) {
+                continue
+            }
+
+            if let duplicateRecord = processedRecords.first(where: { isDuplicate(candidate, of: $0) }) {
+                let record = healthRecord(
+                    for: candidate,
+                    wasImported: false,
+                    isDuplicate: true,
+                    overlapsImportedWorkout: false,
+                    relatedWorkoutUUID: duplicateRecord.workoutUUID
+                )
+                context.insert(record)
+                try context.save()
+                TrainingStore.recordLocalWrite(reason: "recorded duplicate Health workout")
+                processedRecords.append(record)
+                existingWorkoutIDs.insert(workoutID)
                 duplicateCount += 1
                 continue
             }
 
-            guard
-                let mapping = mapping(for: workout),
-                let stat = activeStats.first(where: { $0.statKey == mapping.statKey }),
-                let habit = TrainingStore.primaryHabit(for: stat)
-            else {
+            guard candidate.value > 0 else {
                 ignoredCount += 1
                 continue
             }
 
-            let value = loggedValue(for: workout, habit: habit)
-            guard value > 0 else {
-                ignoredCount += 1
-                continue
-            }
-
+            let overlappingRecord = processedRecords.first(where: { overlaps(candidate, with: $0) && !isDuplicate(candidate, of: $0) })
             let sourceName = workout.sourceRevision.source.name
             let note = "Imported from Apple Health\(sourceName.isEmpty ? "" : " via \(sourceName)")"
             _ = try TrainingStore.log(
-                habit: habit,
-                value: value,
+                habit: candidate.habit,
+                value: candidate.value,
                 date: workout.endDate,
-                sessionType: mapping.sessionType,
+                sessionType: candidate.mapping.sessionType,
                 note: note,
                 source: .health,
                 context: context
             )
 
-            context.insert(
-                HealthImportedWorkout(
-                    workoutUUID: workoutID,
-                    statKeyRaw: mapping.statKey.rawValue,
-                    habitSystemKey: habit.systemKey,
-                    sourceBundleIdentifier: workout.sourceRevision.source.bundleIdentifier,
-                    activityTypeRaw: Int(workout.workoutActivityType.rawValue),
-                    startDate: workout.startDate,
-                    endDate: workout.endDate,
-                    durationMinutes: workout.duration / 60
-                )
+            let record = healthRecord(
+                for: candidate,
+                wasImported: true,
+                isDuplicate: false,
+                overlapsImportedWorkout: overlappingRecord != nil,
+                relatedWorkoutUUID: overlappingRecord?.workoutUUID
             )
+            context.insert(record)
             try context.save()
+            TrainingStore.recordLocalWrite(reason: "recorded imported Health workout")
 
+            processedRecords.append(record)
             existingWorkoutIDs.insert(workoutID)
             importedCount += 1
+            if overlappingRecord != nil {
+                overlapCount += 1
+            }
         }
 
         if let newAnchor {
             saveAnchor(newAnchor)
         }
 
+        if scope == .yearBackfill {
+            defaults.set(Date(), forKey: lastYearBackfillDefaultsKey)
+        }
+
         settings.lastHealthSyncAt = .now
         settings.updatedAt = .now
         try context.save()
+        TrainingStore.recordLocalWrite(reason: "updated Health sync timestamp")
         try TrainingStore.refreshWidgetSnapshot(context: context)
         TrainingStore.refreshHomeScreenQuickActions()
 
         return HealthSyncSummary(
             importedCount: importedCount,
             duplicateCount: duplicateCount,
+            overlapCount: overlapCount,
             ignoredCount: ignoredCount,
             syncedAt: settings.lastHealthSyncAt ?? .now
         )
+    }
+
+    private static func candidate(for workout: HKWorkout, activeStats: [StatDomain], disabledTypeKeys: Set<String>) -> HealthWorkoutCandidate? {
+        guard
+            let mapping = mapping(for: workout),
+            !disabledTypeKeys.contains(SupportedWorkoutType.key(for: workout.workoutActivityType)),
+            let stat = activeStats.first(where: { $0.statKey == mapping.statKey }),
+            let habit = TrainingStore.primaryHabit(for: stat)
+        else {
+            return nil
+        }
+
+        let value = loggedValue(for: workout, habit: habit)
+        return HealthWorkoutCandidate(workout: workout, mapping: mapping, habit: habit, value: value)
+    }
+
+    private static func healthRecord(
+        for candidate: HealthWorkoutCandidate,
+        wasImported: Bool,
+        isDuplicate: Bool,
+        overlapsImportedWorkout: Bool,
+        relatedWorkoutUUID: String?
+    ) -> HealthImportedWorkout {
+        let workout = candidate.workout
+        return HealthImportedWorkout(
+            workoutUUID: workout.uuid.uuidString,
+            statKeyRaw: candidate.mapping.statKey.rawValue,
+            habitSystemKey: candidate.habit.systemKey,
+            sourceName: workout.sourceRevision.source.name,
+            sourceBundleIdentifier: workout.sourceRevision.source.bundleIdentifier,
+            activityTypeRaw: Int(workout.workoutActivityType.rawValue),
+            startDate: workout.startDate,
+            endDate: workout.endDate,
+            durationMinutes: workout.duration / 60,
+            wasImported: wasImported,
+            isDuplicate: isDuplicate,
+            overlapsImportedWorkout: overlapsImportedWorkout,
+            relatedWorkoutUUID: relatedWorkoutUUID
+        )
+    }
+
+    private static func normalizeExistingHealthImports(context: ModelContext) throws -> [HealthImportedWorkout] {
+        var records = try TrainingStore.fetchImportedHealthWorkouts(context: context)
+            .sorted { $0.startDate < $1.startDate }
+        var importedRecords: [HealthImportedWorkout] = []
+
+        for record in records where record.wasImported && !record.isDuplicate {
+            if let duplicateRecord = importedRecords.first(where: { isDuplicate(record, of: $0) }) {
+                try deleteImportedHealthLog(for: record, context: context)
+                record.wasImported = false
+                record.isDuplicate = true
+                record.overlapsImportedWorkout = false
+                record.relatedWorkoutUUID = duplicateRecord.workoutUUID
+            } else {
+                importedRecords.append(record)
+            }
+        }
+
+        importedRecords = records
+            .filter { $0.wasImported && !$0.isDuplicate }
+            .sorted { $0.startDate < $1.startDate }
+
+        for record in importedRecords {
+            record.overlapsImportedWorkout = false
+            record.relatedWorkoutUUID = nil
+        }
+
+        for index in importedRecords.indices {
+            let record = importedRecords[index]
+            guard let overlappingRecord = importedRecords[..<index].first(where: { overlaps(record, with: $0) && !isDuplicate(record, of: $0) }) else {
+                continue
+            }
+
+            record.overlapsImportedWorkout = true
+            record.relatedWorkoutUUID = overlappingRecord.workoutUUID
+        }
+
+        try context.save()
+        TrainingStore.recordLocalWrite(reason: "normalized Health import records")
+        records = try TrainingStore.fetchImportedHealthWorkouts(context: context)
+        return records
+    }
+
+    private static func deleteImportedHealthLog(for record: HealthImportedWorkout, context: ModelContext) throws {
+        guard let habitSystemKey = record.habitSystemKey else { return }
+        let matchingLogs = try TrainingStore.fetchLogs(context: context)
+            .filter { log in
+                log.sourceType == .health &&
+                log.habit?.systemKey == habitSystemKey &&
+                abs(log.date.timeIntervalSince(record.endDate)) < 120
+            }
+            .sorted { abs($0.date.timeIntervalSince(record.endDate)) < abs($1.date.timeIntervalSince(record.endDate)) }
+
+        if let log = matchingLogs.first {
+            try TrainingStore.delete(log, context: context)
+        }
+    }
+
+    private static func shouldRunYearBackfill(now: Date = .now) -> Bool {
+        guard let lastBackfill = defaults.object(forKey: lastYearBackfillDefaultsKey) as? Date else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastBackfill) > 7 * 24 * 60 * 60
+    }
+
+    private static func yearBackfillStartDate(now: Date = .now) -> Date {
+        Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now.addingTimeInterval(-365 * 24 * 60 * 60)
+    }
+
+    private static func isDuplicate(_ candidate: HealthWorkoutCandidate, of record: HealthImportedWorkout) -> Bool {
+        guard candidate.mapping.statKey.rawValue == record.statKeyRaw else { return false }
+        return isDuplicate(
+            startDate: candidate.workout.startDate,
+            endDate: candidate.workout.endDate,
+            durationMinutes: candidate.workout.duration / 60,
+            of: record
+        )
+    }
+
+    private static func isDuplicate(_ record: HealthImportedWorkout, of otherRecord: HealthImportedWorkout) -> Bool {
+        guard record.statKeyRaw == otherRecord.statKeyRaw, record.workoutUUID != otherRecord.workoutUUID else { return false }
+        return isDuplicate(
+            startDate: record.startDate,
+            endDate: record.endDate,
+            durationMinutes: record.durationMinutes,
+            of: otherRecord
+        )
+    }
+
+    private static func isDuplicate(
+        startDate: Date,
+        endDate: Date,
+        durationMinutes: Double,
+        of record: HealthImportedWorkout
+    ) -> Bool {
+        let startDelta = abs(startDate.timeIntervalSince(record.startDate))
+        let endDelta = abs(endDate.timeIntervalSince(record.endDate))
+        let durationDelta = abs(durationMinutes - record.durationMinutes)
+        if startDelta <= 10 * 60, endDelta <= 10 * 60, durationDelta <= 10 {
+            return true
+        }
+
+        let overlapRatio = overlapRatio(
+            firstStart: startDate,
+            firstEnd: endDate,
+            secondStart: record.startDate,
+            secondEnd: record.endDate
+        )
+        return overlapRatio >= 0.85 && durationDelta <= 15
+    }
+
+    private static func overlaps(_ candidate: HealthWorkoutCandidate, with record: HealthImportedWorkout) -> Bool {
+        overlapDuration(
+            firstStart: candidate.workout.startDate,
+            firstEnd: candidate.workout.endDate,
+            secondStart: record.startDate,
+            secondEnd: record.endDate
+        ) > 0
+    }
+
+    private static func overlaps(_ record: HealthImportedWorkout, with otherRecord: HealthImportedWorkout) -> Bool {
+        guard record.workoutUUID != otherRecord.workoutUUID else { return false }
+        return overlapDuration(
+            firstStart: record.startDate,
+            firstEnd: record.endDate,
+            secondStart: otherRecord.startDate,
+            secondEnd: otherRecord.endDate
+        ) > 0
+    }
+
+    private static func overlapRatio(firstStart: Date, firstEnd: Date, secondStart: Date, secondEnd: Date) -> Double {
+        let overlap = overlapDuration(firstStart: firstStart, firstEnd: firstEnd, secondStart: secondStart, secondEnd: secondEnd)
+        let shorterDuration = min(firstEnd.timeIntervalSince(firstStart), secondEnd.timeIntervalSince(secondStart))
+        guard shorterDuration > 0 else { return 0 }
+        return overlap / shorterDuration
+    }
+
+    private static func overlapDuration(firstStart: Date, firstEnd: Date, secondStart: Date, secondEnd: Date) -> TimeInterval {
+        max(0, min(firstEnd, secondEnd).timeIntervalSince(max(firstStart, secondStart)))
     }
 
     private static func fetchWorkouts(
@@ -2010,14 +3278,7 @@ enum HealthImportService {
     }
 
     private static func mapping(for workout: HKWorkout) -> WorkoutMapping? {
-        switch workout.workoutActivityType {
-        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
-            return WorkoutMapping(statKey: .strength, sessionType: "Strength")
-        case .running, .walking, .cycling, .swimming, .rowing, .elliptical, .stairClimbing, .hiking, .mixedCardio, .highIntensityIntervalTraining, .jumpRope:
-            return WorkoutMapping(statKey: .cardio, sessionType: "Cardio")
-        default:
-            return nil
-        }
+        SupportedWorkoutType.mapping(for: workout.workoutActivityType)
     }
 
     private static func loggedValue(for workout: HKWorkout, habit: Habit) -> Double {

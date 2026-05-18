@@ -18,7 +18,7 @@ struct HabitDetailView: View {
     }
 
     private var recentLogs: [HabitLog] {
-        habit.logs.sorted { $0.date > $1.date }
+        (habit.logs ?? []).sorted { $0.date > $1.date }
     }
 
     private var streakCadence: StreakCadence {

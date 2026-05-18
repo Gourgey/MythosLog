@@ -90,7 +90,9 @@ enum TrainingArcConfig {
     static let focusRankThresholds = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150]
     static let intellectRankThresholds = [0, 10, 20, 30, 45, 60, 80, 100, 130, 170]
     static let cardioRankThresholds = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240]
+    static let readingRankThresholds = [0, 30, 60, 90, 120, 180, 240, 300, 360, 480]
     private static let strengthSourceLockedLevels: Set<Int> = Set(2...10)
+    private static let creativitySourceLockedLevels: Set<Int> = Set(2...10)
 
     static let habitDefinitions: [HabitProgressionDefinition] = [
         HabitProgressionDefinition(
@@ -126,16 +128,16 @@ enum TrainingArcConfig {
                 levelThresholds: defaultRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Idle Maker", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Casual Doodler", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Rookie Creator", image: nil, description: nil),
+                RankLevelDefinition(level: 1, title: "Untrained", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Beginner", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Practicing", image: nil, description: nil),
                 RankLevelDefinition(level: 4, title: "Active Maker", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Skilled Creator", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Vision Builder", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Signature Artist", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Master Creator", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Cultural Maker", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "World-Shaping Visionary", image: nil, description: nil)
+                RankLevelDefinition(level: 5, title: "Skilled Maker", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Strong Voice", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Distinctive Creator", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Mature Artist", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Master Creator", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Defining Artist", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -171,16 +173,16 @@ enum TrainingArcConfig {
                 levelThresholds: defaultRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Closed Observer", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Casual Browser", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Rookie Researcher", image: nil, description: nil),
+                RankLevelDefinition(level: 1, title: "Closed Off", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Browsing", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Exploring", image: nil, description: nil),
                 RankLevelDefinition(level: 4, title: "Active Learner", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Wide Explorer", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Insight Hunter", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Field Scholar", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Relentless Seeker", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Boundary Breaker", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "World-Class Explorer", image: nil, description: nil)
+                RankLevelDefinition(level: 5, title: "Wide Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Pattern Hunter", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Deep Investigator", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Polymath", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Boundary Pusher", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master Explorer", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -216,15 +218,15 @@ enum TrainingArcConfig {
                 levelThresholds: defaultRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Untended Self", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Guarded Civilian", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Honest Beginner", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Grounded Human", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Steady Heart", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Centered Presence", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Resilient Guide", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Emotional Anchor", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Pillar of Calm", image: nil, description: nil),
+                RankLevelDefinition(level: 1, title: "Untended", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Guarded", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Reflecting", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Grounded", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Steady", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Self-Aware", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Resilient", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Anchored", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Deeply Grounded", image: nil, description: nil),
                 RankLevelDefinition(level: 10, title: "Master of Self", image: nil, description: nil)
             ]
         ),
@@ -261,16 +263,16 @@ enum TrainingArcConfig {
                 levelThresholds: focusRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Scattered Starter", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Distracted Worker", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Attention Trainee", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Steady Operator", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Deep Worker", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Calm Executor", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Precision Specialist", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Flow State Adept", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Iron Discipline", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Absolute Concentration", image: nil, description: nil)
+                RankLevelDefinition(level: 1, title: "Scattered", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Distracted", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Practicing Focus", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Steady", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Focused", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Deep Worker", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Disciplined", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Flow Capable", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Iron Concentration", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master of Focus", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -306,16 +308,16 @@ enum TrainingArcConfig {
                 levelThresholds: intellectRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Dormant Student", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Casual Learner", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Rookie Scholar", image: nil, description: nil),
+                RankLevelDefinition(level: 1, title: "Untrained Mind", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Beginning Learner", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Student", image: nil, description: nil),
                 RankLevelDefinition(level: 4, title: "Thoughtful Reader", image: nil, description: nil),
                 RankLevelDefinition(level: 5, title: "Sharp Thinker", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Skilled Analyst", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Learned Strategist", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Master Scholar", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Towering Mind", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Apex Intellectual", image: nil, description: nil)
+                RankLevelDefinition(level: 6, title: "Analytical", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Well-Read", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Scholar", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Deep Thinker", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master Intellect", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -351,16 +353,16 @@ enum TrainingArcConfig {
                 levelThresholds: defaultRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Frail Elder", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Soft Civilian", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Rookie Trainee", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Strong Human", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Peak Human", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Iron Colossus", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Monster Hero", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Polished Titan", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Symbol of Strength", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Ascended Martial Titan", image: nil, description: nil)
+                RankLevelDefinition(level: 1, title: "Untrained", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Beginning Lifter", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Novice", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Steady Trainee", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Strong", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Powerful", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Hardened", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Highly Trained", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Elite Strength", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master of Strength", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -396,16 +398,106 @@ enum TrainingArcConfig {
                 levelThresholds: cardioRankThresholds
             ),
             ranks: [
-                RankLevelDefinition(level: 1, title: "Winded Walker", image: nil, description: nil),
+                RankLevelDefinition(level: 1, title: "Sedentary", image: nil, description: nil),
                 RankLevelDefinition(level: 2, title: "Casual Mover", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Rookie Runner", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Conditioned Human", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Enduring Athlete", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Distance Machine", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Iron-Lung Competitor", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Elite Endurance", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Symbol of Endurance", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Ascended Endurance", image: nil, description: nil)
+                RankLevelDefinition(level: 3, title: "Building Pace", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Conditioned", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Enduring", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Strong Engine", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Distance Capable", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "High Endurance", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Elite Endurance", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master of Endurance", image: nil, description: nil)
+            ]
+        ),
+        HabitProgressionDefinition(
+            key: .cooking,
+            displayName: "Cooking",
+            iconName: "fork.knife",
+            colorToken: "cooking",
+            overview: "Home cooking, kitchen skill, and the discipline of feeding yourself well.",
+            defaultBaseline: 3,
+            starterHabit: HabitTemplate(
+                id: "cooking",
+                systemKey: "habit.cooking",
+                name: "Cooked Meals",
+                statKey: .cooking,
+                measurementType: .count,
+                scheduleType: .weekly,
+                unitLabel: "meals",
+                targetPerPeriod: 3,
+                notes: "Meals prepared from scratch at home."
+            ),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many meals do you cook from scratch each week?",
+                valueLabelSingular: "meal per week",
+                valueLabelPlural: "meals per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 30,
+                quickAdjustments: [1, 2, 3],
+                manualEntryLabel: "Custom number"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: defaultRankThresholds
+            ),
+            ranks: [
+                RankLevelDefinition(level: 1, title: "Untrained Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Beginning Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Recipe Follower", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Home Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Capable Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Confident Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Skilled Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Strong Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Expert Cook", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Master Cook", image: nil, description: nil)
+            ]
+        ),
+        HabitProgressionDefinition(
+            key: .reading,
+            displayName: "Reading",
+            iconName: "book.fill",
+            colorToken: "reading",
+            overview: "Pleasure reading, narrative immersion, and time spent with longer-form work.",
+            defaultBaseline: 90,
+            starterHabit: HabitTemplate(
+                id: "reading.session",
+                systemKey: "habit.reading.session",
+                name: "Reading Minutes",
+                statKey: .reading,
+                measurementType: .minutes,
+                scheduleType: .weekly,
+                unitLabel: "min",
+                targetPerPeriod: 90,
+                notes: "Fiction, narrative non-fiction, or any long-form reading."
+            ),
+            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
+            onboarding: BaselineOnboardingConfiguration(
+                question: "How many minutes a week do you read for pleasure?",
+                valueLabelSingular: "minute per week",
+                valueLabelPlural: "minutes per week",
+                minimumValue: minimumBaseline,
+                maximumValue: 1_000,
+                quickAdjustments: [10, 30, 60],
+                manualEntryLabel: "Custom minutes"
+            ),
+            progression: RankProgressionConfiguration(
+                rollingWindowWeeks: defaultRollingWindowWeeks,
+                levelThresholds: readingRankThresholds
+            ),
+            ranks: [
+                RankLevelDefinition(level: 1, title: "Non-Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 2, title: "Occasional Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 3, title: "Light Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 4, title: "Steady Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 5, title: "Regular Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 6, title: "Deep Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 7, title: "Voracious Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 8, title: "Scholar of Books", image: nil, description: nil),
+                RankLevelDefinition(level: 9, title: "Master Reader", image: nil, description: nil),
+                RankLevelDefinition(level: 10, title: "Lifelong Reader", image: nil, description: nil)
             ]
         )
     ]
@@ -564,7 +656,19 @@ enum TrainingArcConfig {
             }
 
             return unlockedName
-        case .intellect, .creativity, .emotional, .focus, .curiosity, .cardio:
+        case .creativity:
+            let unlockedName = "Creativity_Level_\(level)"
+
+            if isLocked {
+                guard level != minimumRankLevel else { return nil }
+                if creativitySourceLockedLevels.contains(level) {
+                    return "Creativity_Level_\(level)_Locked"
+                }
+                return unlockedName
+            }
+
+            return unlockedName
+        case .intellect, .emotional, .focus, .curiosity, .cardio, .cooking, .reading:
             return nil
         }
     }
@@ -590,6 +694,39 @@ enum TrainingArcConfig {
         }
 
         return minimumRankLevel
+    }
+
+    static func suggestedTargetValue(for statKey: StatKey, baseline: Int) -> Int {
+        let onboarding = onboardingConfiguration(for: statKey)
+        let stepUp = max(positiveChargeStep(for: statKey, level: rankLevel(for: statKey, weeklyValue: Double(baseline))) ?? 1, 1)
+        let suggested = baseline + stepUp
+        return min(max(suggested, onboarding.minimumValue), onboarding.maximumValue)
+    }
+
+    static func suggestedPersonalMaxValue(for statKey: StatKey, baseline: Int, target: Int? = nil) -> Int {
+        let onboarding = onboardingConfiguration(for: statKey)
+        let basis = max(target ?? baseline, baseline)
+        let suggested = max(basis * 2, basis + 2)
+        return min(max(suggested, basis), onboarding.maximumValue)
+    }
+
+    static func clampCalibration(baseline: Int, target: Int?, personalMax: Int?, maintenance: Int?) -> (target: Int?, max: Int?, maintenance: Int?) {
+        var resolvedTarget = target
+        if let t = resolvedTarget, t < baseline {
+            resolvedTarget = baseline
+        }
+        var resolvedMax = personalMax
+        if let m = resolvedMax {
+            let floor = resolvedTarget ?? baseline
+            if m < floor {
+                resolvedMax = floor
+            }
+        }
+        var resolvedMaintenance = maintenance
+        if let f = resolvedMaintenance {
+            resolvedMaintenance = max(0, min(f, baseline))
+        }
+        return (resolvedTarget, resolvedMax, resolvedMaintenance)
     }
 
     static func baselineValueLabel(for statKey: StatKey, value: Int) -> String {
@@ -656,6 +793,8 @@ enum TrainingArcConfig {
         case "focus": Color(red: 0.34, green: 0.72, blue: 0.61)
         case "curiosity": Color(red: 0.63, green: 0.56, blue: 0.88)
         case "cardio": Color(red: 0.30, green: 0.72, blue: 0.88)
+        case "cooking": Color(red: 0.92, green: 0.50, blue: 0.30)
+        case "reading": Color(red: 0.45, green: 0.50, blue: 0.74)
         default: TrainingTheme.textSecondary
         }
     }

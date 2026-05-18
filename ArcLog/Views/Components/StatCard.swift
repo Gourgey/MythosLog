@@ -31,6 +31,7 @@ enum DashboardChargeDots {
 
 struct SignedChargeMeter: View {
     let charge: Int
+    var pendingProgress: Double = 0
     var socketSize: CGFloat = 14
     var spacing: CGFloat = 8
 
@@ -42,11 +43,21 @@ struct SignedChargeMeter: View {
         DashboardChargeDots.negativeDots(from: charge)
     }
 
+    private var clampedPending: Double {
+        min(max(pendingProgress, 0), 1)
+    }
+
+    private var pendingPositiveIndex: Int? {
+        guard charge >= 0, positiveDots < DashboardChargeDots.slotsPerSide, clampedPending > 0.001 else { return nil }
+        return positiveDots
+    }
+
     var body: some View {
         HStack(spacing: spacing) {
             ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
                 chargeSocket(
                     filled: negativeDots > (DashboardChargeDots.slotsPerSide - index - 1),
+                    pendingFraction: 0,
                     tint: TrainingTheme.warning
                 )
             }
@@ -59,6 +70,7 @@ struct SignedChargeMeter: View {
             ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
                 chargeSocket(
                     filled: positiveDots > index,
+                    pendingFraction: pendingPositiveIndex == index ? clampedPending : 0,
                     tint: TrainingTheme.positiveStrong
                 )
             }
@@ -67,17 +79,27 @@ struct SignedChargeMeter: View {
         .accessibilityLabel(DashboardChargeDots.summaryLabel(for: charge))
     }
 
-    private func chargeSocket(filled: Bool, tint: Color) -> some View {
-        ZStack {
+    private func chargeSocket(filled: Bool, pendingFraction: Double, tint: Color) -> some View {
+        let isPending = !filled && pendingFraction > 0
+        return ZStack {
             Circle()
                 .fill(filled ? tint.opacity(0.18) : TrainingTheme.socketInner)
                 .overlay(
                     Circle()
                         .stroke(
-                            filled ? tint.opacity(0.34) : TrainingTheme.socketOuter.opacity(0.72),
-                            lineWidth: filled ? 1.1 : 1
+                            filled ? tint.opacity(0.34) : (isPending ? tint.opacity(0.55) : TrainingTheme.socketOuter.opacity(0.72)),
+                            lineWidth: filled ? 1.1 : (isPending ? 1.3 : 1)
                         )
                 )
+
+            if isPending {
+                Circle()
+                    .fill(tint.opacity(0.75))
+                    .frame(width: socketSize * 0.42, height: socketSize * 0.42)
+                    .scaleEffect(pendingFraction)
+                    .shadow(color: tint.opacity(0.28), radius: 3, x: 0, y: 0)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.78), value: pendingFraction)
+            }
 
             Circle()
                 .fill(filled ? tint : .clear)
@@ -163,9 +185,13 @@ struct StatCard: View {
         return "minus"
     }
 
+    private var indicatorActive: Bool {
+        snapshot.rankChangeIndicatorVisible
+    }
+
     private var stateAccent: Color {
-        if let pending = snapshot.pendingRankChange {
-            return pending.direction == .up ? .orange : TrainingTheme.cold
+        if indicatorActive, let pending = snapshot.pendingRankChange {
+            return pending.direction == .up ? TrainingTheme.positiveStrong : TrainingTheme.danger
         }
 
         switch snapshot.focusState {
@@ -176,14 +202,14 @@ struct StatCard: View {
         case .behindTarget:
             return TrainingTheme.warning
         case .pendingRankChange:
-            return .orange
+            return accent
         case .neutral:
             return accent
         }
     }
 
     private var stateLabel: String? {
-        if let pending = snapshot.pendingRankChange {
+        if indicatorActive, let pending = snapshot.pendingRankChange {
             return pending.direction == .up ? "Rank Ready" : "Rank Drop"
         }
 
@@ -195,7 +221,7 @@ struct StatCard: View {
         case .behindTarget:
             return "Fading"
         case .pendingRankChange:
-            return "Rank Shift"
+            return nil
         case .neutral:
             return isFocusTarget ? "Focus Target" : nil
         }
@@ -237,13 +263,13 @@ struct StatCard: View {
                         .strokeBorder(TrainingTheme.borderStrong.opacity(0.28), lineWidth: 1.15)
                 )
                 .overlay {
-                    if isFocusTarget || snapshot.pendingRankChange != nil {
+                    if isFocusTarget || indicatorActive {
                         RoundedRectangle(cornerRadius: 32, style: .continuous)
-                            .strokeBorder(stateAccent.opacity(snapshot.pendingRankChange == nil ? 0.18 : 0.30), lineWidth: snapshot.pendingRankChange == nil ? 1 : 1.2)
+                            .strokeBorder(stateAccent.opacity(indicatorActive ? 0.36 : 0.18), lineWidth: indicatorActive ? 1.4 : 1)
                             .padding(3)
                     }
                 }
-                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+                .shadow(color: indicatorActive ? stateAccent.opacity(0.32) : Color.black.opacity(0.06), radius: indicatorActive ? 12 : 8, x: 0, y: 4)
 
             VStack(alignment: .leading, spacing: 14) {
                 Button(action: onOpenDetail) {
@@ -274,6 +300,26 @@ struct StatCard: View {
                     )
                     .allowsHitTesting(false)
                     .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if indicatorActive, let direction = snapshot.pendingRankChange?.direction {
+                Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(
+                        Circle()
+                            .fill(stateAccent)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(.white.opacity(0.85), lineWidth: 1.6)
+                    )
+                    .shadow(color: stateAccent.opacity(0.5), radius: 8, x: 0, y: 0)
+                    .padding(10)
+                    .accessibilityLabel(direction == .up ? "Rank up available" : "Rank drop pending")
+                    .allowsHitTesting(false)
             }
         }
         .scaleEffect(showLogFeedback ? 1.015 : (isFocusTarget ? 1.005 : 1))
@@ -454,7 +500,7 @@ struct StatCard: View {
     }
 
     private var chargeMeter: some View {
-        SignedChargeMeter(charge: snapshot.charge.current, socketSize: 16, spacing: 7)
+        SignedChargeMeter(charge: snapshot.charge.current, pendingProgress: snapshot.weeklyTargetProgress, socketSize: 16, spacing: 7)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(
@@ -498,8 +544,8 @@ struct DashboardGridTile: View {
     }
 
     private var stateAccent: Color {
-        if let pending = snapshot.pendingRankChange {
-            return pending.direction == .up ? .orange : TrainingTheme.cold
+        if snapshot.rankChangeIndicatorVisible, let pending = snapshot.pendingRankChange {
+            return pending.direction == .up ? TrainingTheme.positiveStrong : TrainingTheme.danger
         }
         return accent
     }
@@ -581,7 +627,7 @@ struct DashboardGridTile: View {
                 .minimumScaleFactor(0.78)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            SignedChargeMeter(charge: snapshot.charge.current, socketSize: 11, spacing: 6)
+            SignedChargeMeter(charge: snapshot.charge.current, pendingProgress: snapshot.weeklyTargetProgress, socketSize: 11, spacing: 6)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
@@ -615,13 +661,32 @@ struct DashboardGridTile: View {
                 .strokeBorder(TrainingTheme.borderStrong.opacity(0.24), lineWidth: 1.1)
         )
         .overlay {
-            if snapshot.pendingRankChange != nil {
+            if snapshot.rankChangeIndicatorVisible {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .strokeBorder(stateAccent.opacity(0.24), lineWidth: 1.1)
+                    .strokeBorder(stateAccent.opacity(0.42), lineWidth: 1.4)
                     .padding(3)
             }
         }
-        .shadow(color: accent.opacity(0.08), radius: 10, x: 0, y: 5)
+        .overlay(alignment: .topTrailing) {
+            if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
+                Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(
+                        Circle()
+                            .fill(stateAccent)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(.white.opacity(0.85), lineWidth: 1.4)
+                    )
+                    .shadow(color: stateAccent.opacity(0.45), radius: 6, x: 0, y: 0)
+                    .padding(8)
+                    .accessibilityLabel(direction == .up ? "Rank up available" : "Rank drop pending")
+            }
+        }
+        .shadow(color: snapshot.rankChangeIndicatorVisible ? stateAccent.opacity(0.28) : accent.opacity(0.08), radius: snapshot.rankChangeIndicatorVisible ? 14 : 10, x: 0, y: 5)
         .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .onTapGesture {
             guard !isReordering else { return }

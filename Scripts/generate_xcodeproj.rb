@@ -8,7 +8,7 @@ ROOT = File.expand_path("..", __dir__)
 PROJECT_PATH = File.join(ROOT, "ArcLog.xcodeproj")
 APP_NAME = "ArcLog"
 WIDGET_NAME = "ArcLogWidgets"
-TEAM_ID = "2QAALFV4AA"
+TEAM_ID = "5865Y52YG7"
 IOS_DEPLOYMENT_TARGET = "17.0"
 
 def ensure_group(parent, path)
@@ -48,6 +48,15 @@ def configure_project(project)
 end
 
 def configure_app_target(target)
+  target.project.root_object.attributes["TargetAttributes"] ||= {}
+  target.project.root_object.attributes["TargetAttributes"][target.uuid] ||= {}
+  target.project.root_object.attributes["TargetAttributes"][target.uuid]["SystemCapabilities"] = {
+    "com.apple.BackgroundModes" => { "enabled" => 1 },
+    "com.apple.HealthKit" => { "enabled" => 1 },
+    "com.apple.Push" => { "enabled" => 1 },
+    "com.apple.iCloud" => { "enabled" => 1 }
+  }
+
   target.build_configurations.each do |config|
     settings = config.build_settings
     settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.ArcLog"
