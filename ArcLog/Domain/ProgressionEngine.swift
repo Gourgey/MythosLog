@@ -22,6 +22,8 @@ struct WeeklyProgressionResult: Sendable {
     var didLevelDown: Bool
     var didDecayTowardZero: Bool
     var visibleChargesAfter: Int
+    var goalBonusApplied: Bool = false
+    var goalTargetMet: Bool = false
 }
 
 enum ProgressionEngine {
@@ -37,7 +39,9 @@ enum ProgressionEngine {
     static func evaluateWeek(
         statKey: StatKey,
         state: WeeklyProgressionState,
-        actualTotal: Double
+        actualTotal: Double,
+        activeGoalTarget: Int? = nil,
+        isRecoveryGoal: Bool = false
     ) -> WeeklyProgressionResult {
         let levelBefore = TrainingArcConfig.clampedRankLevel(state.level)
         let expectedTargetBefore = max(state.expectedWeeklyTarget, TrainingArcConfig.minimumBaseline)
@@ -46,12 +50,23 @@ enum ProgressionEngine {
         let bankedUnitsBefore = state.bankedProgressUnits
         let chargeBeforeDecay = TrainingArcConfig.displayedCharge(for: statKey, bankedUnits: bankedUnitsBefore, level: levelBefore)
         let chargeAfterDecay = decayCharge(chargeBeforeDecay)
-        let weeklyChargeDelta = chargeDelta(
+        let baselineChargeDelta = chargeDelta(
             statKey: statKey,
             level: levelBefore,
             expectedTarget: expectedTargetBefore,
             actualTotal: actualTotal
         )
+
+        let goalTargetMet: Bool = {
+            guard let goalTarget = activeGoalTarget, goalTarget > 0 else { return false }
+            return actualTotal >= Double(goalTarget)
+        }()
+        let goalBonus: Int = {
+            guard goalTargetMet else { return 0 }
+            if isRecoveryGoal { return 1 }
+            return baselineChargeDelta >= 0 ? 1 : 0
+        }()
+        let weeklyChargeDelta = baselineChargeDelta + goalBonus
         var resolvedCharge = DashboardChargeDots.clampedCharge(chargeAfterDecay + weeklyChargeDelta)
         var levelAfter = levelBefore
         var expectedTargetAfter = expectedTargetBefore
@@ -99,7 +114,9 @@ enum ProgressionEngine {
                 for: statKey,
                 bankedUnits: bankedUnitsAfter,
                 level: levelAfter
-            )
+            ),
+            goalBonusApplied: goalBonus > 0,
+            goalTargetMet: goalTargetMet
         )
     }
 

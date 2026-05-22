@@ -9,12 +9,13 @@ enum NotificationService {
         _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
     }
 
-    static func refreshNotifications(using settings: AppSettings) {
+    static func refreshNotifications(using settings: AppSettings, goalsAtRiskCount: Int = 0) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [
             "training.daily",
             "training.evening",
-            "training.weekly"
+            "training.weekly",
+            "training.goalAtRisk"
         ])
 
         if settings.dailyReminderEnabled {
@@ -59,11 +60,28 @@ enum NotificationService {
             let request = UNNotificationRequest(identifier: "training.weekly", content: content, trigger: trigger)
             center.add(request)
         }
+
+        if settings.goalAtRiskReminderEnabled, goalsAtRiskCount > 0 {
+            let content = UNMutableNotificationContent()
+            content.title = goalsAtRiskCount == 1 ? "1 goal at risk" : "\(goalsAtRiskCount) goals at risk"
+            content.body = "Catch up before the week ends to keep your goals on pace."
+            content.sound = .default
+            content.badge = NSNumber(value: goalsAtRiskCount)
+
+            var components = DateComponents()
+            // Fire Thursday mid-day as a mid-week nudge.
+            components.weekday = settings.weekStartsOnMonday ? 5 : 4
+            components.hour = 12
+            components.minute = 30
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let request = UNNotificationRequest(identifier: "training.goalAtRisk", content: content, trigger: trigger)
+            center.add(request)
+        }
     }
 }
 #else
 enum NotificationService {
     static func requestAuthorization() async {}
-    static func refreshNotifications(using settings: AppSettings) {}
+    static func refreshNotifications(using settings: AppSettings, goalsAtRiskCount: Int = 0) {}
 }
 #endif

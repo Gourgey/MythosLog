@@ -449,6 +449,7 @@ enum TrainingStore {
         priority: GoalPriority = .normal,
         affectsMetrics: Bool = false,
         affectsProgression: Bool = false,
+        isRecoveryMode: Bool = false,
         context: ModelContext
     ) throws -> Goal {
         let goal = Goal(
@@ -465,7 +466,8 @@ enum TrainingStore {
             status: .active,
             priority: priority,
             affectsMetrics: affectsMetrics,
-            affectsProgression: affectsProgression
+            affectsProgression: affectsProgression,
+            isRecoveryMode: isRecoveryMode
         )
         context.insert(goal)
         try context.save()
@@ -693,6 +695,23 @@ enum TrainingStore {
 
         let sorted = output.sorted { $0.priority > $1.priority }
         return Array(sorted.prefix(limit))
+    }
+
+    static func activeWeeklyGoalTarget(for goals: [Goal], week: WeekRange) -> Int? {
+        activeWeeklyGoal(for: goals, week: week).map { Int($0.targetValue.rounded()) }
+    }
+
+    static func activeWeeklyGoal(for goals: [Goal], week: WeekRange) -> Goal? {
+        let weekInterval = WeekMath.dateInterval(for: week, calendar: progressionCalendar())
+        let eligible = goals.filter { goal in
+            guard goal.affectsProgression else { return false }
+            guard goal.type == .weeklyTarget else { return false }
+            guard goal.status == .active || goal.status == .completed else { return false }
+            if goal.startDate > weekInterval.end { return false }
+            if let endDate = goal.endDate, endDate < weekInterval.start { return false }
+            return goal.targetValue > 0
+        }
+        return eligible.max(by: { $0.targetValue < $1.targetValue })
     }
 
     private static func computeGoalCurrentValue(for goal: Goal, context: ModelContext, now: Date) -> Double {
@@ -1800,10 +1819,20 @@ enum TrainingStore {
 
         var state = ProgressionEngine.initialState(for: statKey, startingBaseline: stat.startingBaseline)
         let completedWeeks = completedProgressionWeeks(for: stat, now: now)
+        let settings = (try? fetchExistingSettings(context: context))
+        let influenceEnabled = settings?.goalsCanAffectProgression ?? false
+        let goalsForStat: [Goal] = influenceEnabled ? ((try? fetchGoals(for: statKey, context: context)) ?? []) : []
 
         for week in completedWeeks {
             let actual = total(for: stat, in: WeekMath.dateInterval(for: week, calendar: progressionCalendar()))
-            let result = ProgressionEngine.evaluateWeek(statKey: statKey, state: state, actualTotal: actual)
+            let activeGoal = activeWeeklyGoal(for: goalsForStat, week: week)
+            let result = ProgressionEngine.evaluateWeek(
+                statKey: statKey,
+                state: state,
+                actualTotal: actual,
+                activeGoalTarget: activeGoal.map { Int($0.targetValue.rounded()) },
+                isRecoveryGoal: activeGoal?.isRecoveryMode ?? false
+            )
             let resolution = WeeklyResolution(
                 statKey: stat.key,
                 statName: stat.name,
@@ -1938,22 +1967,26 @@ enum TrainingStore {
     static func summaryText(for stat: StatDomain, week: WeekRange, result: WeeklyProgressionResult) -> String {
         let actualLabel = MetricFormatting.shortMetric(result.actualTotal)
         let expectedLabel = MetricFormatting.shortMetric(result.expectedTotal)
+        let goalSuffix = result.goalBonusApplied
+            ? " Goal target met added +1 bonus charge."
+            : (result.goalTargetMet ? " Goal target met." : "")
+
         if result.didLevelUp {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) advanced \(stat.name) to Level \(result.levelAfter) after reaching +4 charge."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) advanced \(stat.name) to Level \(result.levelAfter) after reaching +4 charge.\(goalSuffix)"
         }
         if result.didLevelDown {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) dropped \(stat.name) to Level \(result.levelAfter) after reaching -4 charge."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) dropped \(stat.name) to Level \(result.levelAfter) after reaching -4 charge.\(goalSuffix)"
         }
         if result.weeklyChargeDelta > 0 {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added +\(result.weeklyChargeDelta) charge."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added +\(result.weeklyChargeDelta) charge.\(goalSuffix)"
         }
         if result.weeklyChargeDelta < 0 {
             return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added \(result.weeklyChargeDelta) charge."
         }
         if result.didDecayTowardZero {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held steady while charge drifted 1 step back toward zero."
+            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held steady while charge drifted 1 step back toward zero.\(goalSuffix)"
         }
-        return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held this rank steady."
+        return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held this rank steady.\(goalSuffix)"
     }
 
     private static func singularWeeklyUnitLabel(for stat: StatDomain) -> String {
@@ -2280,6 +2313,15 @@ enum TrainingStore {
             motivationColorToken = "focus"
         }
 
+        let settings = try? fetchExistingSettings(context: context)
+        let recommendations = (try? trainTodayRecommendations(context: context, settings: settings, now: now, limit: 1)) ?? []
+        let topRec = recommendations.first
+        let goalSnapshots = (try? goalProgressSnapshots(context: context, now: now)) ?? []
+        let activeGoalCount = goalSnapshots.filter { $0.goal.status == .active }.count
+        let goalsAtRiskCount = goalSnapshots.filter {
+            $0.goal.status == .active && ($0.paceStatus == .atRisk || $0.paceStatus == .behind)
+        }.count
+
         let snapshot = TrainingWidgetSnapshot(
             generatedAt: now,
             appName: AppIdentity.displayName,
@@ -2292,7 +2334,12 @@ enum TrainingStore {
             pendingWeeklyReview: pending,
             weakestStat: statSnapshots.first(where: { $0.id == weakest?.id }),
             stats: statSnapshots,
-            todayHabits: Array(habitSnapshots)
+            todayHabits: Array(habitSnapshots),
+            trainTodayHeadline: topRec?.headline,
+            trainTodayDetail: topRec?.detail,
+            trainTodayColorToken: topRec?.colorToken,
+            activeGoalCount: activeGoalCount,
+            goalsAtRiskCount: goalsAtRiskCount
         )
 
         WidgetSnapshotStore.save(snapshot)
@@ -2432,6 +2479,7 @@ enum TrainingStore {
                     priorityRaw: $0.priorityRaw,
                     affectsMetrics: $0.affectsMetrics,
                     affectsProgression: $0.affectsProgression,
+                    isRecoveryMode: $0.isRecoveryMode,
                     createdAt: $0.createdAt,
                     updatedAt: $0.updatedAt,
                     completedAt: $0.completedAt
@@ -2580,6 +2628,7 @@ enum TrainingStore {
                 priority: GoalPriority(rawValue: exported.priorityRaw) ?? .normal,
                 affectsMetrics: exported.affectsMetrics,
                 affectsProgression: exported.affectsProgression,
+                isRecoveryMode: exported.isRecoveryMode ?? false,
                 createdAt: exported.createdAt,
                 updatedAt: exported.updatedAt,
                 completedAt: exported.completedAt
@@ -2592,7 +2641,104 @@ enum TrainingStore {
         try synchronizeCatalog(context: context)
         try refreshAllProgress(context: context, reason: .appRefresh)
         try refreshWidgetSnapshot(context: context)
-        NotificationService.refreshNotifications(using: settings)
+        let atRiskCount = ((try? goalProgressSnapshots(context: context)) ?? []).filter {
+            $0.goal.status == .active && ($0.paceStatus == .atRisk || $0.paceStatus == .behind)
+        }.count
+        NotificationService.refreshNotifications(using: settings, goalsAtRiskCount: atRiskCount)
+    }
+
+    static func seedSampleGoals(context: ModelContext, now: Date = .now) throws {
+        let stats = try fetchActiveStats(context: context)
+        let calendar = Calendar.current
+        let inEightWeeks = calendar.date(byAdding: .weekOfYear, value: 8, to: now)
+        let inFourWeeks = calendar.date(byAdding: .weekOfYear, value: 4, to: now)
+        let inThreeMonths = calendar.date(byAdding: .month, value: 3, to: now)
+
+        func makeGoal(
+            title: String,
+            statKey: StatKey?,
+            type: GoalType,
+            measurementType: MeasurementType,
+            targetValue: Double,
+            endDate: Date?,
+            priority: GoalPriority = .normal,
+            affectsProgression: Bool = false
+        ) -> Goal {
+            Goal(
+                title: title,
+                scope: statKey == nil ? .overall : .skill,
+                linkedStatKey: statKey,
+                type: type,
+                measurementType: measurementType,
+                targetValue: targetValue,
+                startDate: now,
+                endDate: endDate,
+                priority: priority,
+                affectsMetrics: false,
+                affectsProgression: affectsProgression
+            )
+        }
+
+        var seeded: [Goal] = []
+
+        if let strength = stats.first(where: { $0.statKey == .strength }) {
+            let target = max(Double(strength.targetValue ?? (strength.currentBaseline + 1)), Double(strength.currentBaseline + 1))
+            seeded.append(makeGoal(
+                title: "\(Int(target)) gym sessions per week",
+                statKey: .strength,
+                type: .weeklyTarget,
+                measurementType: .booleanSession,
+                targetValue: target,
+                endDate: inEightWeeks,
+                priority: .high,
+                affectsProgression: true
+            ))
+        }
+        if stats.contains(where: { $0.statKey == .cardio }) {
+            seeded.append(makeGoal(
+                title: "90 cardio minutes per week",
+                statKey: .cardio,
+                type: .weeklyTarget,
+                measurementType: .minutes,
+                targetValue: 90,
+                endDate: inEightWeeks
+            ))
+        }
+        if stats.contains(where: { $0.statKey == .reading }) {
+            seeded.append(makeGoal(
+                title: "Read 300 pages this month",
+                statKey: .reading,
+                type: .monthlyTotal,
+                measurementType: .pages,
+                targetValue: 300,
+                endDate: inFourWeeks
+            ))
+        }
+        if stats.contains(where: { $0.statKey == .focus }) {
+            seeded.append(makeGoal(
+                title: "Reach Focus Level 5",
+                statKey: .focus,
+                type: .reachLevel,
+                measurementType: .customNumber,
+                targetValue: 5,
+                endDate: inThreeMonths,
+                priority: .normal
+            ))
+        }
+        seeded.append(makeGoal(
+            title: "Log 20 total sessions this month",
+            statKey: nil,
+            type: .monthlyTotal,
+            measurementType: .count,
+            targetValue: 20,
+            endDate: inFourWeeks
+        ))
+
+        for goal in seeded {
+            context.insert(goal)
+        }
+        try context.save()
+        recordLocalWrite(reason: "seeded sample goals")
     }
 
     static func seedSampleData(context: ModelContext, profile: SampleProfile, now: Date = .now) throws {
@@ -2804,7 +2950,8 @@ struct SupportedWorkoutType: Identifiable, Sendable {
         SupportedWorkoutType(activityType: .mindAndBody, displayName: "Mind & Body", category: .mindBody, statKey: .focus, sessionType: "Focus"),
         SupportedWorkoutType(activityType: .flexibility, displayName: "Flexibility", category: .mindBody, statKey: .focus, sessionType: "Focus"),
         SupportedWorkoutType(activityType: .barre, displayName: "Barre", category: .mindBody, statKey: .focus, sessionType: "Focus"),
-        SupportedWorkoutType(activityType: .dance, displayName: "Dance", category: .mindBody, statKey: .focus, sessionType: "Focus")
+        SupportedWorkoutType(activityType: .cardioDance, displayName: "Cardio Dance", category: .mindBody, statKey: .focus, sessionType: "Focus"),
+        SupportedWorkoutType(activityType: .socialDance, displayName: "Social Dance", category: .mindBody, statKey: .focus, sessionType: "Focus")
     ]
 
     static func key(for activityType: HKWorkoutActivityType) -> String {

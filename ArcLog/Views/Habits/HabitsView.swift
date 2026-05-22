@@ -271,8 +271,10 @@ struct SkillDetailView: View {
                     calibrationCell(title: "Baseline", value: "\(stat.currentBaseline)")
                     Divider().frame(height: 36)
                     calibrationCell(title: "Target", value: stat.targetValue.map { "\($0)" } ?? "—")
-                    Divider().frame(height: 36)
-                    calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
+                    if settings?.showPersonalMaxInUI ?? true {
+                        Divider().frame(height: 36)
+                        calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
+                    }
                 }
 
                 Text(calibrationStatusLabel)
@@ -1365,7 +1367,7 @@ struct SkillCalibrationSheet: View {
         stat.maintenanceFloor = clamped.maintenance
         stat.updatedAt = .now
         try? modelContext.save()
-        try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .appRefresh)
+        _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .appRefresh)
         dismiss()
     }
 }

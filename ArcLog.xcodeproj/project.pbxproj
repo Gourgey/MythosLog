@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -25,7 +25,7 @@
 		45D80ED5613CEA6FD9816E00 /* RankArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6888D8D1A58A620AC847DCA /* RankArtworkView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		46CFC5D4A919C44C99B7B73E /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B2EC7D73D0E475E2F8CEE3D /* HistoryView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		4A8F31B0D7E24C0F9A1B2C3D /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F31B0D7E24C0F9A1B2C3E /* GoalsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
-		4C8436280FA6CCDBCAA98BA9 /* ArcLogWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E0D39427B50B885EF2F60238 /* ArcLogWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		4C8436280FA6CCDBCAA98BA9 /* ArcLogWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E0D39427B50B885EF2F60238 /* ArcLogWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		578EF90D3F42025F60A676B5 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9569087814846758126EBEE /* DeepLink.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		5E215D0973CA16E9429BA455 /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79A4CE7949AA0744BC3BC16D /* SurfaceCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		5E6BC1F02C6BFC045C0037AD /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EFAF6A42E52AC2C41BFEC79 /* Formatting.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -77,15 +77,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		B02627CE8E9ABF432BC311F6 /* Embed App Extensions */ = {
+		B02627CE8E9ABF432BC311F6 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				4C8436280FA6CCDBCAA98BA9 /* ArcLogWidgets.appex in Embed App Extensions */,
+				4C8436280FA6CCDBCAA98BA9 /* ArcLogWidgets.appex in Embed Foundation Extensions */,
 			);
-			name = "Embed App Extensions";
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -107,6 +107,7 @@
 		392CC621CBDAC9B6E6A49427 /* ArcLogWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogWidgets.swift; path = ArcLogWidgets/ArcLogWidgets.swift; sourceTree = "<group>"; };
 		3A9D22C8A259EDD9396732F0 /* AppIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppIdentity.swift; path = ArcLog/App/AppIdentity.swift; sourceTree = "<group>"; };
 		49ACAF205B1B4D0DCE35C843 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = ArcLog/Assets.xcassets; sourceTree = "<group>"; };
+		4A8F31B0D7E24C0F9A1B2C3E /* GoalsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GoalsView.swift; path = ArcLog/Views/Goals/GoalsView.swift; sourceTree = "<group>"; };
 		4CD565C3A31AE2154188F191 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = ArcLog/Support/WidgetSnapshot.swift; sourceTree = "<group>"; };
 		4EFAF6A42E52AC2C41BFEC79 /* Formatting.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Formatting.swift; path = ArcLog/Support/Formatting.swift; sourceTree = "<group>"; };
 		5279BB0F082859EEB352971F /* OnboardingFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OnboardingFlowView.swift; path = ArcLog/Views/Onboarding/OnboardingFlowView.swift; sourceTree = "<group>"; };
@@ -118,7 +119,6 @@
 		8277062E60207448212B991B /* WeeklyReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewView.swift; path = ArcLog/Views/WeeklyReview/WeeklyReviewView.swift; sourceTree = "<group>"; };
 		85C919B53CB2AF01A8B887A1 /* TrainingArcConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcConfig.swift; path = ArcLog/Domain/TrainingArcConfig.swift; sourceTree = "<group>"; };
 		8B2EC7D73D0E475E2F8CEE3D /* HistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistoryView.swift; path = ArcLog/Views/History/HistoryView.swift; sourceTree = "<group>"; };
-		4A8F31B0D7E24C0F9A1B2C3E /* GoalsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GoalsView.swift; path = ArcLog/Views/Goals/GoalsView.swift; sourceTree = "<group>"; };
 		8D3F0D7C4B8DC8A81F5A404C /* ArcLogApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcLogApp.swift; path = ArcLog/ArcLogApp.swift; sourceTree = "<group>"; };
 		92165F921AE72A2BB5A163CF /* TrainingRoute.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingRoute.swift; path = ArcLog/Support/TrainingRoute.swift; sourceTree = "<group>"; };
 		9AFF5C370B7CCF2962A99DF4 /* StatCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatCard.swift; path = ArcLog/Views/Components/StatCard.swift; sourceTree = "<group>"; };
@@ -422,7 +422,7 @@
 				B0AE0D0B1B6EF7945269BB97 /* Sources */,
 				A5C6368314E4717518DE5AB4 /* Frameworks */,
 				79E7B1355CD32EB4736584FB /* Resources */,
-				B02627CE8E9ABF432BC311F6 /* Embed App Extensions */,
+				B02627CE8E9ABF432BC311F6 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -458,8 +458,9 @@
 		BBA9442F9EB0903823CF0E5A /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1700;
-				LastUpgradeCheck = 1700;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					38B737E316FED683347D3868 = {
 						SystemCapabilities = {
@@ -621,7 +622,11 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ArcLogWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -657,6 +662,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -664,10 +670,13 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 5865Y52YG7;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -687,6 +696,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -748,7 +758,10 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ArcLog/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -767,10 +780,15 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ArcLogWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -789,10 +807,14 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ArcLog/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.ArcLog;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -827,6 +849,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -834,10 +857,12 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 5865Y52YG7;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -850,6 +875,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;

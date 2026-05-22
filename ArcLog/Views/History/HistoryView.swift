@@ -83,8 +83,26 @@ struct HistoryView: View {
                             Text("History appears after you resolve your first week.")
                                 .foregroundStyle(TrainingTheme.textSecondary)
                         }
+                    } else if allResolutions.isEmpty {
+                        SurfaceCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("No resolved weeks yet")
+                                    .font(.headline)
+                                    .foregroundStyle(TrainingTheme.textPrimary)
+                                Text("Once you resolve your first weekly review, History will fill with charts, trends, and per-skill summaries.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(TrainingTheme.textSecondary)
+                            }
+                        }
                     } else {
                         rangePicker
+                        if resolutionsInRange.isEmpty {
+                            SurfaceCard {
+                                Text("No resolved weeks in this range. Try widening the range or resolve another week.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(TrainingTheme.textSecondary)
+                            }
+                        }
                         overallSummary
                         statPicker
                         if let stat = selectedStat {
@@ -288,11 +306,29 @@ struct HistoryView: View {
                             Text(resolution.summaryText)
                                 .font(.caption)
                                 .foregroundStyle(TrainingTheme.textSecondary)
+                            if let healthNote = healthSourceNote(for: resolution) {
+                                Label(healthNote, systemImage: "heart.fill")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(TrainingTheme.cold)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func healthSourceNote(for resolution: WeeklyResolution) -> String? {
+        let weekInterval = DateInterval(start: resolution.weekStartDate, end: resolution.weekEndDate)
+        let healthLogs = allLogs.filter { log in
+            guard let key = log.habit?.statDomain?.statKey?.rawValue, key == resolution.statKey else { return false }
+            return log.sourceType == .health && weekInterval.contains(log.date)
+        }
+        guard !healthLogs.isEmpty else { return nil }
+        if healthLogs.count == 1 {
+            return "Includes 1 Apple Health import"
+        }
+        return "Includes \(healthLogs.count) Apple Health imports"
     }
 
     private func trendInsight(for stat: StatDomain) -> String {

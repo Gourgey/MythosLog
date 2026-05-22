@@ -60,12 +60,14 @@ struct PendingAppDestination: Codable, Equatable, Sendable {
 
 enum PendingDestinationStore {
     static let didQueueNotification = Notification.Name("PendingDestinationStore.didQueue")
+    static let didQueueGoalNotification = Notification.Name("PendingDestinationStore.didQueueGoal")
 
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
     }
 
     private static var inProcessDestination: PendingAppDestination?
+    private static var inProcessGoalID: UUID?
 
     static func queue(_ destination: PendingAppDestination) {
         inProcessDestination = destination
@@ -84,5 +86,16 @@ enum PendingDestinationStore {
         guard let data = defaults.data(forKey: AppIdentity.pendingDestinationKey) else { return nil }
         defaults.removeObject(forKey: AppIdentity.pendingDestinationKey)
         return try? JSONDecoder().decode(PendingAppDestination.self, from: data)
+    }
+
+    static func queueGoal(_ goalID: UUID) {
+        inProcessGoalID = goalID
+        NotificationCenter.default.post(name: didQueueGoalNotification, object: nil)
+    }
+
+    static func consumeGoal() -> UUID? {
+        let value = inProcessGoalID
+        inProcessGoalID = nil
+        return value
     }
 }

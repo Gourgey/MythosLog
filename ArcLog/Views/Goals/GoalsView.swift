@@ -68,6 +68,17 @@ struct GoalsView: View {
                 presentedEditor = GoalEditorSeed(goal: nil, initialStatKey: key)
                 self.initialStatKey = nil
             }
+            consumePendingGoalIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: PendingDestinationStore.didQueueGoalNotification)) { _ in
+            consumePendingGoalIfNeeded()
+        }
+    }
+
+    private func consumePendingGoalIfNeeded() {
+        guard let pendingID = PendingDestinationStore.consumeGoal() else { return }
+        if let match = goals.first(where: { $0.id == pendingID }) {
+            presentedEditor = GoalEditorSeed(goal: match, initialStatKey: nil)
         }
     }
 
@@ -239,6 +250,7 @@ struct GoalEditorView: View {
     @State private var endDate: Date
     @State private var priority: GoalPriority
     @State private var affectsProgression: Bool
+    @State private var isRecoveryMode: Bool
 
     init(goal: Goal?, initialStatKey: StatKey?) {
         self.existingGoal = goal
@@ -255,6 +267,7 @@ struct GoalEditorView: View {
         _endDate = State(initialValue: goal?.endDate ?? defaultEnd)
         _priority = State(initialValue: goal?.priority ?? .normal)
         _affectsProgression = State(initialValue: goal?.affectsProgression ?? false)
+        _isRecoveryMode = State(initialValue: goal?.isRecoveryMode ?? false)
     }
 
     private var availableStats: [StatDomain] {
@@ -326,7 +339,12 @@ struct GoalEditorView: View {
 
             Section {
                 Toggle("Goal affects progression", isOn: $affectsProgression)
-                Text("By default goals are tracking-only. Turn this on if you want missing this goal to also affect Charge.")
+                Text("By default goals are tracking-only. Turn this on if you want meeting this goal to also reward bonus Charge.")
+                    .font(.caption)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+
+                Toggle("Recovery mode", isOn: $isRecoveryMode)
+                Text("Use when the target is intentionally lower than baseline — for example, easing back after illness. Meeting a recovery target still rewards bonus Charge even if below baseline.")
                     .font(.caption)
                     .foregroundStyle(TrainingTheme.textSecondary)
             } header: {
@@ -397,6 +415,7 @@ struct GoalEditorView: View {
             existingGoal.endDate = resolvedEnd
             existingGoal.priority = priority
             existingGoal.affectsProgression = affectsProgression
+            existingGoal.isRecoveryMode = isRecoveryMode
             try? TrainingStore.updateGoal(existingGoal, context: modelContext)
         } else {
             _ = try? TrainingStore.createGoal(
@@ -413,6 +432,7 @@ struct GoalEditorView: View {
                 priority: priority,
                 affectsMetrics: false,
                 affectsProgression: affectsProgression,
+                isRecoveryMode: isRecoveryMode,
                 context: modelContext
             )
         }

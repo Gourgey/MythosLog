@@ -125,6 +125,38 @@ enum LogSourceType: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum ProgressionStrictness: String, Codable, CaseIterable, Identifiable, Sendable {
+    case forgiving
+    case balanced
+    case strict
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .forgiving: "Forgiving"
+        case .balanced: "Balanced"
+        case .strict: "Strict"
+        }
+    }
+
+    var decaySensitivity: Double {
+        switch self {
+        case .forgiving: 0.7
+        case .balanced: 1.0
+        case .strict: 1.3
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .forgiving: "Slower decay. Missing baseline costs less charge."
+        case .balanced: "Default behavior. One step toward zero each completed week."
+        case .strict: "Faster decay. Missing baseline costs more charge."
+        }
+    }
+}
+
 enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case detailedCards
     case compactGrid
@@ -524,6 +556,10 @@ final class AppSettings {
     var themePreferenceRaw: String = "light"
     var dashboardLayoutModeRaw: String = DashboardLayoutMode.compactGrid.rawValue
     var disabledHealthWorkoutTypeKeysRaw: String = ""
+    var progressionStrictnessRaw: String = ProgressionStrictness.balanced.rawValue
+    var goalsCanAffectProgression: Bool = false
+    var showPersonalMaxInUI: Bool = true
+    var goalAtRiskReminderEnabled: Bool = false
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now
 
@@ -567,6 +603,14 @@ final class AppSettings {
     var dashboardLayoutMode: DashboardLayoutMode {
         get { DashboardLayoutMode(rawValue: dashboardLayoutModeRaw) ?? .compactGrid }
         set { dashboardLayoutModeRaw = newValue.rawValue }
+    }
+
+    var progressionStrictness: ProgressionStrictness {
+        get { ProgressionStrictness(rawValue: progressionStrictnessRaw) ?? .balanced }
+        set {
+            progressionStrictnessRaw = newValue.rawValue
+            decaySensitivity = newValue.decaySensitivity
+        }
     }
 
     var disabledHealthWorkoutTypeKeys: Set<String> {
@@ -726,6 +770,7 @@ final class Goal {
     var priorityRaw: String = GoalPriority.normal.rawValue
     var affectsMetrics: Bool = false
     var affectsProgression: Bool = false
+    var isRecoveryMode: Bool = false
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now
     var completedAt: Date?
@@ -746,6 +791,7 @@ final class Goal {
         priority: GoalPriority = .normal,
         affectsMetrics: Bool = false,
         affectsProgression: Bool = false,
+        isRecoveryMode: Bool = false,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         completedAt: Date? = nil
@@ -765,6 +811,7 @@ final class Goal {
         self.priorityRaw = priority.rawValue
         self.affectsMetrics = affectsMetrics
         self.affectsProgression = affectsProgression
+        self.isRecoveryMode = isRecoveryMode
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
@@ -1310,6 +1357,7 @@ nonisolated struct GoalExport: Codable, Sendable {
     var priorityRaw: String
     var affectsMetrics: Bool
     var affectsProgression: Bool
+    var isRecoveryMode: Bool?
     var createdAt: Date
     var updatedAt: Date
     var completedAt: Date?

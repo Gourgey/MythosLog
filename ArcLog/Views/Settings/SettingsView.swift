@@ -168,22 +168,39 @@ struct SettingsView: View {
         List {
             if let settings {
                 Section("Progression") {
-                    Toggle("Enable decay", isOn: binding(\.enableDecay))
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Decay sensitivity")
-                        Slider(value: binding(\.decaySensitivity), in: 0.6...1.4, step: 0.1)
-                        Text(String(format: "%.1fx", settings.decaySensitivity))
-                            .font(.caption)
-                            .foregroundStyle(TrainingTheme.textSecondary)
+                    Picker("Strictness", selection: strictnessBinding) {
+                        ForEach(ProgressionStrictness.allCases) { strictness in
+                            Text(strictness.displayName).tag(strictness)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    Text(settings.progressionStrictness.detail)
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+
+                    Toggle("Enable decay", isOn: binding(\.enableDecay))
                     Toggle("Week starts on Monday", isOn: binding(\.weekStartsOnMonday))
                     Toggle("Lock in weekly review", isOn: binding(\.lockInWeeklyReview))
+                }
+
+                Section {
+                    Toggle("Show personal max in UI", isOn: binding(\.showPersonalMaxInUI))
+                    Toggle("Goals can affect progression", isOn: binding(\.goalsCanAffectProgression))
+                    Text("By default goals are tracking-only. Turn this on if you want missing aspirational goals to also affect Charge for goals that have ‘affects progression’ turned on.")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                } header: {
+                    Text("Calibration & Goals")
                 }
 
                 Section("Notifications") {
                     Toggle("Daily reminder", isOn: binding(\.dailyReminderEnabled))
                     Toggle("Evening unfinished reminder", isOn: binding(\.eveningReminderEnabled))
                     Toggle("Weekly review reminder", isOn: binding(\.weeklyReviewReminderEnabled))
+                    Toggle("Goal at risk reminder", isOn: binding(\.goalAtRiskReminderEnabled))
+                    Text("Notifies you mid-week if any active goal is at risk of being missed.")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
                     Button("Request notification access") {
                         Task { await NotificationService.requestAuthorization() }
                     }
@@ -310,6 +327,10 @@ struct SettingsView: View {
                             onSettingsMutated()
                         }
                     }
+                    Button("Seed Sample Goals") {
+                        try? TrainingStore.seedSampleGoals(context: modelContext)
+                        onSettingsMutated()
+                    }
                     Button("Clear All Data", role: .destructive) {
                         try? TrainingStore.clearAll(context: modelContext)
                         onSettingsMutated()
@@ -368,6 +389,16 @@ struct SettingsView: View {
         }
     }
 
+    private var strictnessBinding: Binding<ProgressionStrictness> {
+        Binding(
+            get: { settings?.progressionStrictness ?? .balanced },
+            set: {
+                settings?.progressionStrictness = $0
+                saveSettings()
+            }
+        )
+    }
+
     private func binding<Value>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
         Binding(
             get: { settings![keyPath: keyPath] },
@@ -403,7 +434,11 @@ struct SettingsView: View {
         try? modelContext.save()
         TrainingStore.recordLocalWrite(reason: "updated settings")
         if let settings {
-            NotificationService.refreshNotifications(using: settings)
+            let atRisk = (try? TrainingStore.goalProgressSnapshots(context: modelContext)) ?? []
+            let atRiskCount = atRisk.filter {
+                $0.goal.status == .active && ($0.paceStatus == .atRisk || $0.paceStatus == .behind)
+            }.count
+            NotificationService.refreshNotifications(using: settings, goalsAtRiskCount: atRiskCount)
         }
         onSettingsMutated()
     }

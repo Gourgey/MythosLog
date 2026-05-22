@@ -11,6 +11,8 @@ struct ExternalLogEvent: Sendable {
 enum TrainingDeepLink {
     case route(TrainingRoute)
     case externalLog(ExternalLogEvent)
+    case skillDetail(statKey: StatKey, openLog: Bool)
+    case goalDetail(goalID: UUID)
 }
 
 enum DeepLinkRouter {
@@ -25,6 +27,26 @@ enum DeepLinkRouter {
 
         if let route = TrainingRoute(rawValue: url.host ?? "") {
             return .route(route)
+        }
+
+        if url.host == "skill" {
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let key = components?.queryItems?.first(where: { $0.name == "key" })?.value
+                ?? components?.queryItems?.first(where: { $0.name == "stat" })?.value
+            let openLog = (components?.queryItems?.first(where: { $0.name == "log" })?.value).flatMap { Int($0) } == 1
+            if let key, let statKey = StatKey(rawValue: key) {
+                return .skillDetail(statKey: statKey, openLog: openLog)
+            }
+            return nil
+        }
+
+        if url.host == "goal" {
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let idValue = components?.queryItems?.first(where: { $0.name == "id" })?.value
+            if let idValue, let uuid = UUID(uuidString: idValue) {
+                return .goalDetail(goalID: uuid)
+            }
+            return nil
         }
 
         guard url.host == "log" else { return nil }

@@ -84,13 +84,17 @@ struct DashboardView: View {
                     trainTodayCard
                         .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
 
-                    switch displayedLayoutMode {
-                    case .detailedCards:
-                        detailedDashboard
-                    case .compactGrid:
-                        compactGridDashboard
-                    case .gameGrid:
-                        gameGridDashboard
+                    if activeStats.isEmpty {
+                        dashboardEmptyState
+                    } else {
+                        switch displayedLayoutMode {
+                        case .detailedCards:
+                            detailedDashboard
+                        case .compactGrid:
+                            compactGridDashboard
+                        case .gameGrid:
+                            gameGridDashboard
+                        }
                     }
                 }
                 .padding(.horizontal, displayedLayoutMode == .gameGrid ? 2 : 16)
@@ -242,6 +246,19 @@ struct DashboardView: View {
                 )
         )
         .shadow(color: dashboardChromeAccent.opacity(0.10), radius: 10, x: 0, y: 5)
+    }
+
+    private var dashboardEmptyState: some View {
+        SurfaceCard(accent: TrainingArcConfig.color(for: "focus")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("No skills yet")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text("Run through onboarding (or Reset Default Profile in Settings → Debug Tools) to set baselines for your core skills.")
+                    .font(.subheadline)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+        }
     }
 
     private var trainTodayRecommendations: [TrainTodayRecommendation] {

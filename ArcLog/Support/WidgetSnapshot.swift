@@ -13,6 +13,78 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
     var weakestStat: TrainingWidgetStat?
     var stats: [TrainingWidgetStat]
     var todayHabits: [TrainingWidgetHabit]
+    var trainTodayHeadline: String?
+    var trainTodayDetail: String?
+    var trainTodayColorToken: String?
+    var activeGoalCount: Int
+    var goalsAtRiskCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt, appName, momentumTitle, momentumSubtitle, characterSummary,
+             motivationTitle, motivationMessage, motivationColorToken, pendingWeeklyReview,
+             weakestStat, stats, todayHabits,
+             trainTodayHeadline, trainTodayDetail, trainTodayColorToken,
+             activeGoalCount, goalsAtRiskCount
+    }
+
+    init(
+        generatedAt: Date,
+        appName: String,
+        momentumTitle: String,
+        momentumSubtitle: String,
+        characterSummary: String,
+        motivationTitle: String,
+        motivationMessage: String,
+        motivationColorToken: String,
+        pendingWeeklyReview: Bool,
+        weakestStat: TrainingWidgetStat?,
+        stats: [TrainingWidgetStat],
+        todayHabits: [TrainingWidgetHabit],
+        trainTodayHeadline: String? = nil,
+        trainTodayDetail: String? = nil,
+        trainTodayColorToken: String? = nil,
+        activeGoalCount: Int = 0,
+        goalsAtRiskCount: Int = 0
+    ) {
+        self.generatedAt = generatedAt
+        self.appName = appName
+        self.momentumTitle = momentumTitle
+        self.momentumSubtitle = momentumSubtitle
+        self.characterSummary = characterSummary
+        self.motivationTitle = motivationTitle
+        self.motivationMessage = motivationMessage
+        self.motivationColorToken = motivationColorToken
+        self.pendingWeeklyReview = pendingWeeklyReview
+        self.weakestStat = weakestStat
+        self.stats = stats
+        self.todayHabits = todayHabits
+        self.trainTodayHeadline = trainTodayHeadline
+        self.trainTodayDetail = trainTodayDetail
+        self.trainTodayColorToken = trainTodayColorToken
+        self.activeGoalCount = activeGoalCount
+        self.goalsAtRiskCount = goalsAtRiskCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try c.decode(Date.self, forKey: .generatedAt)
+        appName = try c.decode(String.self, forKey: .appName)
+        momentumTitle = try c.decode(String.self, forKey: .momentumTitle)
+        momentumSubtitle = try c.decode(String.self, forKey: .momentumSubtitle)
+        characterSummary = try c.decode(String.self, forKey: .characterSummary)
+        motivationTitle = try c.decode(String.self, forKey: .motivationTitle)
+        motivationMessage = try c.decode(String.self, forKey: .motivationMessage)
+        motivationColorToken = try c.decode(String.self, forKey: .motivationColorToken)
+        pendingWeeklyReview = try c.decode(Bool.self, forKey: .pendingWeeklyReview)
+        weakestStat = try c.decodeIfPresent(TrainingWidgetStat.self, forKey: .weakestStat)
+        stats = try c.decode([TrainingWidgetStat].self, forKey: .stats)
+        todayHabits = try c.decode([TrainingWidgetHabit].self, forKey: .todayHabits)
+        trainTodayHeadline = try c.decodeIfPresent(String.self, forKey: .trainTodayHeadline)
+        trainTodayDetail = try c.decodeIfPresent(String.self, forKey: .trainTodayDetail)
+        trainTodayColorToken = try c.decodeIfPresent(String.self, forKey: .trainTodayColorToken)
+        activeGoalCount = try c.decodeIfPresent(Int.self, forKey: .activeGoalCount) ?? 0
+        goalsAtRiskCount = try c.decodeIfPresent(Int.self, forKey: .goalsAtRiskCount) ?? 0
+    }
 
     static let empty = TrainingWidgetSnapshot(
         generatedAt: .now,
@@ -26,7 +98,12 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         pendingWeeklyReview: false,
         weakestStat: nil,
         stats: [],
-        todayHabits: []
+        todayHabits: [],
+        trainTodayHeadline: nil,
+        trainTodayDetail: nil,
+        trainTodayColorToken: nil,
+        activeGoalCount: 0,
+        goalsAtRiskCount: 0
     )
 }
 

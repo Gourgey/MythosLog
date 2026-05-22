@@ -63,12 +63,12 @@ private func addSessionLogs(
 
 struct ArcLogTests {
     @Test func rankTitlesUseCentralConfig() {
-        #expect(TrainingArcConfig.rankTitle(for: .strength, level: 1) == "Frail Elder")
-        #expect(TrainingArcConfig.rankTitle(for: .strength, level: 10) == "Ascended Martial Titan")
-        #expect(TrainingArcConfig.rankTitle(for: .cardio, level: 4) == "Conditioned Human")
+        #expect(TrainingArcConfig.rankTitle(for: .strength, level: 1) == "Untrained")
+        #expect(TrainingArcConfig.rankTitle(for: .strength, level: 10) == "Master of Strength")
+        #expect(TrainingArcConfig.rankTitle(for: .cardio, level: 4) == "Conditioned")
         #expect(TrainingArcConfig.defaultHabitTemplates.count == 9)
-        #expect(TrainingArcConfig.rankTitle(for: .cooking, level: 1) == "Take-Out Regular")
-        #expect(TrainingArcConfig.rankTitle(for: .reading, level: 10) == "Living Archive")
+        #expect(TrainingArcConfig.rankTitle(for: .cooking, level: 1) == "Untrained Cook")
+        #expect(TrainingArcConfig.rankTitle(for: .reading, level: 10) == "Lifelong Reader")
     }
 
     @Test func baselineThresholdsMapToExpectedRankLevels() {
@@ -313,8 +313,8 @@ struct ArcLogTests {
         #expect(snapshot.weeklyCounterValueLabel == "0 / 3")
         #expect(snapshot.chargeExplanation.contains("Level 4"))
         #expect(snapshot.chargeExplanation.contains("+4 ranks you up"))
-        #expect(snapshot.nextEvaluationLabel.contains("Banks"))
-        #expect(snapshot.bankCountdownLabel.contains("Banking in"))
+        #expect(snapshot.nextEvaluationLabel.contains("Resolves"))
+        #expect(snapshot.bankCountdownLabel.contains("Resolves in"))
         #expect(snapshot.nextActionLabel.contains("Log"))
         #expect(snapshot.pacingStatus == .behind)
         #expect(snapshot.focusState == .behindTarget)
@@ -594,5 +594,289 @@ struct ArcLogTests {
         #expect(ISO8601DateFormatter().string(from: start).hasPrefix("2026-03-23"))
         #expect(ISO8601DateFormatter().string(from: range.start).hasPrefix("2026-03-16"))
         #expect(ISO8601DateFormatter().string(from: range.end).hasPrefix("2026-03-22"))
+    }
+
+    // MARK: - Wave A–E coverage
+
+    @Test func calibrationClampingPreservesBaselinePrinciple() {
+        let result = TrainingArcConfig.clampCalibration(baseline: 3, target: 2, personalMax: 4, maintenance: 5)
+        #expect(result.target == 3, "Target below baseline should be raised to baseline")
+        #expect(result.max == 4)
+        #expect(result.maintenance == 3, "Maintenance above baseline should be clamped down")
+
+        let strict = TrainingArcConfig.clampCalibration(baseline: 5, target: 7, personalMax: 5, maintenance: nil)
+        #expect(strict.target == 7)
+        #expect(strict.max == 7, "Personal max below target should be raised to target")
+        #expect(strict.maintenance == nil)
+
+        let optional = TrainingArcConfig.clampCalibration(baseline: 3, target: nil, personalMax: nil, maintenance: nil)
+        #expect(optional.target == nil)
+        #expect(optional.max == nil)
+        #expect(optional.maintenance == nil)
+    }
+
+    @Test func suggestedTargetAndMaxAreReasonableForStrength() {
+        let baseline = 3
+        let target = TrainingArcConfig.suggestedTargetValue(for: .strength, baseline: baseline)
+        let personalMax = TrainingArcConfig.suggestedPersonalMaxValue(for: .strength, baseline: baseline, target: target)
+        #expect(target >= baseline + 1)
+        #expect(personalMax >= target)
+        #expect(personalMax >= baseline + 2)
+    }
+
+    @Test func progressionEngineGrantsBonusWhenGoalMetAboveBaseline() {
+        let state = WeeklyProgressionState(level: 4, expectedWeeklyTarget: 3, bankedProgressUnits: 0)
+        let baseline = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: state,
+            actualTotal: 5,
+            activeGoalTarget: nil
+        )
+        let withGoal = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: state,
+            actualTotal: 5,
+            activeGoalTarget: 5
+        )
+
+        #expect(withGoal.goalTargetMet)
+        #expect(withGoal.goalBonusApplied)
+        #expect(withGoal.weeklyChargeDelta == baseline.weeklyChargeDelta + 1, "Goal met above baseline should grant +1 bonus charge")
+    }
+
+    @Test func progressionEngineWithholdsBonusWhenBelowBaselineAndNotRecovery() {
+        let state = WeeklyProgressionState(level: 4, expectedWeeklyTarget: 5, bankedProgressUnits: 0)
+        let result = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: state,
+            actualTotal: 3,
+            activeGoalTarget: 3,
+            isRecoveryGoal: false
+        )
+
+        #expect(result.goalTargetMet)
+        #expect(!result.goalBonusApplied, "Goal met but below baseline should not grant bonus unless recovery mode")
+        #expect(result.weeklyChargeDelta < 0, "Below baseline should still penalize charge")
+    }
+
+    @Test func progressionEngineGrantsBonusInRecoveryModeEvenBelowBaseline() {
+        let state = WeeklyProgressionState(level: 4, expectedWeeklyTarget: 5, bankedProgressUnits: 0)
+        let result = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: state,
+            actualTotal: 3,
+            activeGoalTarget: 3,
+            isRecoveryGoal: true
+        )
+
+        #expect(result.goalTargetMet)
+        #expect(result.goalBonusApplied, "Recovery goal met should grant bonus even below baseline")
+        // Baseline penalty was -2, recovery bonus +1, net -1
+        #expect(result.weeklyChargeDelta == -1)
+    }
+
+    @Test func progressionEngineWithoutGoalBehavesUnchanged() {
+        let state = WeeklyProgressionState(level: 4, expectedWeeklyTarget: 3, bankedProgressUnits: 0)
+        let result = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: state,
+            actualTotal: 3
+        )
+
+        #expect(!result.goalTargetMet)
+        #expect(!result.goalBonusApplied)
+        #expect(result.weeklyChargeDelta == 0)
+    }
+
+    @Test func appSettingsDefaultsForNewWaveCFields() {
+        let settings = AppSettings()
+        #expect(settings.progressionStrictness == .balanced)
+        #expect(settings.goalsCanAffectProgression == false)
+        #expect(settings.showPersonalMaxInUI == true)
+        #expect(settings.goalAtRiskReminderEnabled == false)
+    }
+
+    @Test func progressionStrictnessMapsToDecaySensitivity() {
+        let settings = AppSettings()
+        settings.progressionStrictness = .forgiving
+        #expect(settings.decaySensitivity == 0.7)
+        settings.progressionStrictness = .strict
+        #expect(settings.decaySensitivity == 1.3)
+        settings.progressionStrictness = .balanced
+        #expect(settings.decaySensitivity == 1.0)
+    }
+
+    @Test @MainActor func createGoalPersistsAllFields() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let goal = try TrainingStore.createGoal(
+            title: "5 gym sessions per week",
+            notes: "Building toward marathon strength block.",
+            scope: .skill,
+            linkedStatKey: .strength,
+            linkedHabitID: nil,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            startDate: isoDate("2026-03-01T00:00:00Z"),
+            endDate: isoDate("2026-05-01T00:00:00Z"),
+            priority: .high,
+            affectsMetrics: false,
+            affectsProgression: true,
+            isRecoveryMode: false,
+            context: fixture.context
+        )
+
+        let fetched = try #require(try TrainingStore.fetchGoals(context: fixture.context).first { $0.id == goal.id })
+        #expect(fetched.title == "5 gym sessions per week")
+        #expect(fetched.scope == .skill)
+        #expect(fetched.linkedStatKey == .strength)
+        #expect(fetched.type == .weeklyTarget)
+        #expect(fetched.targetValue == 5)
+        #expect(fetched.status == .active)
+        #expect(fetched.priority == .high)
+        #expect(fetched.affectsProgression == true)
+        #expect(fetched.isRecoveryMode == false)
+    }
+
+    @Test @MainActor func setGoalStatusTransitionsAndTimestampsCorrectly() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let goal = try TrainingStore.createGoal(
+            title: "Test",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            context: fixture.context
+        )
+
+        try TrainingStore.setGoalStatus(goal, status: .completed, context: fixture.context)
+        #expect(goal.status == .completed)
+        #expect(goal.completedAt != nil)
+
+        try TrainingStore.setGoalStatus(goal, status: .active, context: fixture.context)
+        #expect(goal.status == .active)
+        #expect(goal.completedAt == nil, "Reactivating should clear completedAt")
+
+        try TrainingStore.setGoalStatus(goal, status: .archived, context: fixture.context)
+        #expect(goal.status == .archived)
+    }
+
+    @Test @MainActor func goalProgressComputesCurrentValueFromLogs() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let weekStart = TrainingStore.progressionWeek(containing: .now).start
+
+        try addSessionLogs(count: 3, habit: fixture.habit, weekStart: weekStart, context: fixture.context)
+
+        let goal = try TrainingStore.createGoal(
+            title: "5 sessions",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            context: fixture.context
+        )
+
+        let snapshot = TrainingStore.goalProgress(for: goal, context: fixture.context)
+        #expect(snapshot.currentValue == 3)
+        #expect(snapshot.targetValue == 5)
+        #expect(snapshot.progressRatio == 0.6)
+        #expect(snapshot.remainingValue == 2)
+    }
+
+    @Test @MainActor func deleteGoalRemovesItFromStore() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let goal = try TrainingStore.createGoal(
+            title: "To delete",
+            scope: .overall,
+            type: .custom,
+            measurementType: .count,
+            targetValue: 1,
+            context: fixture.context
+        )
+
+        try TrainingStore.deleteGoal(goal, context: fixture.context)
+
+        let remaining = try TrainingStore.fetchGoals(context: fixture.context)
+        #expect(remaining.allSatisfy { $0.id != goal.id })
+    }
+
+    @Test @MainActor func seedSampleGoalsCreatesExpectedSpread() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+
+        try TrainingStore.seedSampleGoals(context: fixture.context)
+
+        let goals = try TrainingStore.fetchGoals(context: fixture.context)
+        #expect(goals.count >= 2, "Should seed at least a Strength weekly + an overall monthly goal")
+        #expect(goals.contains { $0.linkedStatKey == .strength })
+        #expect(goals.contains { $0.scope == .overall })
+    }
+
+    @Test @MainActor func trainTodayRecommendationsSurfaceBaselineGapForUnloggedSkill() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let now = isoDate("2026-03-30T12:00:00Z")
+
+        let recommendations = try TrainingStore.trainTodayRecommendations(
+            context: fixture.context,
+            settings: nil,
+            now: now,
+            limit: 5
+        )
+
+        // With no logs and a baseline, at least one stale-or-no-log recommendation should appear
+        #expect(!recommendations.isEmpty)
+        #expect(recommendations.allSatisfy { !$0.headline.isEmpty })
+    }
+
+    @Test @MainActor func activeWeeklyGoalIsFilteredByDateAndProgressionFlag() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let week = TrainingStore.progressionWeek(containing: isoDate("2026-04-01T12:00:00Z"))
+
+        let trackingOnly = try TrainingStore.createGoal(
+            title: "Tracking only",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 4,
+            startDate: isoDate("2026-03-01T00:00:00Z"),
+            endDate: isoDate("2026-05-01T00:00:00Z"),
+            affectsProgression: false,
+            context: fixture.context
+        )
+        _ = trackingOnly
+
+        let influencing = try TrainingStore.createGoal(
+            title: "Influencing",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 6,
+            startDate: isoDate("2026-03-01T00:00:00Z"),
+            endDate: isoDate("2026-05-01T00:00:00Z"),
+            affectsProgression: true,
+            context: fixture.context
+        )
+
+        let target = TrainingStore.activeWeeklyGoalTarget(for: [trackingOnly, influencing], week: week)
+        #expect(target == 6, "Should pick the goal with affectsProgression=true")
+
+        let goal = TrainingStore.activeWeeklyGoal(for: [trackingOnly, influencing], week: week)
+        #expect(goal?.id == influencing.id)
+    }
+
+    @Test func goalIsRecoveryModeDefaultsToFalse() {
+        let goal = Goal(
+            title: "Test",
+            scope: .skill,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5
+        )
+        #expect(goal.isRecoveryMode == false)
+        #expect(goal.affectsProgression == false)
+        #expect(goal.status == .active)
     }
 }

@@ -50,6 +50,143 @@ struct TrainingArcMotivationWidget: Widget {
     }
 }
 
+struct TrainTodayWidget: Widget {
+    let kind = "TrainTodayWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
+            TrainTodayWidgetEntryView(entry: entry)
+                .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
+        }
+        .configurationDisplayName("Train Today")
+        .description("The single most important action right now — review ready, goal at risk, or pace gap.")
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
+    }
+}
+
+private struct TrainTodayWidgetEntryView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: TrainingArcEntry
+
+    private var headline: String {
+        entry.snapshot.trainTodayHeadline ?? (entry.snapshot.pendingWeeklyReview ? "Weekly review ready" : "All skills on pace")
+    }
+
+    private var detail: String {
+        entry.snapshot.trainTodayDetail ?? entry.snapshot.momentumSubtitle
+    }
+
+    private var accent: Color {
+        accentColor(for: entry.snapshot.trainTodayColorToken ?? entry.snapshot.motivationColorToken)
+    }
+
+    var body: some View {
+        switch family {
+        case .systemMedium:
+            mediumWidget
+        case .accessoryRectangular:
+            accessoryWidget
+        default:
+            smallWidget
+        }
+    }
+
+    private var smallWidget: some View {
+        widgetSurface(accent: accent) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("TRAIN TODAY")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.72))
+                Text(headline)
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(3)
+                Spacer()
+                if entry.snapshot.goalsAtRiskCount > 0 {
+                    Text("\(entry.snapshot.goalsAtRiskCount) goal\(entry.snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var mediumWidget: some View {
+        widgetSurface(accent: accent) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("TRAIN TODAY")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.72))
+                Text(headline)
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.84))
+                    .lineLimit(3)
+                Spacer()
+                HStack(spacing: 14) {
+                    if entry.snapshot.activeGoalCount > 0 {
+                        Label("\(entry.snapshot.activeGoalCount) active", systemImage: "target")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.82))
+                    }
+                    if entry.snapshot.goalsAtRiskCount > 0 {
+                        Label("\(entry.snapshot.goalsAtRiskCount) at risk", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.yellow)
+                    }
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var accessoryWidget: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(headline)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            Text(detail)
+                .font(.caption2)
+                .lineLimit(2)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func widgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .containerBackground(for: .widget) {
+                LinearGradient(
+                    colors: [Color.black, accent.opacity(0.45)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+    }
+
+    private func accentColor(for token: String) -> Color {
+        switch token {
+        case "strength": Color(red: 0.93, green: 0.39, blue: 0.28)
+        case "intellect": Color(red: 0.35, green: 0.61, blue: 1.0)
+        case "creativity": Color(red: 0.96, green: 0.53, blue: 0.27)
+        case "emotional": Color(red: 0.96, green: 0.35, blue: 0.52)
+        case "focus": Color(red: 0.32, green: 0.82, blue: 0.67)
+        case "curiosity": Color(red: 0.73, green: 0.56, blue: 1.0)
+        case "cardio": Color(red: 0.30, green: 0.72, blue: 0.88)
+        case "cooking": Color(red: 0.92, green: 0.50, blue: 0.30)
+        case "reading": Color(red: 0.45, green: 0.50, blue: 0.74)
+        default: .white
+        }
+    }
+}
+
 private struct TrainingArcStatsWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TrainingArcEntry
@@ -244,6 +381,11 @@ private struct TrainingArcMotivationWidgetEntryView: View {
                     Text("Current pressure point: \(weakest.name)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.74))
+                }
+                if entry.snapshot.goalsAtRiskCount > 0 {
+                    Label("\(entry.snapshot.goalsAtRiskCount) goal\(entry.snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk", systemImage: "target")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.yellow)
                 }
             }
             .padding(16)

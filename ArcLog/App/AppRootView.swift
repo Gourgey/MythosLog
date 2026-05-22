@@ -26,57 +26,67 @@ private struct SkillDetailDestinationView: View {
 struct AppRootView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsRecords: [AppSettings]
+    @Query private var allGoals: [Goal]
     @StateObject private var router = AppRouter()
     @State private var settings: AppSettings?
     @State private var showOnboarding = false
 
+    private var goalsAtRiskCount: Int {
+        allGoals.filter { goal in
+            guard goal.status == .active else { return false }
+            let snapshot = TrainingStore.goalProgress(for: goal, context: modelContext)
+            return snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind
+        }.count
+    }
+
     var body: some View {
-        NavigationStack(path: $router.rootPath) {
-            Group {
-                if showOnboarding {
-                    OnboardingFlowView {
-                        reloadSettings()
-                    }
-                } else {
-                    TabView(selection: $router.selectedRoute) {
-                        DashboardView()
-                            .tag(TrainingRoute.dashboard)
-                            .tabItem {
-                                Label("Dashboard", systemImage: "shield.lefthalf.filled")
-                            }
-
-                        NavigationStack {
-                            WeeklyReviewView()
-                        }
-                        .tag(TrainingRoute.weeklyReview)
-                        .tabItem {
-                            Label("Review", systemImage: "calendar.badge.clock")
-                        }
-
-                        NavigationStack {
-                            GoalsView()
-                        }
-                        .tag(TrainingRoute.goals)
-                        .tabItem {
-                            Label("Goals", systemImage: "target")
-                        }
-
-                        NavigationStack {
-                            MoreView {
-                                reloadSettings()
-                            }
-                        }
-                        .tag(TrainingRoute.more)
-                        .tabItem {
-                            Label("More", systemImage: "square.grid.2x2.fill")
-                        }
-                    }
+        Group {
+            if showOnboarding {
+                OnboardingFlowView {
+                    reloadSettings()
                 }
-            }
-            .navigationDestination(for: DashboardNavigationDestination.self) { destination in
-                switch destination {
-                case .skillDetail(let destination):
-                    SkillDetailDestinationView(destination: destination)
+            } else {
+                TabView(selection: $router.selectedRoute) {
+                    NavigationStack(path: $router.rootPath) {
+                        DashboardView()
+                            .navigationDestination(for: DashboardNavigationDestination.self) { destination in
+                                switch destination {
+                                case .skillDetail(let destination):
+                                    SkillDetailDestinationView(destination: destination)
+                                }
+                            }
+                    }
+                    .tag(TrainingRoute.dashboard)
+                    .tabItem {
+                        Label("Dashboard", systemImage: "shield.lefthalf.filled")
+                    }
+
+                    NavigationStack {
+                        WeeklyReviewView()
+                    }
+                    .tag(TrainingRoute.weeklyReview)
+                    .tabItem {
+                        Label("Review", systemImage: "calendar.badge.clock")
+                    }
+
+                    NavigationStack {
+                        GoalsView()
+                    }
+                    .tag(TrainingRoute.goals)
+                    .tabItem {
+                        Label("Goals", systemImage: "target")
+                    }
+                    .badge(goalsAtRiskCount)
+
+                    NavigationStack {
+                        MoreView {
+                            reloadSettings()
+                        }
+                    }
+                    .tag(TrainingRoute.more)
+                    .tabItem {
+                        Label("More", systemImage: "square.grid.2x2.fill")
+                    }
                 }
             }
         }
@@ -111,6 +121,15 @@ struct AppRootView: View {
             case .externalLog(let event):
                 try? ExternalEventService.ingest(event, context: modelContext)
                 try? TrainingStore.refreshAllProgress(context: modelContext, reason: .logMutation)
+            case .skillDetail(let statKey, let openLog):
+                router.open(
+                    PendingAppDestination(
+                        skillDetail: PendingSkillDestination(statKeyRaw: statKey.rawValue, openLogSheet: openLog)
+                    )
+                )
+            case .goalDetail(let goalID):
+                router.open(.goals)
+                PendingDestinationStore.queueGoal(goalID)
             }
         }
         .preferredColorScheme(.light)
