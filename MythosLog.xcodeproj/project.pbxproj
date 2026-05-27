@@ -1,0 +1,955 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001EEF1DA3B9EE6D49E95F03 /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		02D71550162A5DF74747F077 /* ManageSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F68BC43AEA3A5AF7A500F7 /* ManageSkillsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		04B0B8C5339EFC86BE455EE0 /* RankArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549E045B5ABF1518B27118F0 /* RankArtworkView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		07E326B84A8EBEE6A9C71496 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		0811AFEEAB80192DF010F288 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B3E749B226B28FFD6C254EF /* HabitsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		10DFA06751FD7A19038CD4F2 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF805E77B318F72532C010DD /* AppRouter.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		1728F4FD12D71E1ADCD8D3DE /* TrainingRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		1933A3EC1686E7A8AB227C2D /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653EE227BF3CD8B846AB8E3C /* AppRootView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		19C31157A9C70EA0781D9B52 /* TrainingRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		26C0CEC84BCFE4803E46DF9B /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CA89B3BC9EAB18E382089C /* HistoryView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		34CD9B23B1340C77CEEE68B6 /* MythosLogApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A26C734A994699116F71229 /* MythosLogApp.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		352018AA042D95986F98072F /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB8AF36764430C22FB504BB /* OnboardingFlowView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		39B8D298183823128080B18A /* CharacterSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AAE55141336C00AD01476D /* CharacterSheetView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3A701C87CACA2BEE076E2332 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BD43C2C892D162116C715EC /* Assets.xcassets */; };
+		3A73EFF81AB80952186F8837 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C923B522DDFF79E9808068D1 /* ContentView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3AE7C62138E1339F1992965F /* HabitQuickLogRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7028EC241BF01806D897954F /* HabitQuickLogRow.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3E7CB87CCD693B29A089E9B6 /* StreakService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 493D2F793420E962EBAD0DF1 /* StreakService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3ED471C6CC20C94B9B1E3825 /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C62235583773262C92A104 /* AppIdentity.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		40271DE57E31CE1B375E6F7E /* HapticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58F4C7E7D2BB8B49849C202 /* HapticsService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		40C7660AA0F973D3682D9011 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9057FB9C2D82CE89491F37FB /* GoalsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		411CECA79CF0C782F7684EFE /* TrainingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7AF49404A52A82E92ED73A /* TrainingStore.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4324644800149CD3710CB681 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C66A6243D32FCD1D92C1819 /* DashboardView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		4FAF969D91E31C3BAE4ABFC6 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED2EF013F47F5A963E928E3 /* Foundation.framework */; };
+		52526327875F7AC47CB93560 /* WeekMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48416C9F1CC9F8D5EF5914E6 /* WeekMath.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		55481061F28A10E8A3990EF2 /* TrainingArcConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37F0D265B4D62B47FD3ACCE /* TrainingArcConfig.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		56507BED3253A126BF96A5E2 /* TrainingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56539AE7AFB8678EBCD34F20 /* TrainingModels.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		5AA37B49EBF08A7FE8BD172D /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED2EF013F47F5A963E928E3 /* Foundation.framework */; };
+		7CD155CC889C175690F5C627 /* WeeklyReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 095CA864B310FECAF52C1896 /* WeeklyReviewView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		7DF3DC9AFFAAFCCA934E6AAC /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 569E9EE18AC898B13A6A699B /* WidgetSnapshot.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		855584B7FCC6AD0E6D95FC76 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 569E9EE18AC898B13A6A699B /* WidgetSnapshot.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		857D54F0D1D91E181552D791 /* TrainingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7450C43951E154450161D4 /* TrainingTheme.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		8595D012279C8BB7F8DDDE30 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED2EF013F47F5A963E928E3 /* Foundation.framework */; };
+		85B2AED447054E0C4E3990A9 /* AuraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B050CA80A9E513675C59242 /* AuraView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		86BCACE9186E2BBC50195112 /* MythosLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197BCDB44EA7C44A3C658961 /* MythosLogTests.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		8CA2AAD13F62051887C11DC7 /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C62235583773262C92A104 /* AppIdentity.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		8EA1AD1AF51C0CEED5ED521D /* TrainingExportDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888CDCBB95F3BAC7518450F2 /* TrainingExportDocument.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		94E1F74AA9B445D8B9D9DF4E /* StatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3A982B49277FC03FB2F881 /* StatCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		95A079955E1F345A90B11C2F /* ParticleBurstView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871AAE9E3E57118456D0DBFD /* ParticleBurstView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		A8F74F552FF52E9341DAB617 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B8F1410A427B9F19795E23 /* DeepLink.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		AA5E56071A5E8CDBBDFF7D74 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837FA3AF2C10BB702C678A24 /* Formatting.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		ABA7595EC94E23F9DB47397B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A4F6FBD69F334171568AB69 /* SettingsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		AC6AEAA949D30A7014D6FA6C /* MythosLogWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AFDFD0C44B951CD55B456B2C /* MythosLogWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B459C42D7249DBBD7646DBDF /* QuickLogIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE3290E74F8AFC71CD3A370 /* QuickLogIntent.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		B7D73B8A964E8CD5F64735D3 /* HabitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		C60922A05610935539A7D553 /* ExternalEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DF705FD536363937DD87C0 /* ExternalEventService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		CFE9D6D846446D1DF4DC7EE9 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47CC4B7997FDD3D4E08AEBB /* NotificationService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		D045B8B8862BE1E4AE132C51 /* MythosLogWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4863915BDC033A7754990A65 /* MythosLogWidgets.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		D7E1234567890ABCDEF12345 /* WeeklyReviewDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E1234567890ABCDEF54321 /* WeeklyReviewDetailView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		E731D739900D99FC123748D4 /* MythosLogWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7170E3A54CFA45D8A8C87B /* MythosLogWidgetsBundle.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		EA34464CB866136169AAECFE /* TrainingArcAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481773423B31F9AEA57E6962 /* TrainingArcAppShortcuts.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		EDCCCBC96E30AB4CCB831B7A /* TrainingArcIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2611980344004C6A9CCFB8C5 /* TrainingArcIntents.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		F223C1396CA339E35BAAC47B /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837FA3AF2C10BB702C678A24 /* Formatting.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		FFEBB26E017DE3D783C401BF /* ProgressionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A133997352A6FD4658EF9449 /* ProgressionEngine.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1CC3B64A995DB3C92D82ADB5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5C8A66567AFDAD333A75D026 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6E2D5F07476064BDCDE9C174;
+			remoteInfo = MythosLog;
+		};
+		946E8338E2475A59897AA258 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5C8A66567AFDAD333A75D026 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F8F142F77665BAE700873682;
+			remoteInfo = MythosLogWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C5E07284797BCC0DFCC7DAB0 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AC6AEAA949D30A7014D6FA6C /* MythosLogWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		095CA864B310FECAF52C1896 /* WeeklyReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewView.swift; path = MythosLog/Views/WeeklyReview/WeeklyReviewView.swift; sourceTree = "<group>"; };
+		0A4F6FBD69F334171568AB69 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = MythosLog/Views/Settings/SettingsView.swift; sourceTree = "<group>"; };
+		0B3E749B226B28FFD6C254EF /* HabitsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitsView.swift; path = MythosLog/Views/Habits/HabitsView.swift; sourceTree = "<group>"; };
+		15CA89B3BC9EAB18E382089C /* HistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistoryView.swift; path = MythosLog/Views/History/HistoryView.swift; sourceTree = "<group>"; };
+		197BCDB44EA7C44A3C658961 /* MythosLogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogTests.swift; path = MythosLogTests/MythosLogTests.swift; sourceTree = "<group>"; };
+		1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingRoute.swift; path = MythosLog/Support/TrainingRoute.swift; sourceTree = "<group>"; };
+		22F68BC43AEA3A5AF7A500F7 /* ManageSkillsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ManageSkillsView.swift; path = MythosLog/Views/Skills/ManageSkillsView.swift; sourceTree = "<group>"; };
+		2611980344004C6A9CCFB8C5 /* TrainingArcIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcIntents.swift; path = MythosLog/Intents/TrainingArcIntents.swift; sourceTree = "<group>"; };
+		38DF705FD536363937DD87C0 /* ExternalEventService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExternalEventService.swift; path = MythosLog/Domain/ExternalEventService.swift; sourceTree = "<group>"; };
+		3B050CA80A9E513675C59242 /* AuraView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuraView.swift; path = MythosLog/Views/Components/AuraView.swift; sourceTree = "<group>"; };
+		3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitEditorView.swift; path = MythosLog/Views/Habits/HabitEditorView.swift; sourceTree = "<group>"; };
+		3F7450C43951E154450161D4 /* TrainingTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingTheme.swift; path = MythosLog/Theme/TrainingTheme.swift; sourceTree = "<group>"; };
+		45C62235583773262C92A104 /* AppIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppIdentity.swift; path = MythosLog/App/AppIdentity.swift; sourceTree = "<group>"; };
+		481773423B31F9AEA57E6962 /* TrainingArcAppShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcAppShortcuts.swift; path = MythosLog/Intents/TrainingArcAppShortcuts.swift; sourceTree = "<group>"; };
+		4829B7983319DEC2F30BA419 /* MythosLog.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MythosLog.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		48416C9F1CC9F8D5EF5914E6 /* WeekMath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeekMath.swift; path = MythosLog/Domain/WeekMath.swift; sourceTree = "<group>"; };
+		4863915BDC033A7754990A65 /* MythosLogWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogWidgets.swift; path = MythosLogWidgets/MythosLogWidgets.swift; sourceTree = "<group>"; };
+		493D2F793420E962EBAD0DF1 /* StreakService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreakService.swift; path = MythosLog/Domain/StreakService.swift; sourceTree = "<group>"; };
+		4A26C734A994699116F71229 /* MythosLogApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogApp.swift; path = MythosLog/MythosLogApp.swift; sourceTree = "<group>"; };
+		4A7AF49404A52A82E92ED73A /* TrainingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingStore.swift; path = MythosLog/Domain/TrainingStore.swift; sourceTree = "<group>"; };
+		549E045B5ABF1518B27118F0 /* RankArtworkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RankArtworkView.swift; path = MythosLog/Views/Components/RankArtworkView.swift; sourceTree = "<group>"; };
+		56539AE7AFB8678EBCD34F20 /* TrainingModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingModels.swift; path = MythosLog/Models/TrainingModels.swift; sourceTree = "<group>"; };
+		569E9EE18AC898B13A6A699B /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = MythosLog/Support/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		653EE227BF3CD8B846AB8E3C /* AppRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppRootView.swift; path = MythosLog/App/AppRootView.swift; sourceTree = "<group>"; };
+		6BD43C2C892D162116C715EC /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = MythosLog/Assets.xcassets; sourceTree = "<group>"; };
+		6C66A6243D32FCD1D92C1819 /* DashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DashboardView.swift; path = MythosLog/Views/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		7028EC241BF01806D897954F /* HabitQuickLogRow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitQuickLogRow.swift; path = MythosLog/Views/Components/HabitQuickLogRow.swift; sourceTree = "<group>"; };
+		837FA3AF2C10BB702C678A24 /* Formatting.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Formatting.swift; path = MythosLog/Support/Formatting.swift; sourceTree = "<group>"; };
+		871AAE9E3E57118456D0DBFD /* ParticleBurstView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleBurstView.swift; path = MythosLog/Views/Components/ParticleBurstView.swift; sourceTree = "<group>"; };
+		888CDCBB95F3BAC7518450F2 /* TrainingExportDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingExportDocument.swift; path = MythosLog/Support/TrainingExportDocument.swift; sourceTree = "<group>"; };
+		89AAE55141336C00AD01476D /* CharacterSheetView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CharacterSheetView.swift; path = MythosLog/Views/Character/CharacterSheetView.swift; sourceTree = "<group>"; };
+		8F7170E3A54CFA45D8A8C87B /* MythosLogWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogWidgetsBundle.swift; path = MythosLogWidgets/MythosLogWidgetsBundle.swift; sourceTree = "<group>"; };
+		9057FB9C2D82CE89491F37FB /* GoalsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GoalsView.swift; path = MythosLog/Views/Goals/GoalsView.swift; sourceTree = "<group>"; };
+		A133997352A6FD4658EF9449 /* ProgressionEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ProgressionEngine.swift; path = MythosLog/Domain/ProgressionEngine.swift; sourceTree = "<group>"; };
+		A37F0D265B4D62B47FD3ACCE /* TrainingArcConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingArcConfig.swift; path = MythosLog/Domain/TrainingArcConfig.swift; sourceTree = "<group>"; };
+		A58F4C7E7D2BB8B49849C202 /* HapticsService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HapticsService.swift; path = MythosLog/Domain/HapticsService.swift; sourceTree = "<group>"; };
+		ADE3290E74F8AFC71CD3A370 /* QuickLogIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QuickLogIntent.swift; path = MythosLogWidgets/QuickLogIntent.swift; sourceTree = "<group>"; };
+		AFDFD0C44B951CD55B456B2C /* MythosLogWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MythosLogWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1B8F1410A427B9F19795E23 /* DeepLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeepLink.swift; path = MythosLog/Support/DeepLink.swift; sourceTree = "<group>"; };
+		BED2EF013F47F5A963E928E3 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS12.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		C923B522DDFF79E9808068D1 /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = MythosLog/ContentView.swift; sourceTree = "<group>"; };
+		CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SurfaceCard.swift; path = MythosLog/Views/Components/SurfaceCard.swift; sourceTree = "<group>"; };
+		CE3A982B49277FC03FB2F881 /* StatCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatCard.swift; path = MythosLog/Views/Components/StatCard.swift; sourceTree = "<group>"; };
+		D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitDetailView.swift; path = MythosLog/Views/Habits/HabitDetailView.swift; sourceTree = "<group>"; };
+		D47CC4B7997FDD3D4E08AEBB /* NotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotificationService.swift; path = MythosLog/Domain/NotificationService.swift; sourceTree = "<group>"; };
+		D7E1234567890ABCDEF54321 /* WeeklyReviewDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewDetailView.swift; path = MythosLog/Views/WeeklyReview/WeeklyReviewDetailView.swift; sourceTree = "<group>"; };
+		DAB8AF36764430C22FB504BB /* OnboardingFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OnboardingFlowView.swift; path = MythosLog/Views/Onboarding/OnboardingFlowView.swift; sourceTree = "<group>"; };
+		EF805E77B318F72532C010DD /* AppRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppRouter.swift; path = MythosLog/App/AppRouter.swift; sourceTree = "<group>"; };
+		F9264404321E24DACA79BC5E /* QuickLogQueue.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QuickLogQueue.swift; path = MythosLog/Support/QuickLogQueue.swift; sourceTree = "<group>"; };
+		F988C3F3C585C40B3445CD7C /* MythosLogTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MythosLogTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3F9459D1664FBDD0E6086A45 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4FAF969D91E31C3BAE4ABFC6 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5280479A115801D377E888DD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5AA37B49EBF08A7FE8BD172D /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D6EBBFBEB01E8E8BCBF5D34B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8595D012279C8BB7F8DDDE30 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01D62D0FC961904002B8C2FC /* App */ = {
+			isa = PBXGroup;
+			children = (
+				45C62235583773262C92A104 /* AppIdentity.swift */,
+				653EE227BF3CD8B846AB8E3C /* AppRootView.swift */,
+				EF805E77B318F72532C010DD /* AppRouter.swift */,
+			);
+			name = App;
+			sourceTree = "<group>";
+		};
+		06B8E252BFFD2635E1917FA1 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				6C66A6243D32FCD1D92C1819 /* DashboardView.swift */,
+			);
+			name = Dashboard;
+			sourceTree = "<group>";
+		};
+		06D6C6665803DE3CAB965C24 /* Habits */ = {
+			isa = PBXGroup;
+			children = (
+				D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */,
+				3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */,
+				0B3E749B226B28FFD6C254EF /* HabitsView.swift */,
+			);
+			name = Habits;
+			sourceTree = "<group>";
+		};
+		176ADFD77905854C06200FF1 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				15CA89B3BC9EAB18E382089C /* HistoryView.swift */,
+			);
+			name = History;
+			sourceTree = "<group>";
+		};
+		25E144B0B61E818D147214C7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				6E1D5C8979798E283CF154D4 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		2FE0D65C0F59D621ADAC32A3 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				481773423B31F9AEA57E6962 /* TrainingArcAppShortcuts.swift */,
+				2611980344004C6A9CCFB8C5 /* TrainingArcIntents.swift */,
+			);
+			name = Intents;
+			sourceTree = "<group>";
+		};
+		3F55F36894FC39A30AFF3435 /* WeeklyReview */ = {
+			isa = PBXGroup;
+			children = (
+				095CA864B310FECAF52C1896 /* WeeklyReviewView.swift */,
+				D7E1234567890ABCDEF54321 /* WeeklyReviewDetailView.swift */,
+			);
+			name = WeeklyReview;
+			sourceTree = "<group>";
+		};
+		43A614FC87F46DF2C972BC02 /* MythosLogWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				4863915BDC033A7754990A65 /* MythosLogWidgets.swift */,
+				8F7170E3A54CFA45D8A8C87B /* MythosLogWidgetsBundle.swift */,
+				ADE3290E74F8AFC71CD3A370 /* QuickLogIntent.swift */,
+			);
+			name = MythosLogWidgets;
+			sourceTree = "<group>";
+		};
+		48845E02BB2AAD3884DDEBEB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4829B7983319DEC2F30BA419 /* MythosLog.app */,
+				AFDFD0C44B951CD55B456B2C /* MythosLogWidgets.appex */,
+				F988C3F3C585C40B3445CD7C /* MythosLogTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		63836A795F07CE72FB5D5423 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F0DDBAC7A59894FDFCF571E7 /* Character */,
+				BF8E7A0CE3FC0CA68E67C53F /* Components */,
+				06B8E252BFFD2635E1917FA1 /* Dashboard */,
+				DEA8B17299B7D1FEC89351F7 /* Goals */,
+				06D6C6665803DE3CAB965C24 /* Habits */,
+				176ADFD77905854C06200FF1 /* History */,
+				F57DBD73BB92A27EB45C31B5 /* Onboarding */,
+				D41DA04F1DB2C912E34D5235 /* Settings */,
+				F925874C9AAE0B01AEFD4810 /* Skills */,
+				3F55F36894FC39A30AFF3435 /* WeeklyReview */,
+			);
+			name = Views;
+			sourceTree = "<group>";
+		};
+		6E1D5C8979798E283CF154D4 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				BED2EF013F47F5A963E928E3 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		792F2B15ABD4DC8B572473DA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				56539AE7AFB8678EBCD34F20 /* TrainingModels.swift */,
+			);
+			name = Models;
+			sourceTree = "<group>";
+		};
+		BA97EA0105F78DE39FE5285F = {
+			isa = PBXGroup;
+			children = (
+				48845E02BB2AAD3884DDEBEB /* Products */,
+				25E144B0B61E818D147214C7 /* Frameworks */,
+				CB82B485D6C8C5A8092AAAF2 /* MythosLog */,
+				43A614FC87F46DF2C972BC02 /* MythosLogWidgets */,
+				C68AC85254ECE19C1253B13A /* MythosLogTests */,
+			);
+			sourceTree = "<group>";
+		};
+		BD4C22256CEAA96DBF324521 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				3F7450C43951E154450161D4 /* TrainingTheme.swift */,
+			);
+			name = Theme;
+			sourceTree = "<group>";
+		};
+		BF8E7A0CE3FC0CA68E67C53F /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				3B050CA80A9E513675C59242 /* AuraView.swift */,
+				7028EC241BF01806D897954F /* HabitQuickLogRow.swift */,
+				871AAE9E3E57118456D0DBFD /* ParticleBurstView.swift */,
+				549E045B5ABF1518B27118F0 /* RankArtworkView.swift */,
+				CE3A982B49277FC03FB2F881 /* StatCard.swift */,
+				CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */,
+			);
+			name = Components;
+			sourceTree = "<group>";
+		};
+		C68AC85254ECE19C1253B13A /* MythosLogTests */ = {
+			isa = PBXGroup;
+			children = (
+				197BCDB44EA7C44A3C658961 /* MythosLogTests.swift */,
+			);
+			name = MythosLogTests;
+			sourceTree = "<group>";
+		};
+		CB82B485D6C8C5A8092AAAF2 /* MythosLog */ = {
+			isa = PBXGroup;
+			children = (
+				01D62D0FC961904002B8C2FC /* App */,
+				C923B522DDFF79E9808068D1 /* ContentView.swift */,
+				DDDCAEABDCDB714CCA3432A0 /* Domain */,
+				2FE0D65C0F59D621ADAC32A3 /* Intents */,
+				792F2B15ABD4DC8B572473DA /* Models */,
+				4A26C734A994699116F71229 /* MythosLogApp.swift */,
+				FA86FE8399F04C7D667FD603 /* Support */,
+				BD4C22256CEAA96DBF324521 /* Theme */,
+				63836A795F07CE72FB5D5423 /* Views */,
+				6BD43C2C892D162116C715EC /* Assets.xcassets */,
+			);
+			name = MythosLog;
+			sourceTree = "<group>";
+		};
+		D41DA04F1DB2C912E34D5235 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				0A4F6FBD69F334171568AB69 /* SettingsView.swift */,
+			);
+			name = Settings;
+			sourceTree = "<group>";
+		};
+		DDDCAEABDCDB714CCA3432A0 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				38DF705FD536363937DD87C0 /* ExternalEventService.swift */,
+				A58F4C7E7D2BB8B49849C202 /* HapticsService.swift */,
+				D47CC4B7997FDD3D4E08AEBB /* NotificationService.swift */,
+				A133997352A6FD4658EF9449 /* ProgressionEngine.swift */,
+				493D2F793420E962EBAD0DF1 /* StreakService.swift */,
+				A37F0D265B4D62B47FD3ACCE /* TrainingArcConfig.swift */,
+				4A7AF49404A52A82E92ED73A /* TrainingStore.swift */,
+				48416C9F1CC9F8D5EF5914E6 /* WeekMath.swift */,
+			);
+			name = Domain;
+			sourceTree = "<group>";
+		};
+		DEA8B17299B7D1FEC89351F7 /* Goals */ = {
+			isa = PBXGroup;
+			children = (
+				9057FB9C2D82CE89491F37FB /* GoalsView.swift */,
+			);
+			name = Goals;
+			sourceTree = "<group>";
+		};
+		F0DDBAC7A59894FDFCF571E7 /* Character */ = {
+			isa = PBXGroup;
+			children = (
+				89AAE55141336C00AD01476D /* CharacterSheetView.swift */,
+			);
+			name = Character;
+			sourceTree = "<group>";
+		};
+		F57DBD73BB92A27EB45C31B5 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				DAB8AF36764430C22FB504BB /* OnboardingFlowView.swift */,
+			);
+			name = Onboarding;
+			sourceTree = "<group>";
+		};
+		F925874C9AAE0B01AEFD4810 /* Skills */ = {
+			isa = PBXGroup;
+			children = (
+				22F68BC43AEA3A5AF7A500F7 /* ManageSkillsView.swift */,
+			);
+			name = Skills;
+			sourceTree = "<group>";
+		};
+		FA86FE8399F04C7D667FD603 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				B1B8F1410A427B9F19795E23 /* DeepLink.swift */,
+				837FA3AF2C10BB702C678A24 /* Formatting.swift */,
+				F9264404321E24DACA79BC5E /* QuickLogQueue.swift */,
+				888CDCBB95F3BAC7518450F2 /* TrainingExportDocument.swift */,
+				1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */,
+				569E9EE18AC898B13A6A699B /* WidgetSnapshot.swift */,
+			);
+			name = Support;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		496A9DB85B301D2CDF80465F /* MythosLogTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6AD80D5517A811CC5FDBCF6B /* Build configuration list for PBXNativeTarget "MythosLogTests" */;
+			buildPhases = (
+				D982E8FDB18B8C01A77FE28B /* Sources */,
+				3F9459D1664FBDD0E6086A45 /* Frameworks */,
+				E105D682953E92C39B370E65 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4930F892C735E24B9551667A /* PBXTargetDependency */,
+			);
+			name = MythosLogTests;
+			productName = MythosLogTests;
+			productReference = F988C3F3C585C40B3445CD7C /* MythosLogTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		6E2D5F07476064BDCDE9C174 /* MythosLog */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 69D5F1B05BFEE33E7D79A787 /* Build configuration list for PBXNativeTarget "MythosLog" */;
+			buildPhases = (
+				FF4787B2681E93DCF57AB132 /* Sources */,
+				5280479A115801D377E888DD /* Frameworks */,
+				A0715DECEABD6CF56FBEB78E /* Resources */,
+				C5E07284797BCC0DFCC7DAB0 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C4BD58DC86099A0474E98125 /* PBXTargetDependency */,
+			);
+			name = MythosLog;
+			productName = MythosLog;
+			productReference = 4829B7983319DEC2F30BA419 /* MythosLog.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F8F142F77665BAE700873682 /* MythosLogWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 92F0F5B9B3EE6ABC84C8C8B5 /* Build configuration list for PBXNativeTarget "MythosLogWidgets" */;
+			buildPhases = (
+				A8056D2A28301CA2DEE1D35B /* Sources */,
+				D6EBBFBEB01E8E8BCBF5D34B /* Frameworks */,
+				E729B03075242AD6B1B6FC2E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MythosLogWidgets;
+			productName = MythosLogWidgets;
+			productReference = AFDFD0C44B951CD55B456B2C /* MythosLogWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5C8A66567AFDAD333A75D026 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 1700;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					6E2D5F07476064BDCDE9C174 = {
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+							com.apple.HealthKit = {
+								enabled = 1;
+							};
+							com.apple.Push = {
+								enabled = 1;
+							};
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
+					};
+				};
+			};
+			buildConfigurationList = C619D6A00FCC587F7365D672 /* Build configuration list for PBXProject "MythosLog" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BA97EA0105F78DE39FE5285F;
+			productRefGroup = 48845E02BB2AAD3884DDEBEB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6E2D5F07476064BDCDE9C174 /* MythosLog */,
+				F8F142F77665BAE700873682 /* MythosLogWidgets */,
+				496A9DB85B301D2CDF80465F /* MythosLogTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A0715DECEABD6CF56FBEB78E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A701C87CACA2BEE076E2332 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E105D682953E92C39B370E65 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E729B03075242AD6B1B6FC2E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A8056D2A28301CA2DEE1D35B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CA2AAD13F62051887C11DC7 /* AppIdentity.swift in Sources */,
+				AA5E56071A5E8CDBBDFF7D74 /* Formatting.swift in Sources */,
+				0811AFEEAB80192DF010F288 /* QuickLogQueue.swift in Sources */,
+				1728F4FD12D71E1ADCD8D3DE /* TrainingRoute.swift in Sources */,
+				7DF3DC9AFFAAFCCA934E6AAC /* WidgetSnapshot.swift in Sources */,
+				D045B8B8862BE1E4AE132C51 /* MythosLogWidgets.swift in Sources */,
+				E731D739900D99FC123748D4 /* MythosLogWidgetsBundle.swift in Sources */,
+				B459C42D7249DBBD7646DBDF /* QuickLogIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D982E8FDB18B8C01A77FE28B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				86BCACE9186E2BBC50195112 /* MythosLogTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF4787B2681E93DCF57AB132 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3ED471C6CC20C94B9B1E3825 /* AppIdentity.swift in Sources */,
+				1933A3EC1686E7A8AB227C2D /* AppRootView.swift in Sources */,
+				10DFA06751FD7A19038CD4F2 /* AppRouter.swift in Sources */,
+				3A73EFF81AB80952186F8837 /* ContentView.swift in Sources */,
+				C60922A05610935539A7D553 /* ExternalEventService.swift in Sources */,
+				40271DE57E31CE1B375E6F7E /* HapticsService.swift in Sources */,
+				CFE9D6D846446D1DF4DC7EE9 /* NotificationService.swift in Sources */,
+				FFEBB26E017DE3D783C401BF /* ProgressionEngine.swift in Sources */,
+				3E7CB87CCD693B29A089E9B6 /* StreakService.swift in Sources */,
+				55481061F28A10E8A3990EF2 /* TrainingArcConfig.swift in Sources */,
+				411CECA79CF0C782F7684EFE /* TrainingStore.swift in Sources */,
+				52526327875F7AC47CB93560 /* WeekMath.swift in Sources */,
+				EA34464CB866136169AAECFE /* TrainingArcAppShortcuts.swift in Sources */,
+				EDCCCBC96E30AB4CCB831B7A /* TrainingArcIntents.swift in Sources */,
+				56507BED3253A126BF96A5E2 /* TrainingModels.swift in Sources */,
+				34CD9B23B1340C77CEEE68B6 /* MythosLogApp.swift in Sources */,
+				A8F74F552FF52E9341DAB617 /* DeepLink.swift in Sources */,
+				F223C1396CA339E35BAAC47B /* Formatting.swift in Sources */,
+				07E326B84A8EBEE6A9C71496 /* QuickLogQueue.swift in Sources */,
+				8EA1AD1AF51C0CEED5ED521D /* TrainingExportDocument.swift in Sources */,
+				19C31157A9C70EA0781D9B52 /* TrainingRoute.swift in Sources */,
+				855584B7FCC6AD0E6D95FC76 /* WidgetSnapshot.swift in Sources */,
+				857D54F0D1D91E181552D791 /* TrainingTheme.swift in Sources */,
+				39B8D298183823128080B18A /* CharacterSheetView.swift in Sources */,
+				85B2AED447054E0C4E3990A9 /* AuraView.swift in Sources */,
+				3AE7C62138E1339F1992965F /* HabitQuickLogRow.swift in Sources */,
+				95A079955E1F345A90B11C2F /* ParticleBurstView.swift in Sources */,
+				04B0B8C5339EFC86BE455EE0 /* RankArtworkView.swift in Sources */,
+				94E1F74AA9B445D8B9D9DF4E /* StatCard.swift in Sources */,
+				001EEF1DA3B9EE6D49E95F03 /* SurfaceCard.swift in Sources */,
+				4324644800149CD3710CB681 /* DashboardView.swift in Sources */,
+				40C7660AA0F973D3682D9011 /* GoalsView.swift in Sources */,
+				B7D73B8A964E8CD5F64735D3 /* HabitDetailView.swift in Sources */,
+				4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */,
+				0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */,
+				26C0CEC84BCFE4803E46DF9B /* HistoryView.swift in Sources */,
+				352018AA042D95986F98072F /* OnboardingFlowView.swift in Sources */,
+				ABA7595EC94E23F9DB47397B /* SettingsView.swift in Sources */,
+				02D71550162A5DF74747F077 /* ManageSkillsView.swift in Sources */,
+				7CD155CC889C175690F5C627 /* WeeklyReviewView.swift in Sources */,
+				D7E1234567890ABCDEF12345 /* WeeklyReviewDetailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4930F892C735E24B9551667A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MythosLog;
+			target = 6E2D5F07476064BDCDE9C174 /* MythosLog */;
+			targetProxy = 1CC3B64A995DB3C92D82ADB5 /* PBXContainerItemProxy */;
+		};
+		C4BD58DC86099A0474E98125 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MythosLogWidgets;
+			target = F8F142F77665BAE700873682 /* MythosLogWidgets */;
+			targetProxy = 946E8338E2475A59897AA258 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4F9BD94012B3D4159D332EF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MythosLog/MythosLog.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MythosLog/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLog;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		65B74F9192242CF119191BDA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MythosLogWidgets/MythosLogWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MythosLogWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLog.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		690A6D6A79934F8C6D1E9A7C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MythosLog.app/MythosLog";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		9666F2BBDE516B0143AF502F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 5865Y52YG7;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AE65A0476A7292DC38B4F6E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MythosLogWidgets/MythosLogWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MythosLogWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLog.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		B51D7A0EAF48BF407FD332C9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5865Y52YG7;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BAA48F874BF30B38ED3FA2D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLogTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MythosLog.app/MythosLog";
+			};
+			name = Debug;
+		};
+		CF300C2B283F8CFDE90DF290 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MythosLog/MythosLog.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MythosLog/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.curateddesign.MythosLog;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		69D5F1B05BFEE33E7D79A787 /* Build configuration list for PBXNativeTarget "MythosLog" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF300C2B283F8CFDE90DF290 /* Release */,
+				4F9BD94012B3D4159D332EF8 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6AD80D5517A811CC5FDBCF6B /* Build configuration list for PBXNativeTarget "MythosLogTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				690A6D6A79934F8C6D1E9A7C /* Release */,
+				BAA48F874BF30B38ED3FA2D9 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		92F0F5B9B3EE6ABC84C8C8B5 /* Build configuration list for PBXNativeTarget "MythosLogWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				65B74F9192242CF119191BDA /* Release */,
+				AE65A0476A7292DC38B4F6E6 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C619D6A00FCC587F7365D672 /* Build configuration list for PBXProject "MythosLog" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9666F2BBDE516B0143AF502F /* Debug */,
+				B51D7A0EAF48BF407FD332C9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5C8A66567AFDAD333A75D026 /* Project object */;
+}

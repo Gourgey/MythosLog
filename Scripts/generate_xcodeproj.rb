@@ -5,9 +5,9 @@ require "fileutils"
 require "xcodeproj"
 
 ROOT = File.expand_path("..", __dir__)
-PROJECT_PATH = File.join(ROOT, "ArcLog.xcodeproj")
-APP_NAME = "ArcLog"
-WIDGET_NAME = "ArcLogWidgets"
+PROJECT_PATH = File.join(ROOT, "MythosLog.xcodeproj")
+APP_NAME = "MythosLog"
+WIDGET_NAME = "MythosLogWidgets"
 TEAM_ID = "5865Y52YG7"
 IOS_DEPLOYMENT_TARGET = "17.0"
 
@@ -59,9 +59,9 @@ def configure_app_target(target)
 
   target.build_configurations.each do |config|
     settings = config.build_settings
-    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.ArcLog"
-    settings["INFOPLIST_FILE"] = "ArcLog/Info.plist"
-    settings["CODE_SIGN_ENTITLEMENTS"] = "ArcLog/ArcLog.entitlements"
+    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.MythosLog"
+    settings["INFOPLIST_FILE"] = "MythosLog/Info.plist"
+    settings["CODE_SIGN_ENTITLEMENTS"] = "MythosLog/MythosLog.entitlements"
     settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon"
     settings["ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME"] = "AccentColor"
     settings["CODE_SIGN_STYLE"] = "Automatic"
@@ -76,9 +76,9 @@ end
 def configure_widget_target(target)
   target.build_configurations.each do |config|
     settings = config.build_settings
-    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.ArcLog.widgets"
-    settings["INFOPLIST_FILE"] = "ArcLogWidgets/Info.plist"
-    settings["CODE_SIGN_ENTITLEMENTS"] = "ArcLogWidgets/ArcLogWidgets.entitlements"
+    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.MythosLog.widgets"
+    settings["INFOPLIST_FILE"] = "MythosLogWidgets/Info.plist"
+    settings["CODE_SIGN_ENTITLEMENTS"] = "MythosLogWidgets/MythosLogWidgets.entitlements"
     settings["CODE_SIGN_STYLE"] = "Automatic"
     settings["CURRENT_PROJECT_VERSION"] = "1"
     settings["MARKETING_VERSION"] = "1.0"
@@ -93,7 +93,7 @@ end
 def configure_test_target(target)
   target.build_configurations.each do |config|
     settings = config.build_settings
-    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.ArcLogTests"
+    settings["PRODUCT_BUNDLE_IDENTIFIER"] = "studio.curateddesign.MythosLogTests"
     settings["CODE_SIGN_STYLE"] = "Automatic"
     settings["CURRENT_PROJECT_VERSION"] = "1"
     settings["MARKETING_VERSION"] = "1.0"
@@ -111,28 +111,29 @@ configure_project(project)
 
 app_target = project.new_target(:application, APP_NAME, :ios, IOS_DEPLOYMENT_TARGET)
 widget_target = project.new_target(:app_extension, WIDGET_NAME, :ios, IOS_DEPLOYMENT_TARGET)
-test_target = project.new_target(:unit_test_bundle, "ArcLogTests", :ios, IOS_DEPLOYMENT_TARGET)
+test_target = project.new_target(:unit_test_bundle, "MythosLogTests", :ios, IOS_DEPLOYMENT_TARGET)
 
 configure_app_target(app_target)
 configure_widget_target(widget_target)
 configure_test_target(test_target)
 
-app_sources = Dir.glob(File.join(ROOT, "ArcLog/**/*.swift"))
+app_sources = Dir.glob(File.join(ROOT, "MythosLog/**/*.swift"))
                 .map { |path| path.delete_prefix("#{ROOT}/") }
                 .sort
-app_resources = ["ArcLog/Assets.xcassets"]
+app_resources = ["MythosLog/Assets.xcassets"]
 
 widget_sources = (
-  Dir.glob(File.join(ROOT, "ArcLogWidgets/**/*.swift")).map { |path| path.delete_prefix("#{ROOT}/") } +
+  Dir.glob(File.join(ROOT, "MythosLogWidgets/**/*.swift")).map { |path| path.delete_prefix("#{ROOT}/") } +
   [
-    "ArcLog/App/AppIdentity.swift",
-    "ArcLog/Support/Formatting.swift",
-    "ArcLog/Support/TrainingRoute.swift",
-    "ArcLog/Support/WidgetSnapshot.swift"
+    "MythosLog/App/AppIdentity.swift",
+    "MythosLog/Support/Formatting.swift",
+    "MythosLog/Support/TrainingRoute.swift",
+    "MythosLog/Support/WidgetSnapshot.swift",
+    "MythosLog/Support/QuickLogQueue.swift"
   ]
 ).uniq.sort
 
-test_sources = Dir.glob(File.join(ROOT, "ArcLogTests/**/*.swift"))
+test_sources = Dir.glob(File.join(ROOT, "MythosLogTests/**/*.swift"))
                 .map { |path| path.delete_prefix("#{ROOT}/") }
                 .sort
 
