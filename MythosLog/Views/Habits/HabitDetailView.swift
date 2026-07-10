@@ -32,48 +32,74 @@ struct HabitDetailView: View {
     var body: some View {
         List {
             Section {
-                SurfaceCard(accent: accent) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(habit.name)
-                            .font(.system(.title2, design: .rounded).weight(.bold))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                V4Card(accent: accent) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let statName = habit.statDomain?.name {
+                            Text(statName.uppercased())
+                                .font(.caption.weight(.heavy))
+                                .tracking(1.8)
+                                .foregroundStyle(accent)
+                        }
+                        V4SerifTitle(text: habit.name, size: 28)
                         Text(habit.notes.isEmpty ? "No notes yet." : habit.notes)
                             .foregroundStyle(TrainingTheme.textSecondary)
-                        HStack {
-                            Label("Current streak \(streak.current)", systemImage: "flame.fill")
-                            Spacer()
-                            Label("Longest \(streak.longest)", systemImage: "flag.pattern.checkered")
+                            .font(.subheadline)
+
+                        Divider().overlay(TrainingTheme.border.opacity(0.5))
+
+                        HStack(alignment: .top, spacing: 0) {
+                            V4StatTile(value: V4Style.displayNumber(streak.current), label: "Current streak", tint: accent)
+                            V4StatTile(value: V4Style.displayNumber(streak.longest), label: "Longest", tint: TrainingTheme.textPrimary)
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
                     }
                 }
                 .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
 
-            Section("Quick Log") {
+            Section {
                 HabitQuickActionButtons(habit: habit, accent: accent) { value in
                     logDraft = LogEntryDraft(habit: habit, value: value)
                 }
-                Button("Custom Log") {
+                Button {
                     logDraft = LogEntryDraft(habit: habit)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "pencil")
+                            .font(.caption.weight(.heavy))
+                        Text("Custom Log")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(accent.opacity(0.12)))
                 }
-                .buttonStyle(.bordered)
-                .tint(accent)
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("QUICK LOG")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
             }
 
-            Section("Recent Logs") {
+            Section {
                 if recentLogs.isEmpty {
                     Text("No logs yet.")
                         .foregroundStyle(TrainingTheme.textSecondary)
+                        .font(.subheadline)
                 } else {
                     ForEach(recentLogs) { log in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(MetricFormatting.metric(log.numericValue, unit: habit.unitLabel))
+                                    .font(.system(.subheadline, design: .serif).weight(.regular))
                                     .foregroundStyle(TrainingTheme.textPrimary)
+                                    .monospacedDigit()
                                 Spacer()
                                 Text(log.date, style: .date)
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(TrainingTheme.textSecondary)
                             }
                             if !log.note.isEmpty {
@@ -83,7 +109,7 @@ struct HabitDetailView: View {
                             }
                             if let sessionType = log.sessionType {
                                 Text(sessionType)
-                                    .font(.caption2.weight(.semibold))
+                                    .font(.caption2.weight(.bold))
                                     .foregroundStyle(accent)
                             }
                         }
@@ -96,11 +122,17 @@ struct HabitDetailView: View {
                         }
                     }
                 }
+            } header: {
+                Text("RECENT LOGS")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
             }
         }
         .scrollContentBackground(.hidden)
         .background(TrainingTheme.background.ignoresSafeArea())
         .navigationTitle(habit.name)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Button("Edit") {
                 showingEditor = true
@@ -169,95 +201,212 @@ struct LogEntrySheetView: View {
         isReadingHabit ? "Book title (optional)" : "Session type (optional)"
     }
 
+    private var skillName: String {
+        habit.statDomain?.name ?? "Skill"
+    }
+
+    private var siblingHabits: [Habit] {
+        guard let stat = habit.statDomain else { return [habit] }
+        let active = TrainingStore.activeHabits(for: stat)
+        return active.isEmpty ? [habit] : active
+    }
+
+    @ViewBuilder
+    private func habitEyebrow(showsChevron: Bool) -> some View {
+        HStack(spacing: 8) {
+            if let icon = habit.statDomain?.iconName {
+                Image(systemName: icon)
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(accent)
+            }
+            Text("\(skillName.uppercased()) · \(habit.name.uppercased())")
+                .font(.caption.weight(.heavy))
+                .tracking(1.6)
+                .foregroundStyle(accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            if showsChevron {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(accent)
+            }
+        }
+    }
+
+    private func selectHabit(_ newHabit: Habit) {
+        guard newHabit.id != habit.id else { return }
+        workingDraft.habit = newHabit
+        workingDraft.value = newHabit.measurementType.defaultIncrement
+    }
+
+    private var screenTitle: String {
+        habit.measurementType == .booleanSession ? "Log a Session" : "Log Progress"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SurfaceCard(accent: accent) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(habit.name)
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .foregroundStyle(TrainingTheme.textPrimary)
-
-                        Text("Choose the date and time for this entry, then confirm it with Enter.")
-                            .font(.subheadline)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-
-                        HStack(spacing: 12) {
-                            DatePicker("Date", selection: $workingDraft.date, displayedComponents: [.date])
-                                .datePickerStyle(.compact)
-                            DatePicker("Time", selection: $workingDraft.date, displayedComponents: [.hourAndMinute])
-                                .datePickerStyle(.compact)
-                        }
-                    }
-                }
-
-                SurfaceCard(accent: accent) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        if habit.measurementType != .booleanSession {
-                            HStack {
-                                Text("Amount")
-                                    .foregroundStyle(TrainingTheme.textPrimary)
-                                Spacer()
-                                TextField("Amount", value: $workingDraft.value, format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .focused($focusedField, equals: .amount)
-                                    .frame(maxWidth: 140)
-                            }
-
-                            HStack(spacing: 10) {
-                                ForEach(habit.measurementType.quickStepValues, id: \.self) { step in
-                                    Button("+\(Int(step))") {
-                                        workingDraft.value += step
+                VStack(alignment: .leading, spacing: 12) {
+                    if siblingHabits.count > 1 {
+                        Menu {
+                            ForEach(siblingHabits) { option in
+                                Button {
+                                    selectHabit(option)
+                                } label: {
+                                    if option.id == habit.id {
+                                        Label(option.name, systemImage: "checkmark")
+                                    } else {
+                                        Text(option.name)
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(accent)
                                 }
                             }
-                        } else {
-                            Label("This will log one completed session.", systemImage: "checkmark.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(accent)
+                        } label: {
+                            habitEyebrow(showsChevron: true)
                         }
-
-                        TextField(sessionTypePlaceholder, text: $workingDraft.sessionType)
-                            .focused($focusedField, equals: .sessionType)
-                            .textInputAutocapitalization(.words)
-                            .submitLabel(.next)
-
-                        TextField("Notes (optional)", text: $workingDraft.note, axis: .vertical)
-                            .focused($focusedField, equals: .note)
-                            .lineLimit(2...4)
+                        .buttonStyle(.plain)
+                    } else {
+                        habitEyebrow(showsChevron: false)
                     }
+
+                    V4SerifTitle(text: screenTitle, size: 34)
+                }
+                .padding(.top, 8)
+
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                logFieldRow(label: "WHEN") {
+                    DatePicker("", selection: $workingDraft.date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                }
+
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                if habit.measurementType != .booleanSession {
+                    logFieldRow(label: "AMOUNT") {
+                        HStack(spacing: 8) {
+                            TextField("0", value: $workingDraft.value, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .font(.system(.title3, design: .serif).weight(.regular))
+                                .focused($focusedField, equals: .amount)
+                                .frame(maxWidth: 120)
+                            Text(habit.unitLabel)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(TrainingTheme.textSecondary)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(habit.measurementType.quickStepValues(weeklyBaseline: habit.statDomain?.currentBaseline ?? 0), id: \.self) { step in
+                            Button {
+                                workingDraft.value += step
+                            } label: {
+                                Text("+\(Int(step))")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(accent)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        Capsule().fill(accent.opacity(0.10))
+                                    )
+                                    .overlay(
+                                        Capsule().strokeBorder(accent.opacity(0.25), lineWidth: 0.8)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Spacer()
+                    }
+
+                    Divider()
+                        .overlay(TrainingTheme.border.opacity(0.5))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("NOTE")
+                        .font(.caption.weight(.heavy))
+                        .tracking(1.6)
+                        .foregroundStyle(TrainingTheme.textMuted)
+
+                    TextField(sessionTypePlaceholder, text: $workingDraft.sessionType)
+                        .focused($focusedField, equals: .sessionType)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.next)
+                        .font(.system(.subheadline, design: .serif))
+                        .italic()
+
+                    TextField("Notes (optional)", text: $workingDraft.note, axis: .vertical)
+                        .focused($focusedField, equals: .note)
+                        .lineLimit(2...4)
+                        .font(.system(.subheadline, design: .serif))
+                        .italic()
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
         .scrollContentBackground(.hidden)
-        .background(TrainingTheme.background.ignoresSafeArea())
+        .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                Divider()
-                    .overlay(TrainingTheme.border.opacity(0.4))
-
-                Button("Enter") {
+            VStack(spacing: 10) {
+                Button {
                     save()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark")
+                            .font(.subheadline.weight(.heavy))
+                        Text(habit.measurementType == .booleanSession ? "Complete Session" : "Save Log")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        Capsule().fill(accent)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 10)
+                .buttonStyle(.plain)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Save for later")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule().fill(Color(red: 0.97, green: 0.96, blue: 0.94))
+                        )
+                        .overlay(
+                            Capsule().strokeBorder(TrainingTheme.border.opacity(0.7), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
-            .background(TrainingTheme.background.opacity(0.96))
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .background(
+                Color(red: 0.985, green: 0.975, blue: 0.955).opacity(0.98)
+            )
         }
-        .navigationTitle(habit.measurementType == .booleanSession ? "Log Session" : "Log Progress")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Close") {
+                Button {
                     dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color(red: 0.93, green: 0.92, blue: 0.89)))
                 }
             }
 
@@ -277,6 +426,20 @@ struct LogEntrySheetView: View {
             }
         }
     }
+
+    private func logFieldRow<Content: View>(label: String, @ViewBuilder trailing: () -> Content) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .font(.caption.weight(.heavy))
+                .tracking(1.6)
+                .foregroundStyle(TrainingTheme.textMuted)
+                .frame(width: 92, alignment: .leading)
+            Spacer(minLength: 0)
+            trailing()
+        }
+        .padding(.vertical, 4)
+    }
+
 
     private func save() {
         if habit.measurementType == .booleanSession {

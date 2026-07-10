@@ -1,11 +1,19 @@
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(UIKit)
+import UIKit
+#endif
 
 private enum DashboardTopMenuState {
     case none
     case layout
     case insights
+}
+
+private struct IdentifiableStat: Identifiable {
+    let stat: StatDomain
+    var id: UUID { stat.id }
 }
 
 struct DashboardView: View {
@@ -22,11 +30,17 @@ struct DashboardView: View {
     @State private var isSyncingHealth = false
     @State private var healthStatusMessage = ""
     @State private var isShowingHealthStatus = false
+    @State private var habitPickerStat: IdentifiableStat?
+    @State private var unmatchedStat: IdentifiableStat?
+    @State private var showingRankReview = false
+    @State private var showingStatsSheet = false
     private let compactGridColumnCount = 2
     private let compactGridSpacing: CGFloat = 16
     private let gameGridColumnCount = 3
     private let gameGridSpacing: CGFloat = 4
-    private let gameGridRowSpacing: CGFloat = 36
+    private let gameGridRowSpacing: CGFloat = 12
+    private let gameGridFocusedScale: CGFloat = 1.0
+    private let gameGridRestingScale: CGFloat = 0.92
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -41,6 +55,10 @@ struct DashboardView: View {
                 }
                 return $0.sortOrder < $1.sortOrder
             }
+    }
+
+    private var pendingRankChanges: [StatDomain] {
+        activeStats.filter { $0.pendingRankChange != nil }
     }
 
     private var dashboardLayoutMode: DashboardLayoutMode {
@@ -70,6 +88,40 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        dashboardMainContent
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
+            .task {
+                try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
+                try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
+            }
+            .modifier(
+                DashboardPresentationModifier(
+                    presentedLogDraft: $presentedLogDraft,
+                    presentedInsight: $presentedInsight,
+                    isShowingHealthStatus: $isShowingHealthStatus,
+                    healthStatusMessage: healthStatusMessage,
+                    habitPickerStat: $habitPickerStat,
+                    unmatchedStat: $unmatchedStat,
+                    settings: settings,
+                    modelContext: modelContext,
+                    onLogSaved: saveLog
+                )
+            )
+            .sheet(isPresented: $showingRankReview) {
+                NavigationStack {
+                    RankChangesReviewView(stats: pendingRankChanges) { stat in
+                        showingRankReview = false
+                        openDetail(for: stat)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingStatsSheet) {
+                statsSheet
+            }
+    }
+
+    private var dashboardMainContent: some View {
         ZStack {
             dashboardBackdrop
 
@@ -84,9 +136,9 @@ struct DashboardView: View {
                     if activeStats.isEmpty {
                         dashboardEmptyState
                     } else {
-                        dashboardSectionsView
-                            .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
-
+                        // Skills-only first view — the circles are the priority.
+                        // Standings, rank & charge, and goals live in the "This
+                        // week" sheet opened from the header chip.
                         switch displayedLayoutMode {
                         case .detailedCards:
                             detailedDashboard
@@ -95,64 +147,80 @@ struct DashboardView: View {
                         case .gameGrid:
                             gameGridDashboard
                         }
+
+                        if !pendingRankChanges.isEmpty {
+                            rankReviewBanner
+                                .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
+                        }
                     }
                 }
                 .padding(.horizontal, displayedLayoutMode == .gameGrid ? 2 : 16)
-                .padding(.top, 16)
-                .padding(.bottom, 32)
+                .padding(.top, 4)
+                .padding(.bottom, 118)
             }
+            .coordinateSpace(name: "dashboardScroll")
         }
-        .navigationTitle("Dashboard")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
-        }
-        .sheet(item: $presentedLogDraft) { draft in
-            NavigationStack {
-                LogEntrySheetView(
-                    draft: draft,
-                    accent: draft.habit.statDomain.map { TrainingArcConfig.color(for: $0.colorToken) } ?? .accentColor,
-                    onSave: { submittedDraft in
-                        _ = try? TrainingStore.log(
-                            habit: submittedDraft.habit,
-                            value: submittedDraft.value,
-                            date: submittedDraft.date,
-                            sessionType: submittedDraft.sessionType,
-                            note: submittedDraft.note,
-                            source: submittedDraft.sourceType,
-                            context: modelContext
-                        )
+    }
 
-                        triggerLogFeedback(for: submittedDraft.habit.statDomain?.id)
+    private var todayKicker: some View {
+        let formatted = Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        return V4PageKicker(title: formatted)
+    }
 
-                        if settings?.hapticsEnabled ?? true {
-                            HapticsService.logSuccess()
-                        }
-                    }
-                )
+    private var statsChip: some View {
+        Button {
+            if settings?.hapticsEnabled ?? true {
+                HapticsService.impact(style: .light)
             }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $presentedInsight) { insight in
-            NavigationStack {
-                DashboardInsightSheet(
-                    option: insight,
-                    settings: settings,
-                    modelContext: modelContext
-                )
+            showingStatsSheet = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.caption2.weight(.bold))
+                Text("This week")
+                    .font(.caption.weight(.semibold))
             }
-            .presentationDetents([.medium, .large])
+            .foregroundStyle(TrainingTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(TrainingTheme.actionSurface))
+            .overlay(
+                Capsule().strokeBorder(TrainingTheme.borderStrong.opacity(0.14), lineWidth: 1)
+            )
         }
-        .alert("Apple Health", isPresented: $isShowingHealthStatus) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(healthStatusMessage)
+        .buttonStyle(.plain)
+        .accessibilityLabel("This week's standing, rank, and goals")
+    }
+
+    private var statsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                dashboardSectionsView
+                    .padding(16)
+            }
+            .background(TrainingTheme.background.ignoresSafeArea())
+            .navigationTitle("This Week")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { showingStatsSheet = false }
+                }
+            }
         }
+        .presentationDetents([.medium, .large])
     }
 
     private var commandStrip: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 28) {
+            HStack(alignment: .center, spacing: 10) {
+                todayKicker
+
+                if !activeStats.isEmpty {
+                    statsChip
+                }
+
+                Spacer(minLength: 8)
+
                 commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
                     toggleMenu(.layout)
                 }
@@ -160,12 +228,6 @@ struct DashboardView: View {
                 commandButton(icon: "sparkles", isActive: topMenuState == .insights, accessibilityLabel: "Dashboard insights") {
                     toggleMenu(.insights)
                 }
-
-                #if canImport(HealthKit)
-                commandButton(icon: isSyncingHealth ? "heart.circle.fill" : "heart.fill", isActive: isSyncingHealth, accessibilityLabel: "Sync Apple Health workouts") {
-                    syncHealthWorkouts()
-                }
-                #endif
             }
             .frame(maxWidth: .infinity)
 
@@ -192,6 +254,16 @@ struct DashboardView: View {
                                 topMenuState = .none
                             }
                         }
+
+                        #if canImport(HealthKit)
+                        menuButton(
+                            title: isSyncingHealth ? "Syncing Apple Health…" : "Sync Apple Health",
+                            icon: isSyncingHealth ? "heart.circle.fill" : "heart.fill",
+                            isSelected: false
+                        ) {
+                            syncHealthWorkouts()
+                        }
+                        #endif
                     }
                 } else {
                     Spacer(minLength: 0)
@@ -249,11 +321,9 @@ struct DashboardView: View {
     }
 
     private var dashboardEmptyState: some View {
-        SurfaceCard(accent: TrainingArcConfig.color(for: "focus")) {
+        V4Card(accent: TrainingArcConfig.color(for: "focus")) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("No skills yet")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
+                V4SerifTitle(text: "No skills yet", size: 24)
                 Text("Run through onboarding (or Reset Default Profile in Settings → Debug Tools) to set baselines for your core skills.")
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
@@ -266,6 +336,52 @@ struct DashboardView: View {
         return Set(recs.compactMap { rec in
             rec.reason == .reviewReady ? nil : rec.statKeyRaw
         })
+    }
+
+    private var awaitingAttributionStatKeys: Set<String> {
+        (try? TrainingStore.awaitingAttributionStatKeys(context: modelContext)) ?? []
+    }
+
+    private var rankReviewBanner: some View {
+        let ups = pendingRankChanges.filter { $0.pendingRankChange?.direction == .up }.count
+        let downs = pendingRankChanges.count - ups
+        return Button {
+            showingRankReview = true
+        } label: {
+            V4Card(accent: TrainingTheme.positiveStrong) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(TrainingTheme.positiveStrong.opacity(0.14))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "rosette")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(TrainingTheme.positiveStrong)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Rank changes to review")
+                            .font(.system(.headline, design: .serif).weight(.regular))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                        HStack(spacing: 8) {
+                            if ups > 0 {
+                                V4StatusPill(text: "\(ups) up", tint: TrainingTheme.positiveStrong, systemImage: "arrow.up")
+                            }
+                            if downs > 0 {
+                                V4StatusPill(text: "\(downs) down", tint: TrainingTheme.danger, systemImage: "arrow.down")
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Dashboard sections (Phase 7)
@@ -303,39 +419,87 @@ struct DashboardView: View {
 
     private func weeklyStatusCardBody(_ status: DashboardWeeklyStatus) -> some View {
         let style = weeklyStatusStyle(status.kind)
-        return SurfaceCard(accent: style.color) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(style.color.opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: style.icon)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(style.color)
+        let total = max(status.aheadCount + status.onPaceCount + status.behindCount, 1)
+        return V4Card(accent: style.color) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center) {
+                    Text("WEEKLY STANDING")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    V4StatusPill(text: status.headline, tint: style.color, systemImage: style.icon)
+                    if status.kind == .reviewReady {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(TrainingTheme.textMuted)
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("THIS WEEK")
-                        .font(.caption2.weight(.black))
-                        .foregroundStyle(TrainingTheme.textMuted)
-                    Text(status.headline)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                        .multilineTextAlignment(.leading)
-                    Text(status.detail)
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                        .multilineTextAlignment(.leading)
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                GeometryReader { proxy in
+                    HStack(spacing: 4) {
+                        weeklyBarSegment(
+                            color: TrainingTheme.positiveStrong,
+                            count: status.aheadCount,
+                            total: total,
+                            fullWidth: proxy.size.width
+                        )
+                        weeklyBarSegment(
+                            color: TrainingTheme.textMuted,
+                            count: status.onPaceCount,
+                            total: total,
+                            fullWidth: proxy.size.width
+                        )
+                        weeklyBarSegment(
+                            color: TrainingTheme.warning,
+                            count: status.behindCount,
+                            total: total,
+                            fullWidth: proxy.size.width
+                        )
+                    }
+                    .frame(width: proxy.size.width, alignment: .leading)
                 }
+                .frame(height: 10)
 
-                Spacer()
-
-                if status.kind == .reviewReady {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textMuted)
+                HStack(alignment: .top, spacing: 0) {
+                    weeklyStandingCount(label: "ahead", value: status.aheadCount, tint: TrainingTheme.positiveStrong)
+                    weeklyStandingCount(label: "on pace", value: status.onPaceCount, tint: TrainingTheme.textPrimary)
+                    weeklyStandingCount(label: "behind", value: status.behindCount, tint: TrainingTheme.warning, alignment: .trailing)
                 }
             }
+        }
+    }
+
+    private func weeklyBarSegment(color: Color, count: Int, total: Int, fullWidth: CGFloat) -> some View {
+        let fraction = Double(count) / Double(total)
+        let raw = fullWidth * fraction - (count > 0 ? 4 : 0)
+        let width = count > 0 ? max(raw, 18) : 0
+        return Capsule()
+            .fill(count > 0 ? color : color.opacity(0.0))
+            .frame(width: width, height: 10)
+    }
+
+    private func weeklyStandingCount(label: String, value: Int, tint: Color, alignment: HorizontalAlignment = .leading) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(V4Style.displayNumber(value))
+                .font(.system(.title2, design: .serif).weight(.regular))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: alignmentToFrame(alignment))
+    }
+
+    private func alignmentToFrame(_ horizontal: HorizontalAlignment) -> Alignment {
+        switch horizontal {
+        case .leading: return .leading
+        case .trailing: return .trailing
+        default: return .center
         }
     }
 
@@ -355,42 +519,109 @@ struct DashboardView: View {
     }
 
     private func highlightsCard(_ highlights: [DashboardHighlight]) -> some View {
-        SurfaceCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("RANK & CHARGE")
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(TrainingTheme.textMuted)
-
-                ForEach(highlights.prefix(4)) { highlight in
-                    Button {
-                        openHighlight(highlight)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: highlightIcon(highlight.kind))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(highlightColor(highlight))
-                                .frame(width: 26)
-
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(highlight.statName)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(TrainingTheme.textPrimary)
-                                Text(highlight.text)
-                                    .font(.caption)
-                                    .foregroundStyle(TrainingTheme.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(TrainingTheme.textMuted)
-                        }
-                        .contentShape(Rectangle())
+        V4Card {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("RANK & CHARGE")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    if let topKind = highlights.first?.kind {
+                        topHighlightTagline(for: topKind)
                     }
-                    .buttonStyle(.plain)
+                }
+
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                VStack(spacing: 12) {
+                    ForEach(Array(highlights.prefix(4).enumerated()), id: \.element.id) { index, highlight in
+                        Button {
+                            openHighlight(highlight)
+                        } label: {
+                            highlightRow(highlight)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < highlights.prefix(4).count - 1 {
+                            Divider()
+                                .overlay(TrainingTheme.border.opacity(0.3))
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private func topHighlightTagline(for kind: DashboardHighlight.Kind) -> some View {
+        let label: String
+        let tint: Color
+        let icon: String
+        switch kind {
+        case .rankedUp:
+            label = "Gaining ground"
+            tint = TrainingTheme.positiveStrong
+            icon = "arrow.up"
+        case .nearRankUp:
+            label = "Close to ranking up"
+            tint = TrainingArcConfig.color(for: "focus")
+            icon = "bolt.fill"
+        case .losingMomentum:
+            label = "Losing momentum"
+            tint = TrainingTheme.warning
+            icon = "arrow.down"
+        }
+        return V4StatusPill(text: label, tint: tint, systemImage: icon)
+    }
+
+    private func highlightRow(_ highlight: DashboardHighlight) -> some View {
+        let accent = TrainingArcConfig.color(for: highlight.colorToken)
+        let level = activeStats.first(where: { $0.key == highlight.statKeyRaw })?.rankLevel ?? 0
+        return HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(accent.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Circle()
+                    .trim(from: 0, to: highlightRingTrim(highlight))
+                    .stroke(highlightColor(highlight), style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 44, height: 44)
+                Image(systemName: highlightIcon(highlight.kind))
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(highlightColor(highlight))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(highlight.statName)
+                        .font(.system(.headline, design: .serif).weight(.regular))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                    if level > 0 {
+                        V4LevelBadge(level: level, tint: accent, compact: true)
+                    }
+                }
+                Text(highlight.text)
+                    .font(.caption)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(TrainingTheme.textMuted)
+        }
+    }
+
+    private func highlightRingTrim(_ highlight: DashboardHighlight) -> Double {
+        switch highlight.kind {
+        case .rankedUp: return 1.0
+        case .nearRankUp: return 0.85
+        case .losingMomentum: return 0.30
         }
     }
 
@@ -423,11 +654,12 @@ struct DashboardView: View {
         Button {
             router.open(.goals)
         } label: {
-            SurfaceCard(accent: TrainingTheme.cold) {
-                VStack(alignment: .leading, spacing: 12) {
+            V4Card(accent: TrainingTheme.cold) {
+                VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         Text("GOALS")
-                            .font(.caption2.weight(.black))
+                            .font(.caption.weight(.heavy))
+                            .tracking(2.0)
                             .foregroundStyle(TrainingTheme.textMuted)
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -435,11 +667,14 @@ struct DashboardView: View {
                             .foregroundStyle(TrainingTheme.textMuted)
                     }
 
-                    HStack(spacing: 10) {
-                        goalStatTile("Active", value: goals.activeCount, color: TrainingTheme.textPrimary)
-                        goalStatTile("At risk", value: goals.atRiskCount, color: goals.atRiskCount > 0 ? TrainingTheme.warning : TrainingTheme.textPrimary)
-                        goalStatTile("Close", value: goals.closeToCompletionCount, color: goals.closeToCompletionCount > 0 ? TrainingTheme.positiveStrong : TrainingTheme.textPrimary)
-                        goalStatTile("Done", value: goals.completedThisWeekCount, color: TrainingTheme.textPrimary)
+                    Divider()
+                        .overlay(TrainingTheme.border.opacity(0.5))
+
+                    HStack(alignment: .top, spacing: 0) {
+                        V4StatTile(value: V4Style.displayNumber(goals.activeCount), label: "Active", tint: TrainingTheme.textPrimary)
+                        V4StatTile(value: V4Style.displayNumber(goals.atRiskCount), label: "At risk", tint: goals.atRiskCount > 0 ? TrainingTheme.warning : TrainingTheme.textPrimary)
+                        V4StatTile(value: V4Style.displayNumber(goals.closeToCompletionCount), label: "Close", tint: goals.closeToCompletionCount > 0 ? TrainingTheme.positiveStrong : TrainingTheme.textPrimary)
+                        V4StatTile(value: V4Style.displayNumber(goals.completedThisWeekCount), label: "Done", tint: TrainingTheme.textPrimary)
                     }
                 }
             }
@@ -447,20 +682,9 @@ struct DashboardView: View {
         .buttonStyle(.plain)
     }
 
-    private func goalStatTile(_ title: String, value: Int, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text("\(value)")
-                .font(.system(.title3, design: .rounded).weight(.bold))
-                .foregroundStyle(color)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(TrainingTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     private var detailedDashboard: some View {
         let attention = needsAttentionStatKeys
+        let unmatched = awaitingAttributionStatKeys
         return VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Skills")
             Text("Tap a skill card to open the character sheet. Use the action tray when you want to log immediately.")
@@ -481,11 +705,15 @@ struct DashboardView: View {
                         isFocusTarget: stat.id == focusTargetID,
                         showLogFeedback: flashedStatID == stat.id,
                         needsAttention: attention.contains(stat.key),
+                        hasUnmatchedImports: unmatched.contains(stat.key),
                         onOpenDetail: {
                             openDetail(for: stat)
                         },
                         onQuickLogTap: { habit, value in
                             presentedLogDraft = LogEntryDraft(habit: habit, value: value)
+                        },
+                        onShowUnmatched: {
+                            unmatchedStat = IdentifiableStat(stat: stat)
                         }
                     )
                     .modifier(ReorderHandleModifier(isVisible: isReordering))
@@ -505,88 +733,170 @@ struct DashboardView: View {
 
     private var compactGridDashboard: some View {
         let attention = needsAttentionStatKeys
+        let unmatched = awaitingAttributionStatKeys
         return VStack(alignment: .leading, spacing: 0) {
             CenteredDashboardGridLayout(columns: compactGridColumnCount, spacing: compactGridSpacing) {
                 ForEach(activeStats) { stat in
-                    compactGridTile(for: stat, needsAttention: attention.contains(stat.key))
+                    compactGridTile(
+                        for: stat,
+                        needsAttention: attention.contains(stat.key),
+                        hasUnmatchedImports: unmatched.contains(stat.key)
+                    )
                 }
             }
         }
     }
 
+    @ViewBuilder
     private var gameGridDashboard: some View {
         let attention = needsAttentionStatKeys
-        return CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
-            ForEach(activeStats) { stat in
-                GameDashboardTile(
-                    stat: stat,
-                    snapshot: snapshot(for: stat),
-                    needsAttention: attention.contains(stat.key),
-                    onOpenDetail: {
-                        openDetail(for: stat)
-                    }
-                )
-                .modifier(ReorderHandleModifier(isVisible: isReordering))
-                .modifier(
-                    ReorderDragDropModifier(
-                        stat: stat,
-                        isReordering: isReordering,
-                        draggedStatID: $draggedStatID,
-                        orderedStatIDs: activeStats.map(\.id),
-                        moveAction: moveSkill
+        let unmatched = awaitingAttributionStatKeys
+
+        if activeStats.count == 7 {
+            honeycombGameGridDashboard(attention: attention, unmatched: unmatched)
+        } else {
+            CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
+                ForEach(activeStats) { stat in
+                    gameDashboardTile(
+                        for: stat,
+                        needsAttention: attention.contains(stat.key),
+                        hasUnmatchedImports: unmatched.contains(stat.key)
                     )
-                )
+                }
             }
+            .padding(.top, 4)
         }
-        .padding(.top, 4)
+    }
+
+    private func honeycombGameGridDashboard(attention: Set<String>, unmatched: Set<String>) -> some View {
+        GeometryReader { proxy in
+            let tileWidth = honeycombTileWidth(for: proxy.size.width)
+            let rowHeight = honeycombRowHeight(for: tileWidth)
+            let rowSpacing = gameGridRowSpacing
+            let rows = honeycombRows
+
+            VStack(spacing: rowSpacing) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, rowStats in
+                    GeometryReader { rowProxy in
+                        HStack(spacing: gameGridSpacing) {
+                            ForEach(rowStats) { stat in
+                                gameDashboardTile(
+                                    for: stat,
+                                    needsAttention: attention.contains(stat.key),
+                                    hasUnmatchedImports: unmatched.contains(stat.key)
+                                )
+                                .frame(width: tileWidth)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .scaleEffect(dashboardRowScale(for: rowProxy.frame(in: .global).midY))
+                        .animation(.easeOut(duration: 0.18), value: dashboardRowScale(for: rowProxy.frame(in: .global).midY))
+                    }
+                    .frame(height: rowHeight)
+                    .zIndex(rowIndex == 1 ? 1 : 0)
+                }
+            }
+            .frame(width: proxy.size.width, alignment: .top)
+        }
+        .frame(height: honeycombGridHeight)
+        .padding(.top, 2)
+    }
+
+    private var honeycombRows: [[StatDomain]] {
+        [
+            Array(activeStats.prefix(2)),
+            Array(activeStats.dropFirst(2).prefix(3)),
+            Array(activeStats.dropFirst(5).prefix(2))
+        ]
+    }
+
+    private var honeycombGridHeight: CGFloat {
+        let estimatedTileWidth: CGFloat = 124
+        return honeycombRowHeight(for: estimatedTileWidth) * 3 + gameGridRowSpacing * 2
+    }
+
+    private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
+        let rawWidth = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
+        return min(max(rawWidth, 96), 124)
+    }
+
+    private func honeycombRowHeight(for tileWidth: CGFloat) -> CGFloat {
+        tileWidth + 72
+    }
+
+    private func dashboardRowScale(for midY: CGFloat) -> CGFloat {
+        #if canImport(UIKit)
+        let focusY = UIScreen.main.bounds.height * 0.48
+        #else
+        let focusY: CGFloat = 390
+        #endif
+        let distance = min(abs(midY - focusY), 260)
+        let normalizedDistance = distance / 260
+        return gameGridFocusedScale - ((gameGridFocusedScale - gameGridRestingScale) * normalizedDistance)
+    }
+
+    private func gameDashboardTile(for stat: StatDomain, needsAttention: Bool, hasUnmatchedImports: Bool) -> some View {
+        GameDashboardTile(
+            stat: stat,
+            snapshot: snapshot(for: stat),
+            needsAttention: needsAttention,
+            hasUnmatchedImports: hasUnmatchedImports,
+            isReordering: isReordering,
+            onOpenDetail: {
+                openDetail(for: stat)
+            },
+            onQuickLog: {
+                presentPrimaryLog(for: stat)
+            },
+            onShowUnmatched: {
+                unmatchedStat = IdentifiableStat(stat: stat)
+            }
+        )
+        .modifier(ReorderHandleModifier(isVisible: isReordering))
+        .modifier(
+            ReorderDragDropModifier(
+                stat: stat,
+                isReordering: isReordering,
+                draggedStatID: $draggedStatID,
+                orderedStatIDs: activeStats.map(\.id),
+                moveAction: moveSkill
+            )
+        )
     }
 
     private var reorderBanner: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Reorder Skills")
-                    .font(.system(.headline, design: .rounded).weight(.bold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                Text("Drag cards into the order you want. This order also drives Siri and Home Screen shortcuts.")
-                    .font(.footnote)
-                    .foregroundStyle(TrainingTheme.textSecondary)
-            }
-
-            Spacer(minLength: 12)
-
-            Button("Done") {
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
-                    isReordering = false
+        V4Card(accent: TrainingArcConfig.color(for: "focus")) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    V4SerifTitle(text: "Reorder Skills", size: 22)
+                    Text("Drag cards into the order you want. This order also drives Siri and Home Screen shortcuts.")
+                        .font(.footnote)
+                        .foregroundStyle(TrainingTheme.textSecondary)
                 }
+
+                Spacer(minLength: 12)
+
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                        isReordering = false
+                    }
+                } label: {
+                    Text("Done")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(TrainingArcConfig.color(for: "focus")))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(TrainingArcConfig.color(for: "focus"))
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(TrainingTheme.card.opacity(0.94))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(TrainingTheme.borderStrong.opacity(0.18), lineWidth: 1)
-        )
     }
 
     private func sectionHeader(_ title: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "sparkles.rectangle.stack.fill")
-                .font(.subheadline.weight(.black))
-                .foregroundStyle(TrainingArcConfig.color(for: "focus"))
-                .frame(width: 32, height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(TrainingArcConfig.color(for: "focus").opacity(0.14))
-                )
-
-            Text(title)
-                .font(.system(.title3, design: .rounded).weight(.bold))
-                .foregroundStyle(TrainingTheme.textPrimary)
+            V4SectionHeader(number: activeStats.count, title: title)
+            Spacer()
         }
     }
 
@@ -718,6 +1028,24 @@ struct DashboardView: View {
         return (last - first) / max(Double(stat.currentBaseline), 1)
     }
 
+    private func saveLog(_ draft: LogEntryDraft) {
+        _ = try? TrainingStore.log(
+            habit: draft.habit,
+            value: draft.value,
+            date: draft.date,
+            sessionType: draft.sessionType,
+            note: draft.note,
+            source: draft.sourceType,
+            context: modelContext
+        )
+
+        triggerLogFeedback(for: draft.habit.statDomain?.id)
+
+        if settings?.hapticsEnabled ?? true {
+            HapticsService.logSuccess()
+        }
+    }
+
     private func triggerLogFeedback(for statID: UUID?) {
         guard let statID else { return }
         flashedStatID = statID
@@ -741,7 +1069,7 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
-    private func compactGridTile(for stat: StatDomain, needsAttention: Bool) -> some View {
+    private func compactGridTile(for stat: StatDomain, needsAttention: Bool, hasUnmatchedImports: Bool) -> some View {
         let primaryHabit = TrainingStore.primaryHabit(for: stat)
         let quickLogTitle = primaryHabit?.measurementType == .booleanSession ? "Log Session" : "Log Progress"
         let tile = DashboardGridTile(
@@ -751,11 +1079,15 @@ struct DashboardView: View {
             quickLogTitle: quickLogTitle,
             isReordering: isReordering,
             needsAttention: needsAttention,
+            hasUnmatchedImports: hasUnmatchedImports,
             onOpenDetail: {
                 openDetail(for: stat)
             },
             onQuickLog: {
                 presentPrimaryLog(for: stat)
+            },
+            onShowUnmatched: {
+                unmatchedStat = IdentifiableStat(stat: stat)
             }
         )
 
@@ -789,7 +1121,15 @@ struct DashboardView: View {
     }
 
     private func presentPrimaryLog(for stat: StatDomain) {
-        guard let habit = TrainingStore.primaryHabit(for: stat) else { return }
+        let habits = TrainingStore.activeHabits(for: stat)
+        guard let habit = TrainingStore.primaryHabit(for: stat) ?? habits.first else { return }
+        // Confirm the long-press with a haptic as the quick-log popup appears.
+        if settings?.hapticsEnabled ?? true {
+            HapticsService.impact(style: .medium)
+        }
+        // Open the log popup directly on the primary habit. When the skill has
+        // several habits the sheet's eyebrow becomes a habit picker, so the
+        // selection lives inside the same popup instead of a separate dialog.
         presentedLogDraft = LogEntryDraft(habit: habit)
     }
 
@@ -881,11 +1221,78 @@ struct DashboardView: View {
     }
 }
 
+private struct DashboardPresentationModifier: ViewModifier {
+    @Binding var presentedLogDraft: LogEntryDraft?
+    @Binding var presentedInsight: DashboardInsightOption?
+    @Binding var isShowingHealthStatus: Bool
+    let healthStatusMessage: String
+    @Binding var habitPickerStat: IdentifiableStat?
+    @Binding var unmatchedStat: IdentifiableStat?
+    let settings: AppSettings?
+    let modelContext: ModelContext
+    let onLogSaved: (LogEntryDraft) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $presentedLogDraft) { draft in
+                NavigationStack {
+                    LogEntrySheetView(
+                        draft: draft,
+                        accent: draft.habit.statDomain.map { TrainingArcConfig.color(for: $0.colorToken) } ?? .accentColor,
+                        onSave: onLogSaved
+                    )
+                }
+                .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $presentedInsight) { insight in
+                NavigationStack {
+                    DashboardInsightSheet(
+                        option: insight,
+                        settings: settings,
+                        modelContext: modelContext
+                    )
+                }
+                .presentationDetents([.medium, .large])
+            }
+            .alert("Apple Health", isPresented: $isShowingHealthStatus) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(healthStatusMessage)
+            }
+            .confirmationDialog(
+                habitPickerStat.map { "Log which habit for \($0.stat.name)?" } ?? "",
+                isPresented: Binding(
+                    get: { habitPickerStat != nil },
+                    set: { if !$0 { habitPickerStat = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: habitPickerStat
+            ) { wrapper in
+                ForEach(TrainingStore.activeHabits(for: wrapper.stat)) { habit in
+                    Button(habit.name) {
+                        presentedLogDraft = LogEntryDraft(habit: habit)
+                        habitPickerStat = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) { habitPickerStat = nil }
+            }
+            #if canImport(HealthKit)
+            .sheet(item: $unmatchedStat) { wrapper in
+                UnmatchedWorkoutSheet(stat: wrapper.stat)
+            }
+            #endif
+    }
+}
+
 private struct GameDashboardTile: View {
     let stat: StatDomain
     let snapshot: SkillProgressSnapshot
     let needsAttention: Bool
+    let hasUnmatchedImports: Bool
+    let isReordering: Bool
     let onOpenDetail: () -> Void
+    let onQuickLog: () -> Void
+    let onShowUnmatched: () -> Void
 
     @State private var indicatorPulse = false
 
@@ -893,38 +1300,43 @@ private struct GameDashboardTile: View {
         TrainingArcConfig.color(for: stat.colorToken)
     }
 
-    private var ringTint: Color {
-        snapshot.weeklyTargetProgress >= 1 ? TrainingTheme.warning : accent
-    }
+    private var ringTint: Color { accent }
 
     private var rankIndicatorTint: Color {
         guard let direction = snapshot.pendingRankChange?.direction else { return .clear }
         return direction == .up ? TrainingTheme.positiveStrong : TrainingTheme.danger
     }
 
+    private var quickLogTitle: String {
+        TrainingStore.primaryHabit(for: stat)?.measurementType == .booleanSession ? "Log Session" : "Log Progress"
+    }
+
+    @ViewBuilder
     var body: some View {
-        Button(action: onOpenDetail) {
-            VStack(spacing: 15) {
+        if isReordering {
+            tileContent
+        } else {
+            // One exclusive gesture so the long-press timing is honored: a
+            // 0.4s hold fires the quick log (haptic + popup at that instant);
+            // a quick tap falls through to opening the skill.
+            tileContent
+                .contentShape(Rectangle())
+                .gesture(
+                    LongPressGesture(minimumDuration: 0.4)
+                        .onEnded { _ in onQuickLog() }
+                        .exclusively(before: TapGesture().onEnded { onOpenDetail() })
+                )
+        }
+    }
+
+    private var tileContent: some View {
+            VStack(spacing: 7) {
                 Text(stat.name)
-                    .font(.footnote.weight(.black))
+                    .font(.system(size: 15, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                     .frame(maxWidth: .infinity)
-
-                HStack(spacing: 8) {
-                    Image(systemName: stat.iconName)
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(accent)
-                        .frame(width: 22, height: 22)
-
-                    Text("LV \(snapshot.rank.level)")
-                        .font(.footnote.weight(.black))
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.76)
-                }
-                .frame(maxWidth: .infinity)
 
                 ZStack {
                     Circle()
@@ -951,23 +1363,31 @@ private struct GameDashboardTile: View {
                 .aspectRatio(1, contentMode: .fit)
                 .frame(maxWidth: .infinity)
 
-                Text(snapshot.weeklyTargetFractionLabel)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    Text(snapshot.weeklyTargetFractionLabel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Text("·")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Text("L\(V4Style.displayNumber(snapshot.rank.level))")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity)
 
                 DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 15, spacing: 7)
-                    .frame(height: 18)
+                    .frame(height: 16)
                     .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, minHeight: 222, alignment: .top)
+            .frame(maxWidth: .infinity, minHeight: 182, alignment: .top)
             .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .topTrailing) {
+            .overlay(alignment: .topTrailing) {
             if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
                 Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                     .font(.title3.weight(.black))
@@ -990,18 +1410,25 @@ private struct GameDashboardTile: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if needsAttention {
+            if hasUnmatchedImports {
+                UnmatchedBadge(accent: accent, action: onShowUnmatched)
+                    .padding(6)
+            } else if needsAttention {
                 AttentionDot(accent: accent)
                     .padding(6)
                     .allowsHitTesting(false)
             }
         }
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
     }
 
     private var accessibilityLabel: String {
-        let base = "\(stat.name), level \(snapshot.rank.level), \(DashboardChargeDots.summaryLabel(for: snapshot.charge.current))"
-        return needsAttention ? base + ", needs attention this week" : base
+        var parts = ["\(stat.name)", "level \(snapshot.rank.level)", DashboardChargeDots.summaryLabel(for: snapshot.charge.current)]
+        if hasUnmatchedImports { parts.append("unmatched workouts to review") }
+        else if needsAttention { parts.append("needs attention this week") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -1015,6 +1442,37 @@ struct AttentionDot: View {
             .overlay(Circle().stroke(.white, lineWidth: 1.4))
             .shadow(color: accent.opacity(0.45), radius: 4, x: 0, y: 1)
             .accessibilityHidden(true)
+    }
+}
+
+struct UnmatchedBadge: View {
+    let accent: Color
+    let action: () -> Void
+
+    @State private var pulse = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "questionmark")
+                .font(.headline.weight(.black))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(accent))
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+                .overlay(
+                    Circle()
+                        .stroke(accent.opacity(pulse ? 0 : 0.55), lineWidth: 2.5)
+                        .scaleEffect(pulse ? 1.6 : 1)
+                )
+                .shadow(color: accent.opacity(0.5), radius: 6, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Review unmatched workouts")
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                pulse = true
+            }
+        }
     }
 }
 

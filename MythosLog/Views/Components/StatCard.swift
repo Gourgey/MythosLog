@@ -165,8 +165,10 @@ struct StatCard: View {
     let isFocusTarget: Bool
     let showLogFeedback: Bool
     let needsAttention: Bool
+    let hasUnmatchedImports: Bool
     let onOpenDetail: () -> Void
     let onQuickLogTap: (Habit, Double) -> Void
+    let onShowUnmatched: () -> Void
 
     private var accent: Color {
         TrainingArcConfig.color(for: stat.colorToken)
@@ -324,7 +326,10 @@ struct StatCard: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if needsAttention {
+            if hasUnmatchedImports {
+                UnmatchedBadge(accent: accent, action: onShowUnmatched)
+                    .padding(12)
+            } else if needsAttention {
                 AttentionDot(accent: accent)
                     .padding(12)
                     .allowsHitTesting(false)
@@ -338,11 +343,13 @@ struct StatCard: View {
     }
 
     private var detailedAccessibilityLabel: String {
-        let base = "\(stat.name), \(snapshot.rank.title), level \(snapshot.rank.level) of \(snapshot.rank.maximumLevel), " +
+        var base = "\(stat.name), \(snapshot.rank.title), level \(snapshot.rank.level) of \(snapshot.rank.maximumLevel), " +
             "\(snapshot.weeklyCounterLabel) \(snapshot.weeklyCounterValueLabel), " +
             "\(DashboardChargeDots.summaryLabel(for: snapshot.charge.current)), " +
             "\(snapshot.nextActionLabel)"
-        return needsAttention ? base + ", needs attention this week" : base
+        if hasUnmatchedImports { base += ", unmatched workouts to review" }
+        else if needsAttention { base += ", needs attention this week" }
+        return base
     }
 
     private var header: some View {
@@ -548,8 +555,10 @@ struct DashboardGridTile: View {
     let quickLogTitle: String
     let isReordering: Bool
     let needsAttention: Bool
+    let hasUnmatchedImports: Bool
     let onOpenDetail: () -> Void
     let onQuickLog: () -> Void
+    let onShowUnmatched: () -> Void
 
     private var accent: Color {
         TrainingArcConfig.color(for: stat.colorToken)
@@ -568,21 +577,11 @@ struct DashboardGridTile: View {
             tileBody
         } else {
             tileBody
-                .contextMenu(menuItems: {
-                    Button("Open Skill", systemImage: "arrow.up.forward.app") {
-                        onOpenDetail()
-                    }
-
-                    Button(quickLogTitle, systemImage: "plus.circle.fill") {
-                        onQuickLog()
-                    }
-                }, preview: {
-                    DashboardTilePreviewBubble(
-                        statName: stat.name,
-                        accent: accent,
-                        preview: preview
-                    )
-                })
+                .gesture(
+                    LongPressGesture(minimumDuration: 0.4)
+                        .onEnded { _ in onQuickLog() }
+                        .exclusively(before: TapGesture().onEnded { onOpenDetail() })
+                )
         }
     }
 
@@ -699,7 +698,10 @@ struct DashboardGridTile: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if needsAttention {
+            if hasUnmatchedImports {
+                UnmatchedBadge(accent: accent, action: onShowUnmatched)
+                    .padding(10)
+            } else if needsAttention {
                 AttentionDot(accent: accent)
                     .padding(10)
                     .allowsHitTesting(false)
@@ -707,17 +709,15 @@ struct DashboardGridTile: View {
         }
         .shadow(color: snapshot.rankChangeIndicatorVisible ? stateAccent.opacity(0.28) : accent.opacity(0.08), radius: snapshot.rankChangeIndicatorVisible ? 14 : 10, x: 0, y: 5)
         .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .onTapGesture {
-            guard !isReordering else { return }
-            onOpenDetail()
-        }
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(accessibilityLabel)
     }
 
     private var accessibilityLabel: String {
-        let base = "\(stat.name), level \(snapshot.rank.level), \(DashboardChargeDots.summaryLabel(for: snapshot.charge.current))"
-        return needsAttention ? base + ", needs attention this week" : base
+        var parts = ["\(stat.name)", "level \(snapshot.rank.level)", DashboardChargeDots.summaryLabel(for: snapshot.charge.current)]
+        if hasUnmatchedImports { parts.append("unmatched workouts to review") }
+        else if needsAttention { parts.append("needs attention this week") }
+        return parts.joined(separator: ", ")
     }
 
     private var levelBadge: some View {
@@ -734,61 +734,5 @@ struct DashboardGridTile: View {
                 Capsule()
                     .strokeBorder(accent.opacity(0.18), lineWidth: 0.9)
             )
-    }
-}
-
-private struct DashboardTilePreviewBubble: View {
-    let statName: String
-    let accent: Color
-    let preview: DashboardCardPreview
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(statName)
-                .font(.system(.subheadline, design: .rounded).weight(.black))
-                .foregroundStyle(TrainingTheme.textPrimary)
-
-            previewRow(systemImage: "sparkles", text: preview.rankSummary)
-            previewRow(systemImage: "bolt.fill", text: preview.bankedChargeSummary)
-            previewRow(systemImage: "target", text: preview.stayOnTargetSummary)
-            previewRow(systemImage: "calendar", text: preview.weeklyTargetSummary)
-            previewRow(systemImage: "arrow.up.circle", text: preview.levelUpSummary)
-        }
-        .padding(14)
-        .frame(maxWidth: 260, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            .white.opacity(0.98),
-                            TrainingTheme.card,
-                            accent.opacity(0.12)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(accent.opacity(0.20), lineWidth: 1)
-        )
-        .shadow(color: accent.opacity(0.18), radius: 18, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 5)
-    }
-
-    private func previewRow(systemImage: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(accent)
-                .frame(width: 14, height: 14)
-
-            Text(text)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(TrainingTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 }

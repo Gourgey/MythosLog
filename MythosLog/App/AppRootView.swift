@@ -88,48 +88,15 @@ struct AppRootView: View {
                     reloadSettings()
                 }
             } else {
-                TabView(selection: $router.selectedRoute) {
-                    NavigationStack(path: $router.rootPath) {
-                        DashboardView()
-                            .navigationDestination(for: DashboardNavigationDestination.self) { destination in
-                                switch destination {
-                                case .skillDetail(let destination):
-                                    SkillDetailDestinationView(destination: destination)
-                                }
-                            }
-                    }
-                    .tag(TrainingRoute.dashboard)
-                    .tabItem {
-                        Label("Dashboard", systemImage: "shield.lefthalf.filled")
-                    }
-
-                    NavigationStack {
-                        WeeklyReviewView()
-                    }
-                    .tag(TrainingRoute.weeklyReview)
-                    .tabItem {
-                        Label("Review", systemImage: "calendar.badge.clock")
-                    }
-
-                    NavigationStack {
-                        GoalsView()
-                    }
-                    .tag(TrainingRoute.goals)
-                    .tabItem {
-                        Label("Goals", systemImage: "target")
-                    }
-                    .badge(goalsAtRiskCount)
-
-                    NavigationStack {
-                        MoreView {
-                            reloadSettings()
+                tabContent
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        CompactRootTabBar(
+                            selection: router.selectedRoute,
+                            goalsBadgeCount: goalsAtRiskCount
+                        ) { route in
+                            router.open(route)
                         }
                     }
-                    .tag(TrainingRoute.more)
-                    .tabItem {
-                        Label("More", systemImage: "square.grid.2x2.fill")
-                    }
-                }
             }
         }
         .environmentObject(router)
@@ -140,6 +107,7 @@ struct AppRootView: View {
             reloadSettings()
             consumeHomeScreenQuickActionIfNeeded()
             try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
+            try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
             consumePendingDestinationIfNeeded()
         }
         .onChange(of: settingsRecords.map { "\($0.id)|\($0.hasCompletedOnboarding)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
@@ -197,4 +165,182 @@ struct AppRootView: View {
         router.open(pendingDestination)
         #endif
     }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch router.selectedRoute {
+        case .dashboard:
+            dashboardStack
+        case .weeklyReview:
+            weeklyReviewStack
+        case .goals:
+            goalsStack
+        case .more:
+            moreStack
+        }
+    }
+
+    private var dashboardStack: some View {
+        NavigationStack(path: $router.rootPath) {
+            DashboardView()
+                .navigationDestination(for: DashboardNavigationDestination.self) { destination in
+                    switch destination {
+                    case .skillDetail(let destination):
+                        SkillDetailDestinationView(destination: destination)
+                    }
+                }
+        }
+    }
+
+    private var weeklyReviewStack: some View {
+        NavigationStack {
+            WeeklyReviewView()
+        }
+    }
+
+    private var goalsStack: some View {
+        NavigationStack {
+            GoalsView()
+        }
+    }
+
+    private var moreStack: some View {
+        NavigationStack {
+            MoreView {
+                reloadSettings()
+            }
+        }
+    }
+}
+
+private struct CompactRootTabBar: View {
+    let selection: TrainingRoute
+    let goalsBadgeCount: Int
+    let onSelect: (TrainingRoute) -> Void
+
+    private let items: [CompactRootTabItem] = [
+        CompactRootTabItem(route: .dashboard, title: "Dashboard", systemImage: "rectangle.grid.2x2.fill"),
+        CompactRootTabItem(route: .weeklyReview, title: "Review", systemImage: "calendar.badge.clock"),
+        CompactRootTabItem(route: .goals, title: "Goals", systemImage: "target"),
+        CompactRootTabItem(route: .more, title: "More", systemImage: "square.grid.2x2.fill")
+    ]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(items) { item in
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        onSelect(item.route)
+                    }
+                } label: {
+                    tabItem(item)
+                }
+                .buttonStyle(LiquidTabButtonStyle(isSelected: selection == item.route))
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(selection == item.route ? .isSelected : [])
+            }
+        }
+        .padding(6)
+        .frame(height: 64)
+        .background(
+            Capsule()
+                .fill(.white.opacity(0.30))
+                .background(.ultraThinMaterial, in: Capsule())
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.95), .white.opacity(0.36), TrainingTheme.borderStrong.opacity(0.18)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(.white.opacity(0.28), lineWidth: 4)
+                .blur(radius: 7)
+                .padding(2)
+        )
+        .shadow(color: TrainingTheme.shadowStrong.opacity(0.34), radius: 24, x: 0, y: 14)
+        .shadow(color: .white.opacity(0.75), radius: 8, x: 0, y: -2)
+        .padding(.horizontal, 18)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+        .background(.clear)
+    }
+
+    private func tabItem(_ item: CompactRootTabItem) -> some View {
+        let isSelected = selection == item.route
+        let tint = isSelected ? Color.accentColor : TrainingTheme.textSecondary
+
+        return ZStack(alignment: .topTrailing) {
+            VStack(spacing: 3) {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 19, weight: isSelected ? .bold : .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .frame(height: 22)
+
+                Text(item.title)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(
+                Capsule()
+                    .fill(isSelected ? Color.white.opacity(0.54) : Color.clear)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(isSelected ? .white.opacity(0.86) : .clear, lineWidth: 0.8)
+            )
+            .shadow(
+                color: isSelected ? Color.accentColor.opacity(0.14) : .clear,
+                radius: 8,
+                x: 0,
+                y: 4
+            )
+
+            if item.route == .goals, goalsBadgeCount > 0 {
+                Text(goalsBadgeLabel)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .frame(minWidth: 19, minHeight: 19)
+                    .padding(.horizontal, goalsBadgeCount > 9 ? 4 : 0)
+                    .background(Capsule().fill(TrainingTheme.danger))
+                    .offset(x: -18, y: -3)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var goalsBadgeLabel: String {
+        goalsBadgeCount > 9 ? "9+" : "\(goalsBadgeCount)"
+    }
+}
+
+private struct LiquidTabButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : (isSelected ? 1.02 : 1.0))
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isSelected)
+    }
+}
+
+private struct CompactRootTabItem: Identifiable {
+    let route: TrainingRoute
+    let title: String
+    let systemImage: String
+
+    var id: TrainingRoute { route }
 }

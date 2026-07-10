@@ -26,9 +26,13 @@ struct ManageSkillsView: View {
                 }
                 .onMove(perform: moveActive)
             } header: {
-                Text("Active Skills")
+                Text("ACTIVE SKILLS")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
             } footer: {
                 Text("Drag to reorder. Swipe to archive — your logs, goals, and history are always kept.")
+                    .font(.caption)
             }
 
             if !inactiveStats.isEmpty {
@@ -37,14 +41,18 @@ struct ManageSkillsView: View {
                         skillRow(stat, isActive: false)
                     }
                 } header: {
-                    Text("Optional & Archived")
+                    Text("OPTIONAL & ARCHIVED")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
                 } footer: {
                     Text("Enable an optional skill or restore an archived one anytime. Nothing here is deleted.")
+                        .font(.caption)
                 }
             }
         }
         .scrollContentBackground(.hidden)
-        .background(TrainingTheme.background.ignoresSafeArea())
+        .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .navigationTitle("Manage Skills")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -57,24 +65,28 @@ struct ManageSkillsView: View {
     private func skillRow(_ stat: StatDomain, isActive: Bool) -> some View {
         let accent = TrainingArcConfig.color(for: stat.colorToken)
         return HStack(spacing: 12) {
-            Image(systemName: stat.iconName.isEmpty ? "circle" : stat.iconName)
-                .font(.headline)
-                .foregroundStyle(accent)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(accent.opacity(0.14)))
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(accent.opacity(isActive ? 0.16 : 0.08))
+                    .frame(width: 40, height: 40)
+                Image(systemName: stat.iconName.isEmpty ? "circle" : stat.iconName)
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(accent)
+            }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(stat.name)
-                        .font(.headline)
-                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .font(.system(.headline, design: .serif).weight(.regular))
+                        .foregroundStyle(isActive ? TrainingTheme.textPrimary : TrainingTheme.textSecondary)
                     if !stat.isCore {
-                        Text("Optional")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Text("OPTIONAL")
+                            .font(.caption2.weight(.heavy))
+                            .tracking(1.2)
+                            .foregroundStyle(TrainingTheme.textMuted)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(TrainingTheme.backgroundTertiary))
+                            .background(Capsule().fill(TrainingTheme.border.opacity(0.4)))
                     }
                 }
                 Text(stat.descriptor)
@@ -86,15 +98,20 @@ struct ManageSkillsView: View {
             Spacer(minLength: 8)
 
             if !isActive {
-                Button(stat.isCore ? "Restore" : "Enable") {
+                Button {
                     enable(stat)
+                } label: {
+                    Text(stat.isCore ? "Restore" : "Enable")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(accent.opacity(0.14)))
                 }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.borderless)
-                .tint(accent)
+                .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if isActive {
                 Button(role: .destructive) {

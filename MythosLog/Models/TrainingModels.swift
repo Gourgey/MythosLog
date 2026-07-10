@@ -84,6 +84,25 @@ enum MeasurementType: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Quick-log increments scaled to a skill's weekly baseline so the tap
+    /// options are proportional to typical effort. A 120 min/week cardio skill
+    /// yields ~+20/+40/+60; a 10/week cooking skill yields ~+1/+2/+3. Falls back
+    /// to the static `quickStepValues` when no baseline is known.
+    func quickStepValues(weeklyBaseline: Int) -> [Double] {
+        if self == .booleanSession { return [1] }
+        guard weeklyBaseline > 0 else { return quickStepValues }
+        let unit = MeasurementType.niceStep(Double(weeklyBaseline) / 6)
+        return [unit, unit * 2, unit * 3]
+    }
+
+    /// Rounds a raw increment to a tidy, human-friendly number.
+    static func niceStep(_ value: Double) -> Double {
+        guard value > 1 else { return 1 }
+        if value >= 15 { return (value / 10).rounded() * 10 } // nearest 10
+        if value >= 7 { return (value / 5).rounded() * 5 }    // nearest 5
+        return value.rounded(.down)                            // nearest whole
+    }
+
     var prefersIntegerValue: Bool {
         true
     }
@@ -702,6 +721,7 @@ final class HealthImportedWorkout {
     var isDuplicate: Bool = false
     var overlapsImportedWorkout: Bool = false
     var relatedWorkoutUUID: String?
+    var awaitingHabitAssignment: Bool = false
     var createdAt: Date = Date.now
 
     init(
@@ -718,6 +738,7 @@ final class HealthImportedWorkout {
         isDuplicate: Bool = false,
         overlapsImportedWorkout: Bool = false,
         relatedWorkoutUUID: String? = nil,
+        awaitingHabitAssignment: Bool = false,
         createdAt: Date = .now
     ) {
         self.workoutUUID = workoutUUID
@@ -733,6 +754,7 @@ final class HealthImportedWorkout {
         self.isDuplicate = isDuplicate
         self.overlapsImportedWorkout = overlapsImportedWorkout
         self.relatedWorkoutUUID = relatedWorkoutUUID
+        self.awaitingHabitAssignment = awaitingHabitAssignment
         self.createdAt = createdAt
     }
 }
@@ -972,7 +994,7 @@ final class Goal {
 
 struct LogEntryDraft: Identifiable {
     let id = UUID()
-    let habit: Habit
+    var habit: Habit
     var value: Double
     var date: Date
     var sessionType: String

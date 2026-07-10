@@ -50,7 +50,7 @@ enum NotificationService {
         if settings.weeklyReviewReminderEnabled {
             let content = UNMutableNotificationContent()
             content.title = "Weekly review ready"
-            content.body = "Open the Review tab and lock in last week's rank changes."
+            content.body = "Last week was finalized overnight. Open Review to see what changed."
             content.sound = .default
 
             var components = DateComponents()

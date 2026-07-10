@@ -43,7 +43,7 @@ struct RankArtworkView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 340)
+        .frame(height: 323)
     }
 
     private var compactArtwork: some View {
@@ -274,17 +274,34 @@ struct RankArtworkView: View {
     }
 
     private var barePlaceholderArtwork: some View {
-        VStack(spacing: 4) {
-            Image(systemName: statFallbackIcon)
-                .font(.system(size: 38, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(accent.opacity(0.88))
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [TrainingTheme.backgroundSecondary.opacity(0.94), .white.opacity(0.72)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(accent.opacity(0.22), lineWidth: 1.3)
+                )
+                .shadow(color: accent.opacity(0.08), radius: 7, x: 0, y: 3)
 
-            Text(habitInitial)
-                .font(.caption2.weight(.black))
-                .foregroundStyle(TrainingTheme.textMuted)
+            VStack(spacing: 4) {
+                Image(systemName: statFallbackIcon)
+                    .font(.system(size: 34, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(accent.opacity(0.72))
+
+                Text(habitInitial)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(TrainingTheme.textMuted)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(8)
     }
 
     @ViewBuilder

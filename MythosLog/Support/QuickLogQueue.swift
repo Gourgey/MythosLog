@@ -7,29 +7,29 @@ import Foundation
 /// queue into real `HabitLog`s on next launch/foreground. The widget reads the
 /// pending amount back so the tap shows immediate progress before the app runs.
 enum QuickLogQueue {
-    private static let key = "training.arc.quicklog.pending"
+    nonisolated private static let key = "training.arc.quicklog.pending"
 
-    private static var defaults: UserDefaults? {
+    nonisolated private static var defaults: UserDefaults? {
         UserDefaults(suiteName: AppIdentity.appGroupIdentifier)
     }
 
     /// habit UUID string -> amount awaiting persistence.
-    static func pending() -> [String: Double] {
+    nonisolated static func pending() -> [String: Double] {
         (defaults?.dictionary(forKey: key) as? [String: Double]) ?? [:]
     }
 
-    static func pendingAmount(forHabitID habitID: String) -> Double {
+    nonisolated static func pendingAmount(forHabitID habitID: String) -> Double {
         pending()[habitID] ?? 0
     }
 
-    static func enqueue(habitID: String, amount: Double) {
+    nonisolated static func enqueue(habitID: String, amount: Double) {
         guard amount > 0, let defaults else { return }
         var dict = pending()
         dict[habitID, default: 0] += amount
         defaults.set(dict, forKey: key)
     }
 
-    static func clear() {
+    nonisolated static func clear() {
         defaults?.removeObject(forKey: key)
     }
 }

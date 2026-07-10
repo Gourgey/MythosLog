@@ -190,7 +190,6 @@ struct SettingsView: View {
 
                     Toggle("Enable decay", isOn: binding(\.enableDecay))
                     Toggle("Week starts on Monday", isOn: binding(\.weekStartsOnMonday))
-                    Toggle("Lock in weekly review", isOn: binding(\.lockInWeeklyReview))
                 }
 
                 Section {
@@ -336,9 +335,6 @@ struct SettingsView: View {
                 }
 
                 Section("Debug Tools") {
-                    Button("Lock In Pending Week") {
-                        _ = try? TrainingStore.resolvePendingWeek(context: modelContext)
-                    }
                     ForEach(SampleProfile.allCases) { profile in
                         Button("Seed \(profile.displayName)") {
                             try? TrainingStore.seedSampleData(context: modelContext, profile: profile)
@@ -381,8 +377,9 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(TrainingTheme.background.ignoresSafeArea())
+        .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             _ = try? TrainingStore.fetchSettings(context: modelContext)
             await refreshCloudSyncStatus()

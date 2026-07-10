@@ -1,7 +1,52 @@
+import SwiftData
 import SwiftUI
 
 struct MoreView: View {
+    @Query private var allStats: [StatDomain]
+    @Query private var resolutions: [WeeklyResolution]
+
     let onSettingsMutated: () -> Void
+
+    private var activeStats: [StatDomain] {
+        allStats.filter(\.isActive)
+    }
+
+    private var totalRanksEarned: Int {
+        activeStats.reduce(0) { $0 + max($1.rankLevel, 0) }
+    }
+
+    private var totalCharge: Int {
+        activeStats.reduce(0) { $0 + max($1.chargeValue, 0) }
+    }
+
+    private var resolvedThisWeekCount: Int {
+        let calendar = Calendar.current
+        let weekRange = calendar.dateInterval(of: .weekOfYear, for: .now) ?? DateInterval(start: .now, duration: 0)
+        return resolutions.filter { weekRange.contains($0.weekStartDate) }.count
+    }
+
+    private var atBaselineCount: Int {
+        let count = activeStats.filter { $0.chargeValue == 0 }.count
+        return count
+    }
+
+    private var overallLevel: Int {
+        let active = activeStats
+        guard !active.isEmpty else { return 1 }
+        let avg = Double(totalRanksEarned) / Double(active.count)
+        return max(1, Int(avg.rounded()))
+    }
+
+    private var overallTitle: String {
+        switch overallLevel {
+        case ...2: return "Initiate"
+        case 3...4: return "Apprentice"
+        case 5...6: return "Skilled"
+        case 7...8: return "Adept"
+        case 9...10: return "Master"
+        default: return "Adept"
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -14,22 +59,16 @@ struct MoreView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    SurfaceCard(accent: TrainingArcConfig.color(for: "focus")) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("More")
-                                .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                                .foregroundStyle(TrainingTheme.textPrimary)
-                            Text("History, settings, and the extra controls that no longer need their own tab.")
-                                .foregroundStyle(TrainingTheme.textSecondary)
-                        }
-                    }
+                    morePageHeader
+
+                    overallStandingCard
 
                     NavigationLink {
                         ManageSkillsView()
                     } label: {
                         destinationCard(
                             title: "Manage Skills",
-                            detail: "Enable optional skills, archive ones you don't track, and reorder your active set.",
+                            detail: "Enable optional skills, archive ones you don't track, reorder your set.",
                             icon: "square.stack.3d.up.fill",
                             accent: TrainingArcConfig.color(for: "strength")
                         )
@@ -41,7 +80,7 @@ struct MoreView: View {
                     } label: {
                         destinationCard(
                             title: "History",
-                            detail: "Review resolved weeks, baselines, and long-term movement for each skill.",
+                            detail: "Resolved weeks, baselines, and long-term movement for each skill.",
                             icon: "chart.xyaxis.line",
                             accent: TrainingArcConfig.color(for: "intellect")
                         )
@@ -55,68 +94,155 @@ struct MoreView: View {
                     } label: {
                         destinationCard(
                             title: "Settings",
-                            detail: "Notifications, theme, exports, sample data, and progression preferences.",
+                            detail: "Notifications, theme, exports, and progression preferences.",
                             icon: "gearshape.fill",
                             accent: TrainingArcConfig.color(for: "curiosity")
                         )
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 32)
             }
         }
         .navigationTitle("More")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var morePageHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            V4PageKicker(title: "Profile & Controls")
+        }
+    }
+
+    private var overallStandingCard: some View {
+        let accent = TrainingArcConfig.color(for: "focus")
+        return V4Card(accent: accent) {
+            VStack(spacing: 14) {
+                HStack(alignment: .center, spacing: 18) {
+                    ZStack {
+                        Circle()
+                            .stroke(TrainingTheme.border.opacity(0.5), lineWidth: 2)
+                            .frame(width: 72, height: 72)
+                        Circle()
+                            .trim(from: 0, to: ringTrim)
+                            .stroke(TrainingTheme.textPrimary, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 72, height: 72)
+                        Text(V4Style.displayNumber(overallLevel))
+                            .font(.system(.title2, design: .serif).weight(.regular))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("OVERALL STANDING")
+                            .font(.caption.weight(.heavy))
+                            .tracking(2.0)
+                            .foregroundStyle(TrainingTheme.textMuted)
+                        V4SerifTitle(text: overallTitle, size: 30)
+                        Text("\(activeStats.count) skills tracked · \(totalRanksEarned) ranks earned")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                HStack(alignment: .top, spacing: 0) {
+                    V4StatTile(value: V4Style.displayNumber(totalCharge), label: "Charge")
+                    V4StatTile(value: V4Style.displayNumber(resolvedThisWeekCount), label: "This week")
+                    V4StatTile(value: V4Style.displayNumber(atBaselineCount), label: "At baseline")
+                }
+            }
+        }
+    }
+
+    private var ringTrim: Double {
+        let maxLevel = Double(TrainingArcConfig.maximumRankLevel)
+        return min(max(Double(overallLevel) / maxLevel, 0.05), 1.0)
     }
 
     private func destinationCard(title: String, detail: String, icon: String, accent: Color) -> some View {
-        SurfaceCard(accent: accent) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(accent.opacity(0.14))
-                    )
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(accent)
+                )
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(.title3, design: .serif).weight(.regular))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text(detail)
+                    .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
+                    .lineLimit(2)
             }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(TrainingTheme.textMuted)
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(red: 0.985, green: 0.975, blue: 0.955))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(TrainingTheme.border.opacity(0.5), lineWidth: 0.8)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
 }
 
 struct SkillCharacterRosterView: View {
-    let stat: StatDomain
+    @Environment(\.modelContext) private var modelContext
+    @Query private var allStats: [StatDomain]
 
-    @State private var centeredLevel: Int?
-    @State private var didCenterInitialLevel = false
-    @State private var initialCenterTask: Task<Void, Never>?
-    @State private var isInitialCenteringComplete = false
+    let stat: StatDomain
+    @State private var activeStatID: UUID
+    @State private var focusedLevel: Int
+
+    init(stat: StatDomain) {
+        self.stat = stat
+        _activeStatID = State(initialValue: stat.id)
+        _focusedLevel = State(initialValue: stat.rankLevel)
+    }
+
+    private var activeStats: [StatDomain] {
+        allStats
+            .filter { $0.isActive }
+            .sorted {
+                if $0.sortOrder == $1.sortOrder { return $0.name < $1.name }
+                return $0.sortOrder < $1.sortOrder
+            }
+    }
+
+    private var activeStat: StatDomain {
+        activeStats.first(where: { $0.id == activeStatID }) ?? stat
+    }
 
     private var statKey: StatKey {
-        stat.statKey ?? .strength
+        activeStat.statKey ?? .strength
     }
 
     private var accent: Color {
-        TrainingArcConfig.color(for: stat.colorToken)
+        TrainingArcConfig.color(for: activeStat.colorToken)
     }
 
     private var currentLevel: Int {
-        stat.rankLevel
+        activeStat.rankLevel
     }
 
     private var entries: [CharacterRosterEntry] {
@@ -124,246 +250,365 @@ struct SkillCharacterRosterView: View {
     }
 
     private var focusedEntry: CharacterRosterEntry {
-        entries.first(where: { $0.level == (centeredLevel ?? currentLevel) }) ?? entries[0]
+        entries.first(where: { $0.level == focusedLevel }) ?? entries.first(where: { $0.level == currentLevel }) ?? entries[0]
     }
 
-    private var activeCenteredLevelBinding: Binding<Int?> {
-        Binding(
-            get: {
-                isInitialCenteringComplete ? centeredLevel : nil
-            },
-            set: { newValue in
-                guard isInitialCenteringComplete else { return }
-                centeredLevel = newValue
-            }
-        )
+    private var unlockedCount: Int {
+        entries.filter { !$0.isLocked }.count
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let cardWidth = min(max(geometry.size.width * 0.72, 260), 380)
-            let carouselHeight = max(geometry.size.height * 0.66, 420)
-            let horizontalInset = max((geometry.size.width - cardWidth) / 2, 18)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 22) {
+                skillSwitcher
+                heroBlock
+                progressionList
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 36)
+        }
+        .background(
+            LinearGradient(
+                colors: [
+                    TrainingTheme.background,
+                    TrainingTheme.backgroundSecondary,
+                    accent.opacity(0.10)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
+        .navigationTitle("Roster")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                V4PageKicker(title: "Roster")
+            }
+        }
+        .onChange(of: activeStatID) { _, _ in
+            focusedLevel = currentLevel
+        }
+    }
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(stat.name)
-                            .font(.system(.largeTitle, design: .rounded).weight(.black))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+    private var skillSwitcher: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            V4PageKicker(title: "Your Skills", symbol: "sparkle", accent: TrainingTheme.textMuted)
+                .padding(.horizontal, 2)
 
-                        HStack(spacing: 10) {
-                            Text(focusedEntry.title)
-                                .font(.system(.title3, design: .rounded).weight(.heavy))
-                                .foregroundStyle(TrainingTheme.textPrimary)
-                                .lineLimit(2)
-
-                            Spacer(minLength: 8)
-
-                            Text("LV \(focusedEntry.level)")
-                                .font(.caption.weight(.black))
-                                .foregroundStyle(focusedEntry.isLocked ? TrainingTheme.warning : accent)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .background(
-                                    Capsule()
-                                        .fill(.white.opacity(0.92))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder((focusedEntry.isLocked ? TrainingTheme.warning : accent).opacity(0.18), lineWidth: 0.9)
-                                )
-
-                            if focusedEntry.isLocked {
-                                Label("Locked", systemImage: "lock.fill")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(TrainingTheme.warning)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        Capsule()
-                                            .fill(TrainingTheme.warning.opacity(0.10))
-                                    )
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 18) {
-                                ForEach(entries) { entry in
-                                    SkillCharacterRosterCard(
-                                        entry: entry,
-                                        statName: stat.name,
-                                        accent: accent
-                                    )
-                                    .frame(width: cardWidth, height: carouselHeight)
-                                    .id(entry.level)
-                                    .visualEffect { content, proxy in
-                                        let frame = proxy.frame(in: .scrollView(axis: .horizontal))
-                                        let distance = abs(frame.midX - geometry.size.width / 2)
-                                        let progress = min(distance / (geometry.size.width * 0.72), 1)
-                                        let scale = 1 - (progress * 0.22)
-                                        let opacity = 1 - (progress * 0.38)
-
-                                        return content
-                                            .scaleEffect(scale)
-                                            .opacity(opacity)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, horizontalInset)
-                            .scrollTargetLayout()
-                        }
-                        .frame(height: carouselHeight)
-                        .scrollTargetBehavior(.viewAligned)
-                        .scrollPosition(id: activeCenteredLevelBinding, anchor: .center)
-                        .onAppear {
-                            centerInitialLevelIfNeeded(using: proxy)
-                        }
-                        .onChange(of: currentLevel) { _, newLevel in
-                            guard didCenterInitialLevel else { return }
-                            centeredLevel = newLevel
-                            proxy.scrollTo(newLevel, anchor: .center)
-                        }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(activeStats) { other in
+                        skillChip(for: other)
                     }
                 }
-                .padding(.vertical, 18)
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
             }
+        }
+    }
+
+    private func skillChip(for other: StatDomain) -> some View {
+        let isActive = other.id == activeStatID
+        let chipAccent = TrainingArcConfig.color(for: other.colorToken)
+        return Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                activeStatID = other.id
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: other.iconName)
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(chipAccent)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(chipAccent.opacity(isActive ? 0.22 : 0.14)))
+                Text(other.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
-                LinearGradient(
-                    colors: [
-                        TrainingTheme.background,
-                        TrainingTheme.backgroundSecondary,
-                        accent.opacity(0.12)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Capsule()
+                    .fill(isActive ? chipAccent.opacity(0.12) : Color(red: 0.97, green: 0.96, blue: 0.94))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(isActive ? chipAccent.opacity(0.45) : TrainingTheme.border.opacity(0.6), lineWidth: 1)
             )
         }
-        .navigationTitle("Character Roster")
-        .navigationBarTitleDisplayMode(.inline)
-        .onDisappear {
-            initialCenterTask?.cancel()
-        }
+        .buttonStyle(.plain)
     }
 
-    private func centerInitialLevelIfNeeded(using proxy: ScrollViewProxy) {
-        guard !didCenterInitialLevel else { return }
-        didCenterInitialLevel = true
-        centeredLevel = nil
-        isInitialCenteringComplete = false
-
-        initialCenterTask?.cancel()
-        initialCenterTask = Task { @MainActor in
-            await Task.yield()
-            proxy.scrollTo(currentLevel, anchor: .center)
-            await Task.yield()
-            proxy.scrollTo(currentLevel, anchor: .center)
-            await Task.yield()
-            centeredLevel = currentLevel
-            isInitialCenteringComplete = true
-        }
-    }
-}
-
-private struct SkillCharacterRosterCard: View {
-    let entry: CharacterRosterEntry
-    let statName: String
-    let accent: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(statName.uppercased())
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(TrainingTheme.textMuted)
-
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(entry.title)
-                        .font(.system(.title3, design: .rounded).weight(.heavy))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                        .lineLimit(2)
-
-                    Spacer(minLength: 8)
-
-                    Text("LV \(entry.level)")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(entry.isLocked ? TrainingTheme.warning : accent)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(.white.opacity(0.92))
-                        )
-                }
-
+    private var heroBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                V4SerifTitle(text: activeStat.name)
+                Spacer()
+                V4LevelBadge(level: focusedEntry.level, tint: accent)
             }
 
-            ZStack(alignment: .bottomTrailing) {
-                cardArtwork
+            (Text(focusPrefix).foregroundStyle(TrainingTheme.textSecondary)
+             + Text(focusedEntry.title).foregroundStyle(accent).fontWeight(.semibold)
+             + Text(" · \(unlockedCount) of \(entries.count) ranks unlocked").foregroundStyle(TrainingTheme.textSecondary))
+                .font(.subheadline)
 
-                if entry.isLocked {
-                    Label("Locked", systemImage: "lock.fill")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(Color.black.opacity(0.44))
-                        )
-                        .padding(16)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            progressBar
+                .padding(.top, 4)
+
+            CharacterRosterCarousel(
+                entries: entries,
+                activeStatName: activeStat.name,
+                focusedLevel: $focusedLevel,
+                currentLevel: currentLevel,
+                accent: accent
+            )
+            .padding(.vertical, 4)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
     }
 
-    @ViewBuilder
-    private var cardArtwork: some View {
-        if let image = entry.image {
-            rosterImage(for: image)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+    private var focusPrefix: String {
+        if focusedEntry.level == currentLevel {
+            return "Currently "
+        }
+        if focusedEntry.isLocked {
+            return "Previewing locked "
+        }
+        return "Previewing "
+    }
+
+    private var progressBar: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 4) {
+                ForEach(entries) { entry in
+                    Capsule()
+                        .fill(entry.isLocked ? TrainingTheme.border.opacity(0.5) : accent.opacity(entry.level == focusedEntry.level ? 1.0 : 0.5))
+                        .frame(width: max((proxy.size.width - CGFloat((entries.count - 1) * 4)) / CGFloat(entries.count), 8), height: 6)
+                }
+            }
+        }
+        .frame(height: 6)
+    }
+
+    private var progressionList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            V4SectionHeader(number: entries.count, title: "Rank Progression")
+                .padding(.horizontal, 2)
+
+            VStack(spacing: 10) {
+                ForEach(entries) { entry in
+                    rankRow(entry)
+                }
+            }
+        }
+    }
+
+    private func rankRow(_ entry: CharacterRosterEntry) -> some View {
+        let isCurrent = entry.level == focusedEntry.level
+        let isActualCurrent = entry.level == currentLevel
+        let statusLabel: String
+        let statusTint: Color
+        if isActualCurrent {
+            statusLabel = "Current"
+            statusTint = accent
+        } else if isCurrent {
+            statusLabel = "Preview"
+            statusTint = accent
+        } else if entry.isLocked {
+            statusLabel = "Locked"
+            statusTint = TrainingTheme.textMuted
         } else {
-            rosterFallbackArtwork
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            statusLabel = "Unlocked"
+            statusTint = TrainingTheme.positiveStrong
         }
+
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(accent.opacity(entry.isLocked ? 0.06 : 0.14))
+                    .frame(width: 56, height: 56)
+                if let image = entry.image {
+                    rosterThumbnail(for: image)
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    Image(systemName: entry.isLocked ? "lock.fill" : "person.fill")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(entry.isLocked ? TrainingTheme.textMuted : accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("LV \(V4Style.displayNumber(entry.level)) · \(statusLabel.uppercased())")
+                    .font(.caption2.weight(.heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(statusTint)
+                Text(entry.title)
+                    .font(.system(.title3, design: .serif).weight(.regular))
+                    .foregroundStyle(entry.isLocked ? TrainingTheme.textSecondary : TrainingTheme.textPrimary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            if isActualCurrent {
+                Text("YOU ARE HERE")
+                    .font(.caption2.weight(.heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule().fill(accent)
+                    )
+            } else if entry.isLocked {
+                Image(systemName: "lock.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textMuted)
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(accent)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(red: 0.985, green: 0.975, blue: 0.955))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(isCurrent ? accent.opacity(0.55) : TrainingTheme.border.opacity(0.45), lineWidth: isCurrent ? 1.4 : 0.8)
+        )
+        .shadow(color: Color.black.opacity(isCurrent ? 0.06 : 0.02), radius: isCurrent ? 6 : 3, x: 0, y: 2)
     }
 
     @ViewBuilder
-    private func rosterImage(for reference: RankImageReference) -> some View {
+    private func rosterThumbnail(for reference: RankImageReference) -> some View {
         switch reference {
         case .asset(let name):
             Image(name)
                 .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.horizontal, 6)
-                .padding(.top, 6)
+                .scaledToFill()
+        }
+    }
+}
+
+private struct CharacterRosterCarousel: View {
+    let entries: [CharacterRosterEntry]
+    let activeStatName: String
+    @Binding var focusedLevel: Int
+    let currentLevel: Int
+    let accent: Color
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 12) {
+                ForEach(entries) { entry in
+                    rosterCard(entry)
+                        .id(entry.level)
+                        .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+                            content
+                                .scaleEffect(phase.isIdentity ? 1.0 : 0.84)
+                                .opacity(phase.isIdentity ? 1.0 : 0.64)
+                        }
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .frame(height: 326)
+        .contentMargins(.horizontal, 54, for: .scrollContent)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: focusedLevelBinding)
+        .onAppear {
+            focusedLevel = min(max(focusedLevel, TrainingArcConfig.minimumRankLevel), TrainingArcConfig.maximumRankLevel)
         }
     }
 
-    private var rosterFallbackArtwork: some View {
-        VStack(spacing: 14) {
-            if entry.isLocked {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 70, weight: .bold))
-                    .foregroundStyle(TrainingTheme.warning)
-            } else {
-                Text(String(statName.prefix(1)).uppercased())
-                    .font(.system(size: 90, design: .rounded).weight(.black))
-                    .foregroundStyle(accent)
+    private var focusedLevelBinding: Binding<Int?> {
+        Binding<Int?>(
+            get: { focusedLevel },
+            set: { newValue in
+                guard let newValue else { return }
+                focusedLevel = newValue
+            }
+        )
+    }
+
+    private func rosterCard(_ entry: CharacterRosterEntry) -> some View {
+        let isCurrent = entry.level == currentLevel
+        return VStack(spacing: 12) {
+            HStack {
+                V4LevelBadge(level: entry.level, tint: accent, compact: true)
+                Spacer()
+                Text(statusText(for: entry))
+                    .font(.caption2.weight(.heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(statusTint(for: entry))
             }
 
-            Text(entry.isLocked ? "Unknown Form" : "Prototype Form")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(TrainingTheme.textSecondary)
+            ZStack(alignment: .topTrailing) {
+                RankArtworkView(
+                    habitName: activeStatName,
+                    level: entry.level,
+                    title: entry.title,
+                    image: entry.image,
+                    accent: accent,
+                    style: .dashboardTile
+                )
+
+                if entry.isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textMuted)
+                        .padding(8)
+                        .background(Circle().fill(.white.opacity(0.86)))
+                        .padding(10)
+                }
+            }
+
+            Text(entry.title)
+                .font(.system(.headline, design: .serif).weight(.regular))
+                .foregroundStyle(entry.isLocked ? TrainingTheme.textSecondary : TrainingTheme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
+        .padding(14)
+        .frame(width: 224, height: 310)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            TrainingTheme.card,
+                            .white.opacity(0.92),
+                            accent.opacity(isCurrent ? 0.14 : 0.07)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(isCurrent ? accent.opacity(0.46) : TrainingTheme.borderStrong.opacity(0.18), lineWidth: isCurrent ? 1.3 : 0.9)
+        )
+        .shadow(color: accent.opacity(isCurrent ? 0.18 : 0.08), radius: isCurrent ? 14 : 8, x: 0, y: 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Level \(entry.level), \(entry.title), \(statusText(for: entry))")
+    }
+
+    private func statusText(for entry: CharacterRosterEntry) -> String {
+        if entry.level == currentLevel { return "CURRENT" }
+        if entry.isLocked { return "LOCKED" }
+        return "UNLOCKED"
+    }
+
+    private func statusTint(for entry: CharacterRosterEntry) -> Color {
+        if entry.level == currentLevel { return accent }
+        if entry.isLocked { return TrainingTheme.textMuted }
+        return TrainingTheme.positiveStrong
     }
 }

@@ -27,6 +27,8 @@ struct GoalsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    goalsPageHeader
+
                     if goals.isEmpty {
                         emptyState
                     } else {
@@ -44,10 +46,13 @@ struct GoalsView: View {
                         }
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 24)
             }
         }
         .navigationTitle("Goals")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -91,12 +96,17 @@ struct GoalsView: View {
         presentedEditor = GoalEditorSeed(goal: nil, initialStatKey: key)
     }
 
+    private var goalsPageHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            V4PageKicker(title: "Targets & Pacing")
+        }
+    }
+
     private var emptyState: some View {
-        SurfaceCard(accent: TrainingArcConfig.color(for: "focus")) {
+        let accent = TrainingArcConfig.color(for: "focus")
+        return V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("No goals yet")
-                    .font(.system(.title2, design: .rounded).weight(.bold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
+                V4SerifTitle(text: "No goals yet", size: 28)
 
                 VStack(alignment: .leading, spacing: 8) {
                     explainerRow(
@@ -116,11 +126,18 @@ struct GoalsView: View {
                 Button {
                     presentedEditor = GoalEditorSeed(goal: nil, initialStatKey: initialStatKey)
                 } label: {
-                    Label("Create your first goal", systemImage: "plus.circle.fill")
-                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.subheadline.weight(.heavy))
+                        Text("Create your first goal")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Capsule().fill(accent))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(TrainingArcConfig.color(for: "focus"))
+                .buttonStyle(.plain)
             }
         }
     }
@@ -128,7 +145,7 @@ struct GoalsView: View {
     private func explainerRow(title: String, body: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.subheadline.weight(.bold))
+                .font(.system(.subheadline, design: .serif).weight(.regular))
                 .foregroundStyle(TrainingTheme.textPrimary)
             Text(body)
                 .font(.footnote)
@@ -139,7 +156,8 @@ struct GoalsView: View {
     private func section(title: String, goals: [Goal]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
-                .font(.caption.weight(.black))
+                .font(.caption.weight(.heavy))
+                .tracking(2.0)
                 .foregroundStyle(TrainingTheme.textMuted)
 
             ForEach(goals) { goal in
@@ -176,16 +194,17 @@ private struct GoalCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            SurfaceCard(accent: accent) {
+            V4Card(accent: accent) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(goal.displayTitle)
-                                .font(.headline)
+                                .font(.system(.headline, design: .serif).weight(.regular))
                                 .foregroundStyle(TrainingTheme.textPrimary)
                             Text(subtitle)
-                                .font(.caption)
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textSecondary)
+                                .tracking(0.5)
                         }
                         Spacer()
                         statusPill
@@ -195,7 +214,7 @@ private struct GoalCardView: View {
 
                     HStack {
                         Text("\(MetricFormatting.shortMetric(progress.currentValue)) / \(MetricFormatting.shortMetric(progress.targetValue))")
-                            .font(.caption.weight(.semibold))
+                            .font(.caption.weight(.bold))
                             .foregroundStyle(TrainingTheme.textPrimary)
                             .monospacedDigit()
                         Spacer()
@@ -220,19 +239,11 @@ private struct GoalCardView: View {
             if let key = goal.linkedStatKey { return key.displayName }
             return "Overall"
         }()
-        return "\(scope) · \(goal.type.displayName)"
+        return "\(scope.uppercased()) · \(goal.type.displayName.uppercased())"
     }
 
     private var statusPill: some View {
-        Text(progress.statusLabel)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(statusColor)
-            )
+        V4StatusPill(text: progress.statusLabel, tint: statusColor)
     }
 
     private var statusColor: Color {
@@ -500,7 +511,7 @@ struct GoalEditorView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(TrainingTheme.background.ignoresSafeArea())
+        .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .navigationTitle(existingGoal == nil ? "New Goal" : "Edit Goal")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

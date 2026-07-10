@@ -10,6 +10,7 @@
 		001EEF1DA3B9EE6D49E95F03 /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		02D71550162A5DF74747F077 /* ManageSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F68BC43AEA3A5AF7A500F7 /* ManageSkillsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		04B0B8C5339EFC86BE455EE0 /* RankArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549E045B5ABF1518B27118F0 /* RankArtworkView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		F4ABCDEF01234567890ABCD1 /* V4Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ABCDEF01234567890ABCD2 /* V4Style.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		07E326B84A8EBEE6A9C71496 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		0811AFEEAB80192DF010F288 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B3E749B226B28FFD6C254EF /* HabitsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -30,6 +31,7 @@
 		40C7660AA0F973D3682D9011 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9057FB9C2D82CE89491F37FB /* GoalsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		411CECA79CF0C782F7684EFE /* TrainingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7AF49404A52A82E92ED73A /* TrainingStore.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		4324644800149CD3710CB681 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C66A6243D32FCD1D92C1819 /* DashboardView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		A1A2345678901ABCDEF11111 /* RankChangesReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2345678901ABCDEF22222 /* RankChangesReviewView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		4FAF969D91E31C3BAE4ABFC6 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED2EF013F47F5A963E928E3 /* Foundation.framework */; };
 		52526327875F7AC47CB93560 /* WeekMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48416C9F1CC9F8D5EF5914E6 /* WeekMath.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -53,6 +55,7 @@
 		AC6AEAA949D30A7014D6FA6C /* MythosLogWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AFDFD0C44B951CD55B456B2C /* MythosLogWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B459C42D7249DBBD7646DBDF /* QuickLogIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE3290E74F8AFC71CD3A370 /* QuickLogIntent.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		B7D73B8A964E8CD5F64735D3 /* HabitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		D7E3456789012ABCDEF12345 /* UnmatchedWorkoutSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E3456789012ABCDEF54321 /* UnmatchedWorkoutSheet.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		C60922A05610935539A7D553 /* ExternalEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DF705FD536363937DD87C0 /* ExternalEventService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		CFE9D6D846446D1DF4DC7EE9 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47CC4B7997FDD3D4E08AEBB /* NotificationService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		D045B8B8862BE1E4AE132C51 /* MythosLogWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4863915BDC033A7754990A65 /* MythosLogWidgets.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -117,11 +120,13 @@
 		4A26C734A994699116F71229 /* MythosLogApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogApp.swift; path = MythosLog/MythosLogApp.swift; sourceTree = "<group>"; };
 		4A7AF49404A52A82E92ED73A /* TrainingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingStore.swift; path = MythosLog/Domain/TrainingStore.swift; sourceTree = "<group>"; };
 		549E045B5ABF1518B27118F0 /* RankArtworkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RankArtworkView.swift; path = MythosLog/Views/Components/RankArtworkView.swift; sourceTree = "<group>"; };
+		F4ABCDEF01234567890ABCD2 /* V4Style.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = V4Style.swift; path = MythosLog/Views/Components/V4Style.swift; sourceTree = "<group>"; };
 		56539AE7AFB8678EBCD34F20 /* TrainingModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingModels.swift; path = MythosLog/Models/TrainingModels.swift; sourceTree = "<group>"; };
 		569E9EE18AC898B13A6A699B /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = MythosLog/Support/WidgetSnapshot.swift; sourceTree = "<group>"; };
 		653EE227BF3CD8B846AB8E3C /* AppRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppRootView.swift; path = MythosLog/App/AppRootView.swift; sourceTree = "<group>"; };
 		6BD43C2C892D162116C715EC /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = MythosLog/Assets.xcassets; sourceTree = "<group>"; };
 		6C66A6243D32FCD1D92C1819 /* DashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DashboardView.swift; path = MythosLog/Views/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		A1A2345678901ABCDEF22222 /* RankChangesReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RankChangesReviewView.swift; path = MythosLog/Views/Dashboard/RankChangesReviewView.swift; sourceTree = "<group>"; };
 		7028EC241BF01806D897954F /* HabitQuickLogRow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitQuickLogRow.swift; path = MythosLog/Views/Components/HabitQuickLogRow.swift; sourceTree = "<group>"; };
 		837FA3AF2C10BB702C678A24 /* Formatting.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Formatting.swift; path = MythosLog/Support/Formatting.swift; sourceTree = "<group>"; };
 		871AAE9E3E57118456D0DBFD /* ParticleBurstView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleBurstView.swift; path = MythosLog/Views/Components/ParticleBurstView.swift; sourceTree = "<group>"; };
@@ -140,6 +145,7 @@
 		CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SurfaceCard.swift; path = MythosLog/Views/Components/SurfaceCard.swift; sourceTree = "<group>"; };
 		CE3A982B49277FC03FB2F881 /* StatCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StatCard.swift; path = MythosLog/Views/Components/StatCard.swift; sourceTree = "<group>"; };
 		D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitDetailView.swift; path = MythosLog/Views/Habits/HabitDetailView.swift; sourceTree = "<group>"; };
+		D7E3456789012ABCDEF54321 /* UnmatchedWorkoutSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = UnmatchedWorkoutSheet.swift; path = MythosLog/Views/Habits/UnmatchedWorkoutSheet.swift; sourceTree = "<group>"; };
 		D47CC4B7997FDD3D4E08AEBB /* NotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotificationService.swift; path = MythosLog/Domain/NotificationService.swift; sourceTree = "<group>"; };
 		D7E1234567890ABCDEF54321 /* WeeklyReviewDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewDetailView.swift; path = MythosLog/Views/WeeklyReview/WeeklyReviewDetailView.swift; sourceTree = "<group>"; };
 		DAB8AF36764430C22FB504BB /* OnboardingFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OnboardingFlowView.swift; path = MythosLog/Views/Onboarding/OnboardingFlowView.swift; sourceTree = "<group>"; };
@@ -190,6 +196,7 @@
 			isa = PBXGroup;
 			children = (
 				6C66A6243D32FCD1D92C1819 /* DashboardView.swift */,
+				A1A2345678901ABCDEF22222 /* RankChangesReviewView.swift */,
 			);
 			name = Dashboard;
 			sourceTree = "<group>";
@@ -200,6 +207,7 @@
 				D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */,
 				3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */,
 				0B3E749B226B28FFD6C254EF /* HabitsView.swift */,
+				D7E3456789012ABCDEF54321 /* UnmatchedWorkoutSheet.swift */,
 			);
 			name = Habits;
 			sourceTree = "<group>";
@@ -319,6 +327,7 @@
 				549E045B5ABF1518B27118F0 /* RankArtworkView.swift */,
 				CE3A982B49277FC03FB2F881 /* StatCard.swift */,
 				CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */,
+				F4ABCDEF01234567890ABCD2 /* V4Style.swift */,
 			);
 			name = Components;
 			sourceTree = "<group>";
@@ -604,9 +613,12 @@
 				04B0B8C5339EFC86BE455EE0 /* RankArtworkView.swift in Sources */,
 				94E1F74AA9B445D8B9D9DF4E /* StatCard.swift in Sources */,
 				001EEF1DA3B9EE6D49E95F03 /* SurfaceCard.swift in Sources */,
+				F4ABCDEF01234567890ABCD1 /* V4Style.swift in Sources */,
 				4324644800149CD3710CB681 /* DashboardView.swift in Sources */,
+				A1A2345678901ABCDEF11111 /* RankChangesReviewView.swift in Sources */,
 				40C7660AA0F973D3682D9011 /* GoalsView.swift in Sources */,
 				B7D73B8A964E8CD5F64735D3 /* HabitDetailView.swift in Sources */,
+				D7E3456789012ABCDEF12345 /* UnmatchedWorkoutSheet.swift in Sources */,
 				4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */,
 				0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */,
 				26C0CEC84BCFE4803E46DF9B /* HistoryView.swift in Sources */,

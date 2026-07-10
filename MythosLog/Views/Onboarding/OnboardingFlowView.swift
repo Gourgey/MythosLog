@@ -67,11 +67,13 @@ struct OnboardingFlowView: View {
             AuraView(color: TrainingArcConfig.color(for: "focus"), size: 180)
 
             VStack(spacing: 12) {
+                V4PageKicker(title: "A Training System")
                 Text(AppIdentity.displayName)
-                    .font(.system(size: 38, weight: .heavy, design: .rounded))
+                    .font(.system(size: 44, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text("A personal training system where real habits harden into earned stats.")
-                    .font(.title3)
+                    .font(.system(.title3, design: .serif))
+                    .italic()
                     .multilineTextAlignment(.center)
                     .foregroundStyle(TrainingTheme.textSecondary)
                     .padding(.horizontal, 32)
@@ -91,8 +93,9 @@ struct OnboardingFlowView: View {
     private var habitsStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                V4PageKicker(title: "Step II")
                 Text("Choose Your Starter Habits")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .font(.system(size: 32, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
 
                 Text("All seven core stats are included. Pick the habits you want seeded on day one.")
@@ -134,8 +137,9 @@ struct OnboardingFlowView: View {
     private var baselineStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                V4PageKicker(title: "Step III")
                 Text("Find your Rank")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .font(.system(size: 32, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text("Set the amount you honestly do in a normal week. Your starting level updates live, along with the next and lower baseline targets.")
                     .foregroundStyle(TrainingTheme.textSecondary)
@@ -165,8 +169,9 @@ struct OnboardingFlowView: View {
     private var calibrationStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                V4PageKicker(title: "Step IV")
                 Text("Calibrate (optional)")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .font(.system(size: 32, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text("Tell Mythos Log what you’re training toward and your believable maximum in a strong week. Both are optional — skip if you’re only using baseline for now.")
                     .foregroundStyle(TrainingTheme.textSecondary)
@@ -254,8 +259,9 @@ struct OnboardingFlowView: View {
     private var reviewStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                V4PageKicker(title: "Step V")
                 Text("Weekly Resolution")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .font(.system(size: 32, weight: .regular, design: .serif))
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text("The weekly report becomes a summary screen. Rank updates after completed weeks are resolved, while charge now decays toward zero and moves up or down based on how far you were above or below your current rank target.")
                     .foregroundStyle(TrainingTheme.textSecondary)

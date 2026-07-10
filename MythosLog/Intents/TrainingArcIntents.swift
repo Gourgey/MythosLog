@@ -185,8 +185,8 @@ private enum IntentSupport {
 
 struct ActiveHabitOptionsProvider: DynamicOptionsProvider {
     func results() async throws -> [String] {
-        let context = IntentSupport.context()
-        return (try? TrainingStore.fetchActiveHabits(context: context).map(\.name)) ?? []
+        let context = await IntentSupport.context()
+        return (try? await TrainingStore.fetchActiveHabits(context: context).map(\.name)) ?? []
     }
 }
 

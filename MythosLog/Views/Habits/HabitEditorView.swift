@@ -7,6 +7,7 @@ struct HabitEditorView: View {
     @Query(sort: \StatDomain.name) private var stats: [StatDomain]
 
     let habit: Habit?
+    var initialStatID: UUID? = nil
 
     @State private var name = ""
     @State private var notes = ""
@@ -76,7 +77,10 @@ struct HabitEditorView: View {
     }
 
     private func load() {
-        guard let habit else { return }
+        guard let habit else {
+            if selectedStatID == nil { selectedStatID = initialStatID }
+            return
+        }
         name = habit.name
         notes = habit.notes
         selectedStatID = habit.statDomain?.id

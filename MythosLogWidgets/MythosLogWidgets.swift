@@ -28,75 +28,12 @@ struct TrainingArcStatusWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            TrainingArcStatsWidgetEntryView(entry: entry)
+            TrainingSummaryWidgetEntryView(entry: entry)
                 .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
         }
-        .configurationDisplayName("Skill Stats")
-        .description("Your weekly progress and current skill levels at a glance.")
+        .configurationDisplayName("Mythos Log")
+        .description("Your current skill levels, weekly progress, and next training prompt.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
-    }
-}
-
-struct TrainingArcMotivationWidget: Widget {
-    let kind = "TrainingArcMotivationWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            TrainingArcMotivationWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
-        }
-        .configurationDisplayName("Training Motivation")
-        .description("A quick nudge toward the skill that needs your attention most.")
-        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
-    }
-}
-
-struct TrainTodayWidget: Widget {
-    let kind = "TrainTodayWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            TrainTodayWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
-        }
-        .configurationDisplayName("Train Today")
-        .description("The single most important action right now — review ready, goal at risk, or pace gap.")
-        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
-    }
-}
-
-// MARK: - Phase 10 widgets
-
-private func arcWidgetAccent(for token: String) -> Color {
-    switch token {
-    case "strength": Color(red: 0.93, green: 0.39, blue: 0.28)
-    case "intellect": Color(red: 0.35, green: 0.61, blue: 1.0)
-    case "creativity": Color(red: 0.96, green: 0.53, blue: 0.27)
-    case "emotional": Color(red: 0.96, green: 0.35, blue: 0.52)
-    case "focus": Color(red: 0.32, green: 0.82, blue: 0.67)
-    case "curiosity": Color(red: 0.73, green: 0.56, blue: 1.0)
-    case "cardio": Color(red: 0.30, green: 0.72, blue: 0.88)
-    case "cooking": Color(red: 0.92, green: 0.50, blue: 0.30)
-    case "reading": Color(red: 0.45, green: 0.50, blue: 0.74)
-    default: Color(red: 0.32, green: 0.82, blue: 0.67)
-    }
-}
-
-private func arcWidgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
-    content()
-        .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: [Color.black, accent.opacity(0.45)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-}
-
-private func quickLogIncrement(forMeasurementRaw raw: String) -> Double {
-    switch raw {
-    case "pages", "minutes": 10
-    default: 1
     }
 }
 
@@ -106,10 +43,177 @@ struct QuickLogWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
             QuickLogWidgetEntryView(entry: entry)
+                .widgetURL(TrainingRouteLink.url(for: .dashboard))
         }
         .configurationDisplayName("Quick Log")
-        .description("Log a session to your top habits without opening the app.")
+        .description("Log progress to your most relevant habits.")
         .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+private struct TrainingSummaryWidgetEntryView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: TrainingArcEntry
+
+    private var snapshot: TrainingWidgetSnapshot { entry.snapshot }
+    private var hasData: Bool { !snapshot.stats.isEmpty }
+    private var primaryStat: TrainingWidgetStat? { snapshot.weakestStat ?? snapshot.stats.first }
+
+    private var accent: Color {
+        arcWidgetAccent(for: snapshot.trainTodayColorToken ?? primaryStat?.colorToken ?? snapshot.motivationColorToken)
+    }
+
+    private var headline: String {
+        if !hasData {
+            return "Open Mythos Log"
+        }
+
+        if snapshot.pendingWeeklyReview {
+            return "Weekly review ready"
+        }
+
+        return snapshot.trainTodayHeadline ?? snapshot.motivationTitle
+    }
+
+    private var detail: String {
+        if !hasData {
+            return "Open the app once to sync your dashboard data."
+        }
+
+        return snapshot.trainTodayDetail ?? snapshot.motivationMessage
+    }
+
+    var body: some View {
+        switch family {
+        case .systemMedium:
+            mediumWidget
+        case .accessoryRectangular:
+            accessoryWidget
+        default:
+            smallWidget
+        }
+    }
+
+    private var smallWidget: some View {
+        arcWidgetSurface(accent: accent) {
+            VStack(alignment: .leading, spacing: 8) {
+                widgetEyebrow("MYTHOS LOG", accent: accent)
+
+                Text(headline)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(widgetInk)
+                    .lineLimit(2)
+
+                if let primaryStat {
+                    summaryMetric(for: primaryStat)
+                } else {
+                    Text("No synced skills yet")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(widgetInkSecondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(widgetInkSecondary)
+                    .lineLimit(3)
+            }
+        }
+    }
+
+    private var mediumWidget: some View {
+        arcWidgetSurface(accent: accent, topPadding: 28, bottomPadding: 26) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    widgetEyebrow(snapshot.appName.uppercased(), accent: accent)
+
+                    Text(headline)
+                        .font(.title3.weight(.heavy))
+                        .foregroundStyle(widgetInk)
+                        .lineLimit(2)
+
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(widgetInkSecondary)
+                        .lineLimit(2)
+
+                    Spacer(minLength: 0)
+
+                    if snapshot.pendingWeeklyReview {
+                        Label("Review ready", systemImage: "calendar.badge.clock")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(widgetWarning)
+                    } else if snapshot.goalsAtRiskCount > 0 {
+                        Label("\(snapshot.goalsAtRiskCount) goal\(snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk", systemImage: "target")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(widgetWarning)
+                    }
+                }
+
+                Divider()
+                    .overlay(widgetInkSecondary.opacity(0.22))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Skills")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(widgetInkSecondary)
+
+                    if snapshot.stats.isEmpty {
+                        Text("Open the app once to sync your active skills.")
+                            .font(.caption)
+                            .foregroundStyle(widgetInkSecondary)
+                            .lineLimit(4)
+                    } else {
+                        ForEach(snapshot.stats.prefix(3)) { stat in
+                            SkillProgressRow(stat: stat)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: 150)
+            }
+        }
+    }
+
+    private var accessoryWidget: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(headline)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            if let primaryStat {
+                Text("\(primaryStat.name) LV \(primaryStat.level)")
+                    .font(.headline.weight(.bold))
+                    .lineLimit(1)
+                Text("\(MetricFormatting.shortMetric(primaryStat.weekActual)) / \(MetricFormatting.shortMetric(Double(primaryStat.baseline))) this week")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text("Sync dashboard")
+                    .font(.headline.weight(.bold))
+                    .lineLimit(1)
+                Text("Open Mythos Log once")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func summaryMetric(for stat: TrainingWidgetStat) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(stat.name) · LV \(stat.level)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(widgetInk)
+                .lineLimit(1)
+            Text("\(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline))) this week")
+                .font(.caption2)
+                .foregroundStyle(widgetInkSecondary)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -117,25 +221,24 @@ private struct QuickLogWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TrainingArcEntry
 
+    private var snapshot: TrainingWidgetSnapshot { entry.snapshot }
+    private var hasData: Bool { !snapshot.stats.isEmpty }
     private var habits: [TrainingWidgetHabit] {
         let limit = family == .systemMedium ? 4 : 2
-        return Array(entry.snapshot.todayHabits.prefix(limit))
+        return Array(snapshot.todayHabits.prefix(limit))
+    }
+
+    private var accent: Color {
+        arcWidgetAccent(for: snapshot.stats.first?.colorToken ?? snapshot.motivationColorToken)
     }
 
     var body: some View {
-        arcWidgetSurface(accent: arcWidgetAccent(for: entry.snapshot.stats.first?.colorToken ?? "focus")) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("QUICK LOG")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.7))
+        arcWidgetSurface(accent: accent) {
+            VStack(alignment: .leading, spacing: 10) {
+                widgetEyebrow("QUICK LOG", accent: accent)
 
                 if habits.isEmpty {
-                    Text("No habits yet")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Text("Finish onboarding to start logging.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
+                    emptyState
                 } else {
                     ForEach(habits) { habit in
                         quickLogRow(habit)
@@ -144,7 +247,19 @@ private struct QuickLogWidgetEntryView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(14)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(hasData ? "No quick logs yet" : "Open Mythos Log")
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(widgetInk)
+                .lineLimit(2)
+            Text(hasData ? "Add an active habit to enable widget logging." : "Open the app once to sync your habits.")
+                .font(.caption)
+                .foregroundStyle(widgetInkSecondary)
+                .lineLimit(3)
         }
     }
 
@@ -157,15 +272,15 @@ private struct QuickLogWidgetEntryView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(habit.name)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(widgetInk)
                     .lineLimit(1)
                 Text("\(MetricFormatting.shortMetric(total)) \(habit.unitLabel) today")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(widgetInkSecondary)
                     .lineLimit(1)
             }
 
-            Spacer()
+            Spacer(minLength: 6)
 
             Button(intent: QuickLogIntent(habitID: habit.id.uuidString, amount: increment, habitName: habit.name)) {
                 Text("+\(MetricFormatting.shortMetric(increment))")
@@ -173,574 +288,134 @@ private struct QuickLogWidgetEntryView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(.white.opacity(0.22)))
+                    .background(Capsule().fill(accent))
             }
             .buttonStyle(.plain)
         }
     }
 }
 
-struct WeakestStatWidget: Widget {
-    let kind = "WeakestStatWidget"
+private struct SkillProgressRow: View {
+    let stat: TrainingWidgetStat
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            WeakestStatWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: .dashboard))
-        }
-        .configurationDisplayName("Weakest Skill")
-        .description("The skill that needs attention most this week.")
-        .supportedFamilies([.systemSmall, .accessoryRectangular])
-    }
-}
-
-private struct WeakestStatWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    private var weakest: TrainingWidgetStat? { entry.snapshot.weakestStat }
-
-    var body: some View {
-        if family == .accessoryRectangular {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Needs attention")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(weakest?.name ?? "All skills steady")
-                    .font(.headline.weight(.bold))
-                if let weakest {
-                    Text("LV \(weakest.level) · \(MetricFormatting.shortMetric(weakest.weekActual)) / \(MetricFormatting.shortMetric(Double(weakest.baseline)))")
-                        .font(.caption2)
-                }
-            }
-            .padding(.vertical, 2)
-        } else {
-            arcWidgetSurface(accent: arcWidgetAccent(for: weakest?.colorToken ?? "focus")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("NEEDS ATTENTION")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.7))
-                    Text(weakest?.name ?? "All skills steady")
-                        .font(.title3.weight(.heavy))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    if let weakest {
-                        Text("Level \(weakest.level)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.82))
-                        Spacer()
-                        Text("\(MetricFormatting.shortMetric(weakest.weekActual)) / \(MetricFormatting.shortMetric(Double(weakest.baseline))) this week")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                    } else {
-                        Spacer()
-                        Text("Nothing is slipping right now.")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                }
-                .padding(16)
-            }
-        }
-    }
-}
-
-struct GoalAtRiskWidget: Widget {
-    let kind = "GoalAtRiskWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            GoalAtRiskWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: .goals))
-        }
-        .configurationDisplayName("Goal at Risk")
-        .description("Your most urgent goal and how many are slipping.")
-        .supportedFamilies([.systemSmall, .accessoryRectangular])
-    }
-}
-
-private struct GoalAtRiskWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    private var title: String {
-        entry.snapshot.topGoalAtRiskTitle ?? (entry.snapshot.activeGoalCount > 0 ? "Goals on track" : "No active goals")
-    }
-
-    private var detail: String {
-        if let detail = entry.snapshot.topGoalAtRiskDetail {
-            return detail
-        }
-        return entry.snapshot.activeGoalCount > 0 ? "Every goal is on pace." : "Set a goal to start tracking."
+    private var progress: Double {
+        guard stat.baseline > 0 else { return 0 }
+        return min(max(stat.weekActual / Double(stat.baseline), 0), 1)
     }
 
     var body: some View {
-        if family == .accessoryRectangular {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.snapshot.goalsAtRiskCount > 0 ? "Goal at risk" : "Goals")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(title)
-                    .font(.headline.weight(.bold))
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(stat.name)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(widgetInk)
                     .lineLimit(1)
-                Text(detail)
-                    .font(.caption2)
-                    .lineLimit(1)
-            }
-            .padding(.vertical, 2)
-        } else {
-            arcWidgetSurface(accent: entry.snapshot.goalsAtRiskCount > 0 ? Color(red: 0.88, green: 0.58, blue: 0.16) : arcWidgetAccent(for: "focus")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("GOAL AT RISK", systemImage: "target")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.72))
-                    Text(title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.82))
-                        .lineLimit(2)
-                    Spacer()
-                    if entry.snapshot.goalsAtRiskCount > 0 {
-                        Text("\(entry.snapshot.goalsAtRiskCount) of \(entry.snapshot.activeGoalCount) goals slipping")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.yellow)
-                    }
-                }
-                .padding(16)
-            }
-        }
-    }
-}
-
-struct ReviewReadyWidget: Widget {
-    let kind = "ReviewReadyWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
-            ReviewReadyWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
-        }
-        .configurationDisplayName("Weekly Review")
-        .description("Shows when last week is ready to resolve.")
-        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
-    }
-}
-
-private struct ReviewReadyWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    private var isReady: Bool { entry.snapshot.pendingWeeklyReview }
-
-    var body: some View {
-        switch family {
-        case .accessoryCircular:
-            ZStack {
-                AccessoryWidgetBackground()
-                Image(systemName: isReady ? "calendar.badge.exclamationmark" : "calendar")
-                    .font(.title3)
-            }
-        case .accessoryRectangular:
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Weekly Review")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(isReady ? "Ready to resolve" : "All caught up")
-                    .font(.headline.weight(.bold))
-                    .lineLimit(1)
-                Text(isReady ? "Lock in last week" : "Nothing to resolve")
-                    .font(.caption2)
-                    .lineLimit(1)
-            }
-            .padding(.vertical, 2)
-        default:
-            arcWidgetSurface(accent: isReady ? Color(red: 0.88, green: 0.58, blue: 0.16) : arcWidgetAccent(for: "focus")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: isReady ? "calendar.badge.clock" : "checkmark.seal.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white)
-                    Text(isReady ? "Weekly review ready" : "All caught up")
-                        .font(.title3.weight(.heavy))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Spacer()
-                    Text(isReady ? "Resolve last week to apply your rank check." : "No week is waiting to resolve.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.82))
-                        .lineLimit(3)
-                }
-                .padding(16)
-            }
-        }
-    }
-}
-
-private struct TrainTodayWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    private var headline: String {
-        entry.snapshot.trainTodayHeadline ?? (entry.snapshot.pendingWeeklyReview ? "Weekly review ready" : "All skills on pace")
-    }
-
-    private var detail: String {
-        entry.snapshot.trainTodayDetail ?? entry.snapshot.momentumSubtitle
-    }
-
-    private var accent: Color {
-        accentColor(for: entry.snapshot.trainTodayColorToken ?? entry.snapshot.motivationColorToken)
-    }
-
-    var body: some View {
-        switch family {
-        case .systemMedium:
-            mediumWidget
-        case .accessoryRectangular:
-            accessoryWidget
-        default:
-            smallWidget
-        }
-    }
-
-    private var smallWidget: some View {
-        widgetSurface(accent: accent) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TRAIN TODAY")
+                Spacer(minLength: 4)
+                Text("LV \(stat.level)")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.72))
-                Text(headline)
-                    .font(.subheadline.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.78))
-                    .lineLimit(3)
-                Spacer()
-                if entry.snapshot.goalsAtRiskCount > 0 {
-                    Text("\(entry.snapshot.goalsAtRiskCount) goal\(entry.snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                }
+                    .foregroundStyle(widgetInkSecondary)
+                    .lineLimit(1)
             }
-            .padding(16)
-        }
-    }
 
-    private var mediumWidget: some View {
-        widgetSurface(accent: accent) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("TRAIN TODAY")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.72))
-                Text(headline)
-                    .font(.title3.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Text(detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.84))
-                    .lineLimit(3)
-                Spacer()
-                HStack(spacing: 14) {
-                    if entry.snapshot.activeGoalCount > 0 {
-                        Label("\(entry.snapshot.activeGoalCount) active", systemImage: "target")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.82))
-                    }
-                    if entry.snapshot.goalsAtRiskCount > 0 {
-                        Label("\(entry.snapshot.goalsAtRiskCount) at risk", systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.yellow)
-                    }
-                }
-            }
-            .padding(16)
-        }
-    }
+            ProgressView(value: progress)
+                .progressViewStyle(.linear)
+                .tint(arcWidgetAccent(for: stat.colorToken))
 
-    private var accessoryWidget: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(headline)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-            Text(detail)
+            Text("\(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline)))")
                 .font(.caption2)
-                .lineLimit(2)
+                .foregroundStyle(widgetInkSecondary)
+                .lineLimit(1)
         }
-        .padding(.vertical, 2)
     }
+}
 
-    private func widgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .containerBackground(for: .widget) {
+// MARK: - Widget styling
+
+/// Primary ink for widget text on the light surface.
+private let widgetInk = Color(red: 0.16, green: 0.18, blue: 0.21)
+/// Secondary, softer ink for supporting copy.
+private let widgetInkSecondary = Color(red: 0.42, green: 0.45, blue: 0.49)
+/// Amber used for "at risk" / "review ready" callouts on the light surface.
+private let widgetWarning = Color(red: 0.82, green: 0.45, blue: 0.12)
+
+private func widgetEyebrow(_ text: String, accent: Color) -> some View {
+    Text(text)
+        .font(.caption2.weight(.black))
+        .tracking(0.6)
+        .foregroundStyle(accent.opacity(0.85))
+        .lineLimit(1)
+}
+
+private func arcWidgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
+    arcWidgetSurface(accent: accent, topPadding: 24, horizontalPadding: 22, bottomPadding: 20, content: content)
+}
+
+private func arcWidgetSurface<Content: View>(
+    accent: Color,
+    topPadding: CGFloat,
+    horizontalPadding: CGFloat = 22,
+    bottomPadding: CGFloat,
+    @ViewBuilder content: () -> Content
+) -> some View {
+    // Light background fills the whole widget; the content is inset so text
+    // never sits against the widget edges. Padding is applied directly to the
+    // content (no wrapping frame, which previously swallowed the inset). The
+    // top gets a little extra so the eyebrow/headline sit lower from the edge.
+    content()
+        .padding(.top, topPadding)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.bottom, bottomPadding)
+        .containerBackground(for: .widget) {
+            ZStack {
                 LinearGradient(
-                    colors: [Color.black, accent.opacity(0.45)],
+                    colors: [
+                        Color(red: 0.96, green: 0.97, blue: 0.96),
+                        Color(red: 0.90, green: 0.93, blue: 0.91),
+                        Color(red: 0.92, green: 0.93, blue: 0.96)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+                RadialGradient(
+                    colors: [accent.opacity(0.14), .clear],
+                    center: .topLeading,
+                    startRadius: 10,
+                    endRadius: 220
+                )
             }
-    }
-
-    private func accentColor(for token: String) -> Color {
-        switch token {
-        case "strength": Color(red: 0.93, green: 0.39, blue: 0.28)
-        case "intellect": Color(red: 0.35, green: 0.61, blue: 1.0)
-        case "creativity": Color(red: 0.96, green: 0.53, blue: 0.27)
-        case "emotional": Color(red: 0.96, green: 0.35, blue: 0.52)
-        case "focus": Color(red: 0.32, green: 0.82, blue: 0.67)
-        case "curiosity": Color(red: 0.73, green: 0.56, blue: 1.0)
-        case "cardio": Color(red: 0.30, green: 0.72, blue: 0.88)
-        case "cooking": Color(red: 0.92, green: 0.50, blue: 0.30)
-        case "reading": Color(red: 0.45, green: 0.50, blue: 0.74)
-        default: .white
         }
+}
+
+private func quickLogIncrement(forMeasurementRaw raw: String) -> Double {
+    switch raw {
+    case "pages", "minutes":
+        return 10
+    default:
+        return 1
     }
 }
 
-private struct TrainingArcStatsWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    var body: some View {
-        switch family {
-        case .systemMedium:
-            mediumWidget
-        case .accessoryRectangular:
-            accessoryWidget
-        default:
-            smallWidget
-        }
-    }
-
-    private var smallWidget: some View {
-        widgetSurface(accent: accentColor(for: entry.snapshot.weakestStat?.colorToken ?? "focus")) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(entry.snapshot.stats.first?.name ?? "No skills yet")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                if let stat = entry.snapshot.stats.first {
-                    Text("LV \(stat.level) · \(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline)))")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.82))
-                } else {
-                    Text(entry.snapshot.momentumSubtitle)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.74))
-                }
-                Text(entry.snapshot.characterSummary)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.74))
-                Spacer()
-                if let weakest = entry.snapshot.weakestStat {
-                    Text("Needs attention")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                    Text("\(weakest.name) · LV \(weakest.level)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                }
-            }
-            .padding(16)
-        }
-    }
-
-    private var mediumWidget: some View {
-        widgetSurface(accent: accentColor(for: entry.snapshot.stats.first?.colorToken ?? "focus")) {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(entry.snapshot.appName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                    Text("This Week")
-                        .font(.title3.weight(.heavy))
-                        .foregroundStyle(.white)
-                    Text(entry.snapshot.characterSummary)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.75))
-                    Spacer()
-                    if let weakest = entry.snapshot.weakestStat {
-                        Text("Needs attention: \(weakest.name)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
-                }
-
-                Divider()
-                    .overlay(.white.opacity(0.12))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Skills")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                    ForEach(entry.snapshot.stats.prefix(3)) { stat in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(stat.name)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
-                            Text("LV \(stat.level) · \(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline)))")
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                    }
-                    Spacer()
-                    if entry.snapshot.pendingWeeklyReview {
-                        Label("Weekly review ready", systemImage: "calendar.badge.clock")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.yellow)
-                    }
-                }
-            }
-            .padding(16)
-        }
-    }
-
-    private var accessoryWidget: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.snapshot.stats.first?.name ?? entry.snapshot.momentumTitle)
-                .font(.caption.weight(.semibold))
-            Text(entry.snapshot.stats.first.map { "LV \($0.level)" } ?? "No skills yet")
-                .font(.headline.weight(.bold))
-            Text(entry.snapshot.weakestStat.map { "Needs: \($0.name)" } ?? "Dashboard ready")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func widgetBackground(accent: Color) -> some View {
-        LinearGradient(
-            colors: [Color.black, accent.opacity(0.45)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private func widgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .containerBackground(for: .widget) {
-                widgetBackground(accent: accent)
-            }
-    }
-
-    private func accentColor(for token: String) -> Color {
-        switch token {
-        case "strength": Color(red: 0.93, green: 0.39, blue: 0.28)
-        case "intellect": Color(red: 0.35, green: 0.61, blue: 1.0)
-        case "creativity": Color(red: 0.96, green: 0.53, blue: 0.27)
-        case "emotional": Color(red: 0.96, green: 0.35, blue: 0.52)
-        case "focus": Color(red: 0.32, green: 0.82, blue: 0.67)
-        case "curiosity": Color(red: 0.73, green: 0.56, blue: 1.0)
-        default: .white
-        }
-    }
-}
-
-private struct TrainingArcMotivationWidgetEntryView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: TrainingArcEntry
-
-    var body: some View {
-        switch family {
-        case .systemMedium:
-            mediumWidget
-        case .accessoryRectangular:
-            accessoryWidget
-        default:
-            smallWidget
-        }
-    }
-
-    private var accent: Color {
-        accentColor(for: entry.snapshot.motivationColorToken)
-    }
-
-    private var smallWidget: some View {
-        widgetSurface(accent: accent) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(entry.snapshot.motivationTitle)
-                    .font(.headline.weight(.heavy))
-                    .foregroundStyle(.white)
-                Text(entry.snapshot.motivationMessage)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(4)
-                Spacer()
-                Text("Tap to open Mythos Log")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.64))
-            }
-            .padding(16)
-        }
-    }
-
-    private var mediumWidget: some View {
-        widgetSurface(accent: accent) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Stay Consistent")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                Text(entry.snapshot.motivationTitle)
-                    .font(.title3.weight(.heavy))
-                    .foregroundStyle(.white)
-                Text(entry.snapshot.motivationMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.84))
-                    .lineLimit(4)
-                Spacer()
-                if let weakest = entry.snapshot.weakestStat {
-                    Text("Current pressure point: \(weakest.name)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.74))
-                }
-                if entry.snapshot.goalsAtRiskCount > 0 {
-                    Label("\(entry.snapshot.goalsAtRiskCount) goal\(entry.snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk", systemImage: "target")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.yellow)
-                }
-            }
-            .padding(16)
-        }
-    }
-
-    private var accessoryWidget: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.snapshot.motivationTitle)
-                .font(.caption.weight(.semibold))
-            Text(entry.snapshot.motivationMessage)
-                .font(.caption2)
-                .lineLimit(2)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func widgetBackground(accent: Color) -> some View {
-        LinearGradient(
-            colors: [Color.black, accent.opacity(0.45)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private func widgetSurface<Content: View>(accent: Color, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .containerBackground(for: .widget) {
-                widgetBackground(accent: accent)
-            }
-    }
-
-    private func accentColor(for token: String) -> Color {
-        switch token {
-        case "strength": Color(red: 0.93, green: 0.39, blue: 0.28)
-        case "intellect": Color(red: 0.35, green: 0.61, blue: 1.0)
-        case "creativity": Color(red: 0.96, green: 0.53, blue: 0.27)
-        case "emotional": Color(red: 0.96, green: 0.35, blue: 0.52)
-        case "focus": Color(red: 0.32, green: 0.82, blue: 0.67)
-        case "curiosity": Color(red: 0.73, green: 0.56, blue: 1.0)
-        default: .white
-        }
+private func arcWidgetAccent(for token: String) -> Color {
+    switch token {
+    case "strength":
+        Color(red: 0.93, green: 0.39, blue: 0.28)
+    case "intellect":
+        Color(red: 0.35, green: 0.61, blue: 1.0)
+    case "creativity":
+        Color(red: 0.96, green: 0.53, blue: 0.27)
+    case "emotional":
+        Color(red: 0.96, green: 0.35, blue: 0.52)
+    case "focus":
+        Color(red: 0.32, green: 0.82, blue: 0.67)
+    case "curiosity":
+        Color(red: 0.73, green: 0.56, blue: 1.0)
+    case "cardio":
+        Color(red: 0.30, green: 0.72, blue: 0.88)
+    case "cooking":
+        Color(red: 0.92, green: 0.50, blue: 0.30)
+    case "reading":
+        Color(red: 0.45, green: 0.50, blue: 0.74)
+    default:
+        Color(red: 0.32, green: 0.82, blue: 0.67)
     }
 }

@@ -78,17 +78,18 @@ struct HistoryView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    historyPageHeader
+
                     if activeStats.isEmpty {
-                        SurfaceCard {
+                        V4Card {
                             Text("History appears after you resolve your first week.")
                                 .foregroundStyle(TrainingTheme.textSecondary)
+                                .font(.subheadline)
                         }
                     } else if allResolutions.isEmpty {
-                        SurfaceCard {
+                        V4Card {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("No resolved weeks yet")
-                                    .font(.headline)
-                                    .foregroundStyle(TrainingTheme.textPrimary)
+                                V4SerifTitle(text: "No resolved weeks yet", size: 24)
                                 Text("Once you resolve your first weekly review, History will fill with charts, trends, and per-skill summaries.")
                                     .font(.subheadline)
                                     .foregroundStyle(TrainingTheme.textSecondary)
@@ -97,7 +98,7 @@ struct HistoryView: View {
                     } else {
                         rangePicker
                         if resolutionsInRange.isEmpty {
-                            SurfaceCard {
+                            V4Card {
                                 Text("No resolved weeks in this range. Try widening the range or resolve another week.")
                                     .font(.subheadline)
                                     .foregroundStyle(TrainingTheme.textSecondary)
@@ -112,12 +113,24 @@ struct HistoryView: View {
                         }
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 24)
             }
         }
         .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedStatKey = selectedStatKey ?? activeStats.first?.key
+        }
+    }
+
+    private var historyPageHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            V4PageKicker(title: "Long-Term Trends")
+            Text("History")
+                .font(.system(size: 38, weight: .regular, design: .serif))
+                .foregroundStyle(TrainingTheme.textPrimary)
         }
     }
 
@@ -139,44 +152,61 @@ struct HistoryView: View {
         let best = bestSkillName()
         let worst = mostNeglectedSkillName()
 
-        return SurfaceCard(accent: TrainingArcConfig.color(for: "focus")) {
+        return V4Card(accent: TrainingArcConfig.color(for: "focus")) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Overall")
-                    .font(.headline)
-                    .foregroundStyle(TrainingTheme.textPrimary)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    summaryStat(title: "Logs", value: "\(totalLogs)")
-                    summaryStat(title: "Weeks Resolved", value: "\(weekCount)")
-                    summaryStat(title: "Skills Improving", value: "\(improved)")
-                    summaryStat(title: "Stagnating", value: "\(stagnating)")
-                    summaryStat(title: "Regressing", value: "\(regressing)")
-                    summaryStat(title: "Range", value: range.label)
+                HStack {
+                    Text("OVERALL")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    Text(range.label)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
                 }
 
-                if let best { Text("Strongest: \(best)").font(.caption).foregroundStyle(TrainingTheme.textSecondary) }
-                if let worst { Text("Most neglected: \(worst)").font(.caption).foregroundStyle(TrainingTheme.textSecondary) }
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    summaryStat(title: "Logs", value: totalLogs)
+                    summaryStat(title: "Weeks", value: weekCount)
+                    summaryStat(title: "Improving", value: improved)
+                    summaryStat(title: "Stagnating", value: stagnating)
+                    summaryStat(title: "Regressing", value: regressing)
+                    summaryStat(title: "Skills", value: activeStats.count)
+                }
+
+                if best != nil || worst != nil {
+                    Divider().overlay(TrainingTheme.border.opacity(0.4))
+                }
+                if let best {
+                    HStack(spacing: 8) {
+                        Text("STRONGEST")
+                            .font(.caption2.weight(.heavy))
+                            .tracking(1.6)
+                            .foregroundStyle(TrainingTheme.textMuted)
+                        Text(best)
+                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .foregroundStyle(TrainingTheme.positiveStrong)
+                    }
+                }
+                if let worst {
+                    HStack(spacing: 8) {
+                        Text("MOST NEGLECTED")
+                            .font(.caption2.weight(.heavy))
+                            .tracking(1.6)
+                            .foregroundStyle(TrainingTheme.textMuted)
+                        Text(worst)
+                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .foregroundStyle(TrainingTheme.warning)
+                    }
+                }
             }
         }
     }
 
-    private func summaryStat(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(TrainingTheme.textMuted)
-            Text(value)
-                .font(.system(.title3, design: .rounded).weight(.heavy))
-                .foregroundStyle(TrainingTheme.textPrimary)
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(TrainingTheme.backgroundTertiary.opacity(0.4))
-        )
+    private func summaryStat(title: String, value: Int) -> some View {
+        V4StatTile(value: V4Style.displayNumber(value), label: title)
     }
 
     private var statPicker: some View {
@@ -196,11 +226,17 @@ struct HistoryView: View {
             .filter { rangeInterval.contains($0.weekStartDate) }
             .sorted { $0.weekStartDate < $1.weekStartDate }
 
-        return SurfaceCard(accent: TrainingArcConfig.color(for: stat.colorToken)) {
+        return V4Card(accent: TrainingArcConfig.color(for: stat.colorToken)) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(stat.name)
-                    .font(.headline)
-                    .foregroundStyle(TrainingTheme.textPrimary)
+                HStack(spacing: 8) {
+                    Image(systemName: stat.iconName)
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(TrainingArcConfig.color(for: stat.colorToken))
+                    Text(stat.name.uppercased())
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingArcConfig.color(for: stat.colorToken))
+                }
 
                 if chartData.isEmpty {
                     Text("No resolved weeks in this range yet.")
@@ -256,21 +292,33 @@ struct HistoryView: View {
 
     private func statSummary(for stat: StatDomain) -> some View {
         let trend = trendInsight(for: stat)
-        return SurfaceCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Trend")
-                    .font(.headline)
-                    .foregroundStyle(TrainingTheme.textPrimary)
+        let accent = TrainingArcConfig.color(for: stat.colorToken)
+        return V4Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("TREND")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
+
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
+
                 Text(trend)
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
-                Text("Rank: \(stat.currentTierName) · Level \(stat.rankLevel)/\(TrainingArcConfig.maximumRankLevel)")
-                    .font(.caption)
-                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    V4LevelBadge(level: stat.rankLevel, tint: accent, compact: true)
+                    Text(stat.currentTierName)
+                        .font(.system(.subheadline, design: .serif).weight(.regular))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                }
+
                 if let target = stat.targetValue {
                     Text("Active target: \(target) \(TrainingStore.weeklyUnitLabel(for: stat)) per week")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)
+                        .monospacedDigit()
                 }
             }
         }
@@ -280,28 +328,30 @@ struct HistoryView: View {
         let recent = (stat.weeklyResolutions ?? [])
             .filter { rangeInterval.contains($0.weekStartDate) }
             .sorted { $0.weekStartDate > $1.weekStartDate }
+        let accent = TrainingArcConfig.color(for: stat.colorToken)
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text("Resolved Weeks")
-                .font(.headline)
-                .foregroundStyle(TrainingTheme.textPrimary)
+            Text("RESOLVED WEEKS")
+                .font(.caption.weight(.heavy))
+                .tracking(2.0)
+                .foregroundStyle(TrainingTheme.textMuted)
             if recent.isEmpty {
-                SurfaceCard {
+                V4Card {
                     Text("No resolved weeks in this range yet.")
+                        .font(.subheadline)
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
                 ForEach(recent) { resolution in
-                    SurfaceCard {
+                    V4Card {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(WeekRange(start: resolution.weekStartDate, end: resolution.weekEndDate).displayTitle)
-                                    .font(.subheadline.weight(.semibold))
+                                    .font(.system(.subheadline, design: .serif).weight(.regular))
+                                    .italic()
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                 Spacer()
-                                Text("LV \(resolution.levelAfter)")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(TrainingTheme.textSecondary)
+                                V4LevelBadge(level: resolution.levelAfter, tint: accent, compact: true)
                             }
                             Text(resolution.summaryText)
                                 .font(.caption)

@@ -58,7 +58,7 @@ struct HabitQuickActionButtons: View {
     let onLog: (Double) -> Void
 
     private var steps: [Double] {
-        habit.measurementType.quickStepValues
+        habit.measurementType.quickStepValues(weeklyBaseline: habit.statDomain?.currentBaseline ?? 0)
     }
 
     var body: some View {

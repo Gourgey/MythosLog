@@ -19,6 +19,10 @@ struct SkillDetailView: View {
     @State private var showingCalibrationSheet = false
     @State private var showingGoalEditorForNew = false
     @State private var editingGoal: Goal?
+    @State private var showingHabitEditorForNew = false
+    @State private var editingHabit: Habit?
+    @State private var showingUnmatched = false
+    @State private var scrollOffset: CGFloat = 0
 
     init(stat: StatDomain, opensLogSheetOnAppear: Bool = false) {
         self.stat = stat
@@ -43,6 +47,54 @@ struct SkillDetailView: View {
 
     private var snapshot: SkillProgressSnapshot {
         TrainingStore.progressSnapshot(for: stat, settings: settings)
+    }
+
+    private var unmatchedCount: Int {
+        TrainingStore.unmatchedWorkoutCount(forStatKey: stat.key, context: modelContext)
+    }
+
+    private var unmatchedImportsBanner: some View {
+        Button {
+            showingUnmatched = true
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(accent.opacity(0.16))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "questionmark")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(accent)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(unmatchedCount == 1 ? "1 imported workout to review" : "\(unmatchedCount) imported workouts to review")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                    Text("Match these Apple Health workouts to a \(stat.name) habit so they count.")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textMuted)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(accent.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(accent.opacity(0.40), lineWidth: 1.2)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the imported workouts to resolve")
     }
 
     private var currentWeek: WeekRange {
@@ -74,9 +126,23 @@ struct SkillDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: SkillDetailScrollOffsetPreferenceKey.self,
+                    value: proxy.frame(in: .named("skillDetailScroll")).minY
+                )
+            }
+            .frame(height: 0)
+
             VStack(alignment: .leading, spacing: 18) {
                 heroSection
+
+                if unmatchedCount > 0 {
+                    unmatchedImportsBanner
+                }
+
+                weeklyHistorySection
                 calibrationSection
                 chargeSection
 
@@ -86,12 +152,12 @@ struct SkillDetailView: View {
 
                 goalsSection
                 linkedHabitsSection
-                weeklyHistorySection
             }
             .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 32)
+            .padding(.top, 12)
+            .padding(.bottom, primaryHabit == nil ? 118 : 36)
         }
+        .coordinateSpace(name: "skillDetailScroll")
         .background(
             LinearGradient(
                 colors: [TrainingTheme.background, TrainingTheme.backgroundSecondary],
@@ -100,7 +166,32 @@ struct SkillDetailView: View {
             )
             .ignoresSafeArea()
         )
-        .navigationTitle(stat.name)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let primaryHabit {
+                StickyLogButton(
+                    title: primaryHabit.measurementType == .booleanSession ? "Log Session" : "Log Progress",
+                    accent: accent
+                ) {
+                    logDraft = LogEntryDraft(habit: primaryHabit)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(stat.name)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                    .opacity(compactTitleOpacity)
+            }
+        }
+        .onPreferenceChange(SkillDetailScrollOffsetPreferenceKey.self) { value in
+            scrollOffset = value
+        }
         .task {
             _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .skillOpen)
             selectedWeekStart = currentWeek.start
@@ -164,6 +255,17 @@ struct SkillDetailView: View {
             }
             .presentationDetents([.large])
         }
+        .sheet(isPresented: $showingHabitEditorForNew) {
+            HabitEditorView(habit: nil, initialStatID: stat.id)
+        }
+        .sheet(item: $editingHabit) { habit in
+            HabitEditorView(habit: habit)
+        }
+        #if canImport(HealthKit)
+        .sheet(isPresented: $showingUnmatched) {
+            UnmatchedWorkoutSheet(stat: stat)
+        }
+        #endif
         .navigationDestination(isPresented: $showingCharacterRoster) {
             SkillCharacterRosterView(stat: stat)
         }
@@ -190,17 +292,22 @@ struct SkillDetailView: View {
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: stat.iconName)
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(accent)
+                Text(stat.name.uppercased())
+                    .font(.caption.weight(.heavy))
+                    .tracking(1.8)
+                    .foregroundStyle(accent)
+            }
+
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(snapshot.rank.title)
-                    .font(.system(.title2, design: .rounded).weight(.black))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                    .lineLimit(2)
+                V4SerifTitle(text: snapshot.rank.title, size: 36)
 
                 Spacer(minLength: 8)
 
-                Text("LV \(snapshot.rank.level)")
-                    .font(.system(.title2, design: .rounded).weight(.black))
-                    .foregroundStyle(accent)
+                V4LevelBadge(level: snapshot.rank.level, tint: accent)
             }
 
             Button {
@@ -218,26 +325,32 @@ struct SkillDetailView: View {
             .accessibilityLabel("\(stat.name) character roster")
             .accessibilityHint("Opens the full progression roster for this skill.")
 
-            HStack(spacing: 16) {
-                heroMetric(title: snapshot.weeklyCounterLabel, value: snapshot.weeklyCounterValueLabel, tint: accent)
-                heroMetric(title: "Pace", value: snapshot.pacingStatus.label, tint: paceTint)
+            HStack(alignment: .top, spacing: 0) {
+                heroMetric(title: snapshot.weeklyCounterLabel, value: snapshot.weeklyCounterValueLabel, tint: TrainingTheme.textPrimary)
+                Rectangle()
+                    .fill(TrainingTheme.border.opacity(0.4))
+                    .frame(width: 1, height: 36)
+                heroPaceMetric(title: "Pace", status: snapshot.pacingStatus, tint: paceTint)
             }
-            .frame(maxWidth: .infinity)
-
-            if let primaryHabit {
-                HStack {
-                    Spacer()
-
-                    Button(primaryHabit.measurementType == .booleanSession ? "Log Session" : "Log Progress") {
-                        logDraft = LogEntryDraft(habit: primaryHabit)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(accent)
-
-                    Spacer()
-                }
-            }
+            .padding(.vertical, 4)
         }
+    }
+
+    private var compactTitleOpacity: Double {
+        let revealStart: CGFloat = -92
+        let revealDistance: CGFloat = 58
+        return Double(min(max((revealStart - scrollOffset) / revealDistance, 0), 1))
+    }
+
+    private func heroPaceMetric(title: String, status: SkillPacingStatus, tint: Color) -> some View {
+        VStack(spacing: 6) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(1.4)
+                .foregroundStyle(TrainingTheme.textMuted)
+            V4StatusPill(text: status.label, tint: tint)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func openInitialLogSheetIfNeeded() {
@@ -252,49 +365,75 @@ struct SkillDetailView: View {
     }
 
     private var calibrationSection: some View {
-        SurfaceCard(accent: accent) {
+        V4Card(padding: 16, accent: TrainingTheme.textMuted) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    sectionKicker("Calibration")
+                    Text("CALIBRATION")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
                     Spacer()
                     Button {
                         showingCalibrationSheet = true
                     } label: {
-                        Label("Recalibrate", systemImage: "slider.horizontal.3")
-                            .font(.footnote.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Recalibrate")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule().fill(accent.opacity(0.14))
+                        )
                     }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
+                    .buttonStyle(.plain)
                 }
 
-                HStack(spacing: 0) {
+                Text("\(stat.name) is measured in \(TrainingStore.weeklyUnitLabel(for: stat)). Edit this if you want to track minutes, pages, or another unit.")
+                    .font(.caption2)
+                    .foregroundStyle(TrainingTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                HStack(alignment: .top, spacing: 0) {
                     calibrationCell(title: "Baseline", value: "\(stat.currentBaseline)")
-                    Divider().frame(height: 36)
+                    Rectangle()
+                        .fill(TrainingTheme.border.opacity(0.4))
+                        .frame(width: 1, height: 36)
                     calibrationCell(title: "Target", value: stat.targetValue.map { "\($0)" } ?? "—")
                     if settings?.showPersonalMaxInUI ?? true {
-                        Divider().frame(height: 36)
+                        Rectangle()
+                            .fill(TrainingTheme.border.opacity(0.4))
+                            .frame(width: 1, height: 36)
                         calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
                     }
                 }
 
                 Text(calibrationStatusLabel)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private func calibrationCell(title: String, value: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(title.uppercased())
                 .font(.caption2.weight(.bold))
+                .tracking(1.4)
                 .foregroundStyle(TrainingTheme.textMuted)
             Text(value)
-                .font(.system(.title3, design: .rounded).weight(.heavy))
+                .font(.system(.title, design: .serif).weight(.regular))
                 .foregroundStyle(TrainingTheme.textPrimary)
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
     }
@@ -308,34 +447,46 @@ struct SkillDetailView: View {
         if let target {
             if actual >= target { return "Goal target met this week. Strong work." }
             if actual >= baseline { return "Maintained baseline. Goal still short by \(MetricFormatting.shortMetric(target - actual)) \(unit)." }
-            return "Below baseline. Focus here to hold form."
+            return "Below baseline - complete \(MetricFormatting.shortMetric(baseline - actual)) \(unit) this week to maintain Level \(snapshot.rank.level)."
         }
 
         if baseline > 0, actual >= baseline { return "Maintained baseline this week." }
-        if baseline > 0 { return "Below baseline. \(MetricFormatting.shortMetric(baseline - actual)) \(unit) to maintain." }
+        if baseline > 0 {
+            return "Below baseline - complete \(MetricFormatting.shortMetric(baseline - actual)) \(unit) this week to maintain Level \(snapshot.rank.level)."
+        }
         return "No baseline set yet."
     }
 
     private var goalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionHeader("Goals")
+                Text("GOALS")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
                 Spacer()
                 Button {
                     showingGoalEditorForNew = true
                 } label: {
-                    Label("Add", systemImage: "plus")
-                        .font(.footnote.weight(.semibold))
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .heavy))
+                        Text("Add")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(accent.opacity(0.14)))
                 }
-                .buttonStyle(.bordered)
-                .tint(accent)
+                .buttonStyle(.plain)
             }
 
             if skillGoals.isEmpty {
-                SurfaceCard(accent: accent) {
+                V4Card(accent: accent) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("This skill is training from baseline only.")
-                            .font(.subheadline.weight(.semibold))
+                        Text("No growth goal set. \(stat.name) is currently only tracking your weekly baseline.")
+                            .font(.system(.subheadline, design: .serif).weight(.regular))
                             .foregroundStyle(TrainingTheme.textPrimary)
                         Text("Create a goal when you want to push beyond your current weekly normal.")
                             .font(.caption)
@@ -353,12 +504,28 @@ struct SkillDetailView: View {
     }
 
     private var chargeSection: some View {
-        SurfaceCard(accent: accent) {
+        V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeaderRow("Charge", topic: .charge)
+                HStack {
+                    Text("CHARGE")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    Button {
+                        presentedHelpTopic = .charge
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(TrainingTheme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                 Text(snapshot.bankedChargeLabel)
-                    .font(.system(.title3, design: .rounded).weight(.heavy))
+                    .font(.system(.title3, design: .serif).weight(.regular))
                     .foregroundStyle(TrainingTheme.textPrimary)
 
                 chargeDots
@@ -373,9 +540,25 @@ struct SkillDetailView: View {
     }
 
     private func nextRankSection(nextTitle: String) -> some View {
-        SurfaceCard(accent: accent) {
+        V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeaderRow("Next Rank", topic: .nextRank)
+                HStack {
+                    Text("NEXT RANK")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    Button {
+                        presentedHelpTopic = .nextRank
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(TrainingTheme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                 HStack(spacing: 14) {
                     RankArtworkView(
@@ -388,16 +571,17 @@ struct SkillDetailView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("LV \(snapshot.rank.level + 1)")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                        Text(nextTitle)
-                            .font(.system(.title3, design: .rounded).weight(.heavy))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                        HStack(spacing: 6) {
+                            Text("LOCKED · LV \(V4Style.displayNumber(snapshot.rank.level + 1))")
+                                .font(.caption2.weight(.heavy))
+                                .tracking(1.4)
+                                .foregroundStyle(TrainingTheme.textMuted)
+                        }
+                        V4SerifTitle(text: nextTitle, size: 24)
                         Text(snapshot.nextRankStatusLabel)
                             .font(.subheadline)
                             .foregroundStyle(TrainingTheme.textSecondary)
-                            .lineLimit(2)
+                            .lineLimit(3)
                     }
 
                     Spacer()
@@ -408,26 +592,48 @@ struct SkillDetailView: View {
 
     private var linkedHabitsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Log Actions")
+            HStack {
+                Text("LOG ACTIONS")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
+                Spacer()
+                Button {
+                    showingHabitEditorForNew = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .heavy))
+                        Text("Add")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(accent.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
+            }
 
             if linkedHabits.isEmpty {
-                SurfaceCard(accent: accent) {
-                    Text("No active habits are linked to this skill yet.")
+                V4Card(accent: accent) {
+                    Text("No active habits are linked to this skill yet. Tap Add to create one (for example Tennis, Swimming, or Running under Cardio).")
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
                 ForEach(linkedHabits) { habit in
-                    SurfaceCard(accent: accent) {
+                    V4Card(accent: accent) {
                         VStack(spacing: 12) {
                             VStack(spacing: 4) {
                                 Text(habit.name)
-                                    .font(.headline)
+                                    .font(.system(.headline, design: .serif).weight(.regular))
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                     .multilineTextAlignment(.center)
                                 Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(habit.unitLabel) this week")
                                     .font(.caption)
                                     .foregroundStyle(TrainingTheme.textSecondary)
                                     .multilineTextAlignment(.center)
+                                    .monospacedDigit()
                             }
                             .frame(maxWidth: .infinity)
 
@@ -436,29 +642,41 @@ struct SkillDetailView: View {
                             }
                         }
                     }
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            editingHabit = habit
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(accent)
+                                .padding(8)
+                                .background(Circle().fill(accent.opacity(0.12)))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(10)
+                        .accessibilityLabel("Edit \(habit.name)")
+                    }
                 }
             }
         }
     }
 
     private var weeklyHistorySection: some View {
-        SurfaceCard(accent: accent) {
+        V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    HStack(spacing: 10) {
-                        sectionKicker("This Week")
+                    HStack(spacing: 8) {
+                        Text("THIS WEEK")
+                            .font(.caption.weight(.heavy))
+                            .tracking(2.0)
+                            .foregroundStyle(TrainingTheme.textMuted)
 
                         Button {
                             presentedHelpTopic = .thisWeek
                         } label: {
                             Image(systemName: "questionmark.circle")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(TrainingTheme.textMuted)
-                                .frame(width: 26, height: 26)
-                                .background(
-                                    Circle()
-                                        .fill(.white.opacity(0.72))
-                                )
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("This Week help")
@@ -468,29 +686,41 @@ struct SkillDetailView: View {
                     Button {
                         showingFullHistory = true
                     } label: {
-                        Text("View Full History")
+                        HStack(spacing: 4) {
+                            Text("Full History")
+                                .font(.caption.weight(.bold))
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(accent)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
+                    .buttonStyle(.plain)
                 }
 
-                HStack {
+                Divider()
+                    .overlay(TrainingTheme.border.opacity(0.5))
+
+                HStack(spacing: 8) {
                     Button {
                         moveWeek(by: -1)
                     } label: {
                         Image(systemName: "chevron.left")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(accent)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(accent.opacity(0.10)))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
+                    .buttonStyle(.plain)
 
                     Spacer()
 
                     VStack(spacing: 2) {
                         Text(selectedWeek.displayTitle)
-                            .font(.subheadline.weight(.bold))
+                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .italic()
                             .foregroundStyle(TrainingTheme.textPrimary)
-                        Text("\(snapshot.weeklyCounterLabel): \(selectedWeekSnapshot.totalLabel)")
-                            .font(.caption)
+                        Text("\(snapshot.weeklyCounterValueLabel) logged")
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(TrainingTheme.textSecondary)
                     }
 
@@ -500,13 +730,16 @@ struct SkillDetailView: View {
                         moveWeek(by: 1)
                     } label: {
                         Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(selectedWeek.start >= currentWeek.start ? TrainingTheme.textMuted : accent)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill((selectedWeek.start >= currentWeek.start ? TrainingTheme.textMuted : accent).opacity(0.10)))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
+                    .buttonStyle(.plain)
                     .disabled(selectedWeek.start >= currentWeek.start)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ForEach(selectedWeekSnapshot.daySummaries) { day in
                         WeekDaySummaryView(
                             summary: day,
@@ -559,16 +792,17 @@ struct SkillDetailView: View {
     }
 
     private func heroMetric(title: String, value: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(title.uppercased())
                 .font(.caption2.weight(.bold))
+                .tracking(1.4)
                 .foregroundStyle(TrainingTheme.textMuted)
             Text(value)
-                .font(.system(.title3, design: .rounded).weight(.heavy))
+                .font(.system(.title2, design: .serif).weight(.regular))
                 .foregroundStyle(tint)
-                .lineLimit(3)
-                .minimumScaleFactor(0.85)
-                .multilineTextAlignment(.center)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
     }
@@ -645,6 +879,51 @@ struct SkillDetailView: View {
     }
 }
 
+private struct SkillDetailScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct StickyLogButton: View {
+    let title: String
+    let accent: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.heavy))
+                Text(title)
+                    .font(.headline.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [accent, accent.opacity(0.82)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(.white.opacity(0.42), lineWidth: 1)
+            )
+            .shadow(color: accent.opacity(0.28), radius: 16, x: 0, y: 8)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+}
+
 private enum SkillHelpTopic: String, Identifiable {
     case currentForm
     case charge
@@ -712,24 +991,26 @@ private struct WeekDaySummaryView: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Text(summary.totalValue > 0 ? summary.totalLabel : "0")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle((summary.totalValue > 0 || isSelected) ? accent : TrainingTheme.textSecondary)
+                V4Diamond(
+                    size: 9,
+                    filled: summary.totalValue > 0,
+                    tint: summary.totalValue > 0 ? accent : TrainingTheme.textMuted.opacity(0.7)
+                )
                 Text(String(Calendar.current.component(.day, from: summary.date)))
-                    .font(.headline.weight(.bold))
+                    .font(.system(.headline, design: .serif).weight(.regular))
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text(MetricFormatting.weekday(summary.date))
-                    .font(.caption2)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? accent.opacity(0.16) : TrainingTheme.card.opacity(0.84))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.10) : Color(red: 0.97, green: 0.96, blue: 0.94))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: borderWidth)
             )
         }
@@ -737,17 +1018,17 @@ private struct WeekDaySummaryView: View {
     }
 
     private var borderColor: Color {
-        if summary.isToday {
-            return accent.opacity(0.42)
-        }
         if isSelected {
-            return accent.opacity(0.24)
+            return accent.opacity(0.65)
         }
-        return TrainingTheme.border
+        if summary.isToday {
+            return accent.opacity(0.32)
+        }
+        return TrainingTheme.border.opacity(0.7)
     }
 
     private var borderWidth: CGFloat {
-        summary.isToday ? 1.2 : 1
+        isSelected ? 1.4 : 1
     }
 }
 

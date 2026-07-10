@@ -84,7 +84,8 @@ struct WeeklyReviewDetailView: View {
 
                     if !weekResolutions.isEmpty {
                         Text("PER SKILL")
-                            .font(.caption.weight(.black))
+                            .font(.caption.weight(.heavy))
+                            .tracking(2.0)
                             .foregroundStyle(TrainingTheme.textMuted)
 
                         ForEach(weekResolutions) { resolution in
@@ -158,24 +159,28 @@ struct WeeklyReviewDetailView: View {
     @ViewBuilder
     private var verdictCard: some View {
         let verdict = weekVerdict
-        SurfaceCard(accent: verdict.color) {
-            VStack(alignment: .leading, spacing: 8) {
+        V4Card(accent: verdict.color) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(verdict.rawValue)
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
+                    Text("VERDICT")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
                     Spacer()
                     Text("\(weekResolutions.count) skills")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
+
+                V4SerifTitle(text: verdict.rawValue, size: 28)
                 Text(verdict.description)
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let weekFocusRecommendation {
-                    Text(weekFocusRecommendation)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(verdict.color)
+                    V4StatusPill(text: weekFocusRecommendation, tint: verdict.color, systemImage: "scope")
                 }
 
                 if let focusSkillKey {
@@ -183,11 +188,18 @@ struct WeeklyReviewDetailView: View {
                         router.open(.goals)
                         PendingDestinationStore.queueNewGoal(statKeyRaw: focusSkillKey.rawValue)
                     } label: {
-                        Label("Set a goal for \(focusSkillKey.displayName)", systemImage: "target")
-                            .font(.caption.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Image(systemName: "target")
+                                .font(.caption.weight(.heavy))
+                            Text("Set a goal for \(focusSkillKey.displayName)")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(verdict.color))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(verdict.color)
+                    .buttonStyle(.plain)
                     .padding(.top, 2)
                 }
             }
@@ -200,11 +212,13 @@ struct WeeklyReviewDetailView: View {
     private var weeklyRecapCard: some View {
         if let recap = try? TrainingStore.weeklyRecap(weekStart: weekStart, context: modelContext, settings: settings),
            recap.hasContent {
-            SurfaceCard {
+            V4Card {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Week Recap")
-                        .font(.system(.headline, design: .rounded).weight(.bold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
+                    Text("WEEK RECAP")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                     if let best = recap.bestSkillName {
                         recapRow(
@@ -266,16 +280,21 @@ struct WeeklyReviewDetailView: View {
 
     private func recapRow(icon: String, color: Color, title: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(color)
-                .frame(width: 22)
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.16))
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(color)
+            }
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TrainingTheme.textSecondary)
+                Text(title.uppercased())
+                    .font(.caption2.weight(.heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(TrainingTheme.textMuted)
                 Text(value)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(.subheadline, design: .serif).weight(.regular))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .multilineTextAlignment(.leading)
             }
@@ -297,11 +316,19 @@ struct WeeklyReviewDetailView: View {
     // MARK: - Health cards
 
     private var healthOverlapsCard: some View {
-        SurfaceCard(accent: TrainingTheme.warning) {
+        V4Card(accent: TrainingTheme.warning) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Apple Health Overlaps", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(.headline, design: .rounded).weight(.bold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(TrainingTheme.warning)
+                    Text("APPLE HEALTH OVERLAPS")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.warning)
+                }
+
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                 Text("Some imported workouts overlap in time. Check Apple Health, WHOOP, and Hevy before relying on these totals.")
                     .font(.subheadline)
@@ -310,7 +337,7 @@ struct WeeklyReviewDetailView: View {
                 ForEach(Array(healthOverlapWarnings.prefix(4)), id: \.workoutUUID) { workout in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(healthWarningTitle(for: workout))
-                            .font(.caption.weight(.semibold))
+                            .font(.system(.subheadline, design: .serif).weight(.regular))
                             .foregroundStyle(TrainingTheme.textPrimary)
                         Text(healthWarningDetail(for: workout))
                             .font(.caption)
@@ -325,20 +352,24 @@ struct WeeklyReviewDetailView: View {
     private var healthWeekCard: some View {
         let summary = healthWeekSummary
         if summary.hasActivity {
-            SurfaceCard(accent: .pink) {
+            V4Card(accent: .pink) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
                         Image(systemName: "heart.fill")
+                            .font(.caption.weight(.heavy))
                             .foregroundStyle(.pink)
-                        Text("Apple Health This Week")
-                            .font(.system(.headline, design: .rounded).weight(.bold))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                        Text("APPLE HEALTH THIS WEEK")
+                            .font(.caption.weight(.heavy))
+                            .tracking(2.0)
+                            .foregroundStyle(.pink)
                     }
 
-                    HStack(spacing: 12) {
-                        metricTile(title: "Counted", value: "\(summary.counted)")
-                        metricTile(title: "Duplicates", value: "\(summary.duplicates)")
-                        metricTile(title: "Review", value: "\(summary.needsReview)")
+                    Divider().overlay(TrainingTheme.border.opacity(0.5))
+
+                    HStack(alignment: .top, spacing: 0) {
+                        V4StatTile(value: V4Style.displayNumber(summary.counted), label: "Counted", tint: TrainingTheme.positiveStrong)
+                        V4StatTile(value: V4Style.displayNumber(summary.duplicates), label: "Duplicates", tint: TrainingTheme.textMuted)
+                        V4StatTile(value: V4Style.displayNumber(summary.needsReview), label: "Review", tint: summary.needsReview > 0 ? TrainingTheme.warning : TrainingTheme.textPrimary)
                     }
 
                     Text(healthSummaryDetail(summary))
@@ -386,36 +417,31 @@ struct WeeklyReviewDetailView: View {
     // MARK: - Per-skill
 
     private func perSkillCard(_ resolution: WeeklyResolution) -> some View {
-        SurfaceCard(accent: TrainingArcConfig.color(for: resolution.statDomain?.colorToken ?? "focus")) {
+        let accent = TrainingArcConfig.color(for: resolution.statDomain?.colorToken ?? "focus")
+        return V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(resolution.statName)
-                        .font(.headline)
+                        .font(.system(.headline, design: .serif).weight(.regular))
                         .foregroundStyle(TrainingTheme.textPrimary)
                     Spacer()
-                    Text("Level \(resolution.levelAfter)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textSecondary)
+                    V4LevelBadge(level: resolution.levelAfter, tint: accent, compact: true)
                 }
 
-                HStack {
-                    metricTile(title: "Expected", value: MetricFormatting.shortMetric(resolution.expectedTotal))
-                    metricTile(title: "Actual", value: MetricFormatting.shortMetric(resolution.actualCompletedValue))
-                    metricTile(title: "Delta", value: MetricFormatting.shortMetric(resolution.weeklyDelta))
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
+
+                HStack(alignment: .top, spacing: 0) {
+                    perSkillStatTile(title: "Expected", value: MetricFormatting.shortMetric(resolution.expectedTotal), tint: TrainingTheme.textPrimary)
+                    perSkillStatTile(title: "Actual", value: MetricFormatting.shortMetric(resolution.actualCompletedValue), tint: TrainingTheme.textPrimary)
+                    perSkillStatTile(title: "Delta", value: MetricFormatting.shortMetric(resolution.weeklyDelta), tint: resolution.weeklyDelta < 0 ? TrainingTheme.warning : TrainingTheme.positiveStrong)
                 }
 
                 if resolution.didLevelUp {
-                    Label("Ranked up this week", systemImage: "arrow.up.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.positive)
+                    V4StatusPill(text: "Ranked up this week", tint: TrainingTheme.positiveStrong, systemImage: "arrow.up")
                 } else if resolution.didRegress {
-                    Label("Ranked down this week", systemImage: "arrow.down.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.warning)
+                    V4StatusPill(text: "Ranked down this week", tint: TrainingTheme.warning, systemImage: "arrow.down")
                 } else if resolution.weeklyDelta < 0 {
-                    Label("Below baseline this week", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.warning)
+                    V4StatusPill(text: "Below baseline this week", tint: TrainingTheme.warning, systemImage: "exclamationmark.triangle.fill")
                 }
 
                 Text(goalAwareStatus(for: resolution))
@@ -427,6 +453,22 @@ struct WeeklyReviewDetailView: View {
                     .foregroundStyle(TrainingTheme.textSecondary)
             }
         }
+    }
+
+    private func perSkillStatTile(title: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.heavy))
+                .tracking(1.4)
+                .foregroundStyle(TrainingTheme.textMuted)
+            Text(value)
+                .font(.system(.title3, design: .serif).weight(.regular))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func goalAwareStatus(for resolution: WeeklyResolution) -> String {
@@ -456,15 +498,4 @@ struct WeeklyReviewDetailView: View {
         return "Below baseline."
     }
 
-    private func metricTile(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(TrainingTheme.textSecondary)
-            Text(value)
-                .font(.title3.weight(.bold))
-                .foregroundStyle(TrainingTheme.textPrimary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 }

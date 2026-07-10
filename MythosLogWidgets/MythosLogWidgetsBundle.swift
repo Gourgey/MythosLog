@@ -5,11 +5,6 @@ import SwiftUI
 struct MythosLogWidgetsBundle: WidgetBundle {
     var body: some Widget {
         TrainingArcStatusWidget()
-        TrainingArcMotivationWidget()
-        TrainTodayWidget()
         QuickLogWidget()
-        WeakestStatWidget()
-        GoalAtRiskWidget()
-        ReviewReadyWidget()
     }
 }

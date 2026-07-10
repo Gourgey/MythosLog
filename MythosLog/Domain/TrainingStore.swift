@@ -461,6 +461,27 @@ enum TrainingStore {
         return try context.fetch(descriptor)
     }
 
+    static func awaitingAttributionStatKeys(context: ModelContext) throws -> Set<String> {
+        let descriptor = FetchDescriptor<HealthImportedWorkout>(
+            predicate: #Predicate { record in
+                record.awaitingHabitAssignment == true && record.isDuplicate == false
+            }
+        )
+        let records = try context.fetch(descriptor)
+        return Set(records.map(\.statKeyRaw))
+    }
+
+    static func unmatchedWorkoutCount(forStatKey statKey: String, context: ModelContext) -> Int {
+        let descriptor = FetchDescriptor<HealthImportedWorkout>(
+            predicate: #Predicate { record in
+                record.statKeyRaw == statKey &&
+                record.awaitingHabitAssignment == true &&
+                record.isDuplicate == false
+            }
+        )
+        return (try? context.fetchCount(descriptor)) ?? 0
+    }
+
     static func fetchGoals(context: ModelContext) throws -> [Goal] {
         let descriptor = FetchDescriptor<Goal>(sortBy: [
             SortDescriptor(\.statusRaw),
@@ -624,11 +645,10 @@ enum TrainingStore {
         now: Date = .now
     ) throws -> DashboardSections {
         let stats = try fetchActiveStats(context: context).sorted { $0.sortOrder < $1.sortOrder }
-        let reviewReady = ((try? pendingWeek(context: context, now: now)) ?? nil) != nil
         let goalSnapshots = (try? goalProgressSnapshots(context: context, now: now)) ?? []
 
         return DashboardSections(
-            weeklyStatus: computeWeeklyStatus(stats: stats, settings: settings, reviewReady: reviewReady, now: now),
+            weeklyStatus: computeWeeklyStatus(stats: stats, settings: settings, reviewReady: false, now: now),
             highlights: computeDashboardHighlights(stats: stats),
             goals: computeGoalsSummary(snapshots: goalSnapshots, settings: settings, now: now)
         )
@@ -883,23 +903,6 @@ enum TrainingStore {
         limit: Int = 3
     ) throws -> [TrainTodayRecommendation] {
         var output: [TrainTodayRecommendation] = []
-
-        if let _ = try pendingWeek(context: context, now: now) {
-            output.append(
-                TrainTodayRecommendation(
-                    id: "review-ready",
-                    statKeyRaw: nil,
-                    statName: "Weekly Review",
-                    colorToken: "focus",
-                    iconName: "calendar.badge.clock",
-                    headline: "Weekly review ready",
-                    detail: "Lock in last week to apply rank changes.",
-                    reason: .reviewReady,
-                    priority: 100,
-                    hasReviewReady: true
-                )
-            )
-        }
 
         let stats = try fetchActiveStats(context: context)
         let goalsAffectPacing = settings?.goalsAffectPacing ?? true
@@ -1280,6 +1283,9 @@ enum TrainingStore {
         didMutate = try reconcileWeeklyResolutions(context: context) || didMutate
         didMutate = try reconcileGoals(context: context) || didMutate
         didMutate = try migrateSkillActivation(context: context) || didMutate
+        #if canImport(HealthKit)
+        didMutate = try HealthImportService.purgeDeprecatedAutoMappings(context: context) || didMutate
+        #endif
 
         if didMutate || context.hasChanges {
             try context.save()
@@ -1494,7 +1500,83 @@ enum TrainingStore {
             }
         }
 
+        let records = try fetchImportedHealthWorkouts(context: context)
+        didMutate = try applyPriorHealthImportAssignments(records: records, context: context) || didMutate
+
         return didMutate
+    }
+
+    private static func applyPriorHealthImportAssignments(records: [HealthImportedWorkout], context: ModelContext) throws -> Bool {
+        let priorHabitKeyByWorkoutTitle = priorHealthImportAssignments(from: records)
+        guard !priorHabitKeyByWorkoutTitle.isEmpty else { return false }
+
+        var habitsBySystemKey: [String: Habit] = [:]
+        for habit in try fetchActiveHabits(context: context) {
+            guard let key = habit.systemKey, habitsBySystemKey[key] == nil else { continue }
+            habitsBySystemKey[key] = habit
+        }
+
+        var didMutate = false
+        for record in records where record.awaitingHabitAssignment && !record.isDuplicate {
+            let titleKey = healthImportAssignmentKey(statKeyRaw: record.statKeyRaw, activityTypeRaw: record.activityTypeRaw)
+            guard
+                let habitKey = priorHabitKeyByWorkoutTitle[titleKey],
+                let habit = habitsBySystemKey[habitKey]
+            else {
+                continue
+            }
+
+            let note = "Imported from Apple Health\(record.sourceName.map { " via \($0)" } ?? "")"
+            guard (try? log(
+                habit: habit,
+                value: loggedValue(for: record, habit: habit),
+                date: record.endDate,
+                sessionType: record.sourceName ?? "Apple Health",
+                note: note,
+                source: .health,
+                healthWorkoutUUID: record.workoutUUID,
+                context: context
+            )) != nil else {
+                continue
+            }
+
+            record.habitSystemKey = habit.systemKey
+            record.wasImported = true
+            record.awaitingHabitAssignment = false
+            didMutate = true
+        }
+
+        return didMutate
+    }
+
+    fileprivate static func priorHealthImportAssignments(from records: [HealthImportedWorkout]) -> [String: String] {
+        var assignments: [String: (habitKey: String, decidedAt: Date)] = [:]
+
+        for record in records where record.wasImported && !record.isDuplicate && !record.awaitingHabitAssignment {
+            guard let habitKey = record.habitSystemKey, !habitKey.isEmpty else { continue }
+
+            let titleKey = healthImportAssignmentKey(statKeyRaw: record.statKeyRaw, activityTypeRaw: record.activityTypeRaw)
+            let decidedAt = max(record.createdAt, record.endDate)
+            if let current = assignments[titleKey], current.decidedAt >= decidedAt {
+                continue
+            }
+
+            assignments[titleKey] = (habitKey, decidedAt)
+        }
+
+        return assignments.mapValues { $0.habitKey }
+    }
+
+    fileprivate static func healthImportAssignmentKey(statKeyRaw: String, activityTypeRaw: Int) -> String {
+        "\(statKeyRaw)|\(activityTypeRaw)"
+    }
+
+    private static func loggedValue(for record: HealthImportedWorkout, habit: Habit) -> Double {
+        switch habit.measurementType {
+        case .booleanSession: return 1
+        case .minutes: return max(1, record.durationMinutes.rounded())
+        case .count, .customNumber, .pages: return 1
+        }
     }
 
     private static func healthImportSortKey(_ record: HealthImportedWorkout) -> (priority: Int, createdAt: Date) {
@@ -1801,6 +1883,7 @@ enum TrainingStore {
         var goalSkillKeys: Set<String>
         var goalHabitIDs: Set<UUID>
 
+        @MainActor
         func attribution(for log: HabitLog) -> HealthLogAttribution? {
             guard log.sourceType == .health else { return nil }
 
@@ -2089,8 +2172,9 @@ enum TrainingStore {
 
         if chargeValue <= -(chargeLimit - 1), stat.rankLevel > TrainingArcConfig.minimumRankLevel {
             let remainingDebt = chargeLimit - abs(chargeValue)
+            let nextLowerLevel = max(stat.rankLevel - 1, TrainingArcConfig.minimumRankLevel)
             return remainingDebt == 1
-                ? "One more weak week will drop this skill a rank."
+                ? "One more weak week will drop \(stat.name) to Level \(nextLowerLevel)."
                 : "\(remainingDebt) more negative charge steps will drop this skill a rank."
         }
 
@@ -2895,7 +2979,7 @@ enum TrainingStore {
 
         if pending {
             motivationTitle = "Weekly review ready"
-            motivationMessage = "Lock in last week so your progress and charge carry forward cleanly."
+            motivationMessage = "Last week was finalized. Open Review to see what changed."
             motivationColorToken = weakest?.colorToken ?? "focus"
         } else if let weakest, let weakestSnapshot {
             motivationTitle = "Focus on \(weakest.name)"
@@ -3587,9 +3671,7 @@ struct SupportedWorkoutType: Identifiable, Sendable {
         SupportedWorkoutType(activityType: .pilates, displayName: "Pilates", category: .mindBody, statKey: .focus, sessionType: "Focus"),
         SupportedWorkoutType(activityType: .mindAndBody, displayName: "Mind & Body", category: .mindBody, statKey: .focus, sessionType: "Focus"),
         SupportedWorkoutType(activityType: .flexibility, displayName: "Flexibility", category: .mindBody, statKey: .focus, sessionType: "Focus"),
-        SupportedWorkoutType(activityType: .barre, displayName: "Barre", category: .mindBody, statKey: .focus, sessionType: "Focus"),
-        SupportedWorkoutType(activityType: .cardioDance, displayName: "Cardio Dance", category: .mindBody, statKey: .focus, sessionType: "Focus"),
-        SupportedWorkoutType(activityType: .socialDance, displayName: "Social Dance", category: .mindBody, statKey: .focus, sessionType: "Focus")
+        SupportedWorkoutType(activityType: .barre, displayName: "Barre", category: .mindBody, statKey: .focus, sessionType: "Focus")
     ]
 
     static func key(for activityType: HKWorkoutActivityType) -> String {
@@ -3613,8 +3695,9 @@ enum HealthImportService {
     private struct HealthWorkoutCandidate {
         var workout: HKWorkout
         var mapping: WorkoutMapping
-        var habit: Habit
+        var habit: Habit?
         var value: Double
+        var awaitingAssignment: Bool
     }
 
     private enum SyncScope {
@@ -3759,6 +3842,7 @@ enum HealthImportService {
         let (workouts, newAnchor) = try await fetchWorkouts(anchor: anchor, predicate: predicate)
         let activeStats = try TrainingStore.fetchActiveStats(context: context)
         let existingRecords = try normalizeExistingHealthImports(context: context)
+        let priorHabitKeyByWorkoutTitle = TrainingStore.priorHealthImportAssignments(from: existingRecords)
         var existingWorkoutIDs = Set(existingRecords.map(\.workoutUUID))
         var processedRecords = existingRecords
             .filter { $0.wasImported || $0.isDuplicate }
@@ -3770,7 +3854,14 @@ enum HealthImportService {
 
         let disabledTypeKeys = settings.disabledHealthWorkoutTypeKeys
         let candidates = workouts
-            .compactMap { candidate(for: $0, activeStats: activeStats, disabledTypeKeys: disabledTypeKeys) }
+            .compactMap {
+                candidate(
+                    for: $0,
+                    activeStats: activeStats,
+                    disabledTypeKeys: disabledTypeKeys,
+                    priorHabitKeyByWorkoutTitle: priorHabitKeyByWorkoutTitle
+                )
+            }
             .sorted { $0.workout.startDate < $1.workout.startDate }
 
         for candidate in candidates {
@@ -3803,10 +3894,33 @@ enum HealthImportService {
             }
 
             let overlappingRecord = processedRecords.first(where: { overlaps(candidate, with: $0) && !isDuplicate(candidate, of: $0) })
+
+            if candidate.awaitingAssignment {
+                let record = healthRecord(
+                    for: candidate,
+                    wasImported: false,
+                    isDuplicate: false,
+                    overlapsImportedWorkout: overlappingRecord != nil,
+                    relatedWorkoutUUID: overlappingRecord?.workoutUUID,
+                    awaitingHabitAssignment: true
+                )
+                context.insert(record)
+                try context.save()
+                TrainingStore.recordLocalWrite(reason: "queued Health workout awaiting habit assignment")
+                processedRecords.append(record)
+                existingWorkoutIDs.insert(workoutID)
+                continue
+            }
+
+            guard let matchedHabit = candidate.habit else {
+                ignoredCount += 1
+                continue
+            }
+
             let sourceName = workout.sourceRevision.source.name
             let note = "Imported from Apple Health\(sourceName.isEmpty ? "" : " via \(sourceName)")"
             _ = try TrainingStore.log(
-                habit: candidate.habit,
+                habit: matchedHabit,
                 value: candidate.value,
                 date: workout.endDate,
                 sessionType: candidate.mapping.sessionType,
@@ -3859,18 +3973,69 @@ enum HealthImportService {
         )
     }
 
-    private static func candidate(for workout: HKWorkout, activeStats: [StatDomain], disabledTypeKeys: Set<String>) -> HealthWorkoutCandidate? {
+    private static func candidate(
+        for workout: HKWorkout,
+        activeStats: [StatDomain],
+        disabledTypeKeys: Set<String>,
+        priorHabitKeyByWorkoutTitle: [String: String]
+    ) -> HealthWorkoutCandidate? {
         guard
             let mapping = mapping(for: workout),
             !disabledTypeKeys.contains(SupportedWorkoutType.key(for: workout.workoutActivityType)),
-            let stat = activeStats.first(where: { $0.statKey == mapping.statKey }),
-            let habit = TrainingStore.primaryHabit(for: stat)
+            let stat = activeStats.first(where: { $0.statKey == mapping.statKey })
         else {
             return nil
         }
 
-        let value = loggedValue(for: workout, habit: habit)
-        return HealthWorkoutCandidate(workout: workout, mapping: mapping, habit: habit, value: value)
+        let habits = TrainingStore.activeHabits(for: stat)
+        let displayName = SupportedWorkoutType.all
+            .first(where: { $0.activityType == workout.workoutActivityType })?
+            .displayName ?? ""
+        var matched = matchHabit(in: habits, workoutDisplayName: displayName)
+        let titleKey = TrainingStore.healthImportAssignmentKey(
+            statKeyRaw: mapping.statKey.rawValue,
+            activityTypeRaw: Int(workout.workoutActivityType.rawValue)
+        )
+        if matched == nil,
+           let priorHabitKey = priorHabitKeyByWorkoutTitle[titleKey] {
+            matched = habits.first { $0.systemKey == priorHabitKey }
+        }
+
+        // When the skill has a single habit there is no ambiguity, so log the
+        // workout directly rather than parking it in the unmatched queue. This
+        // is what lets e.g. a Tennis workout count toward a one-habit Cardio
+        // skill without manual assignment.
+        if matched == nil, habits.count == 1 {
+            matched = habits.first
+        }
+
+        let value: Double
+        if let matched {
+            value = loggedValue(for: workout, habit: matched)
+        } else {
+            value = max(1, (workout.duration / 60).rounded())
+        }
+
+        return HealthWorkoutCandidate(
+            workout: workout,
+            mapping: mapping,
+            habit: matched,
+            value: value,
+            awaitingAssignment: matched == nil
+        )
+    }
+
+    private static func matchHabit(in habits: [Habit], workoutDisplayName: String) -> Habit? {
+        let needle = workoutDisplayName.lowercased()
+        guard !needle.isEmpty else { return nil }
+        if let exact = habits.first(where: { $0.name.lowercased() == needle }) {
+            return exact
+        }
+        return habits.first(where: {
+            let n = $0.name.lowercased()
+            guard !n.isEmpty else { return false }
+            return needle.contains(n) || n.contains(needle)
+        })
     }
 
     private static func healthRecord(
@@ -3878,13 +4043,14 @@ enum HealthImportService {
         wasImported: Bool,
         isDuplicate: Bool,
         overlapsImportedWorkout: Bool,
-        relatedWorkoutUUID: String?
+        relatedWorkoutUUID: String?,
+        awaitingHabitAssignment: Bool = false
     ) -> HealthImportedWorkout {
         let workout = candidate.workout
         return HealthImportedWorkout(
             workoutUUID: workout.uuid.uuidString,
             statKeyRaw: candidate.mapping.statKey.rawValue,
-            habitSystemKey: candidate.habit.systemKey,
+            habitSystemKey: candidate.habit?.systemKey,
             sourceName: workout.sourceRevision.source.name,
             sourceBundleIdentifier: workout.sourceRevision.source.bundleIdentifier,
             activityTypeRaw: Int(workout.workoutActivityType.rawValue),
@@ -3894,7 +4060,8 @@ enum HealthImportService {
             wasImported: wasImported,
             isDuplicate: isDuplicate,
             overlapsImportedWorkout: overlapsImportedWorkout,
-            relatedWorkoutUUID: relatedWorkoutUUID
+            relatedWorkoutUUID: relatedWorkoutUUID,
+            awaitingHabitAssignment: awaitingHabitAssignment
         )
     }
 
@@ -3953,6 +4120,23 @@ enum HealthImportService {
         if let log = matchingLogs.first {
             try TrainingStore.delete(log, context: context)
         }
+    }
+
+    static func purgeDeprecatedAutoMappings(context: ModelContext) throws -> Bool {
+        let danceRawValues: Set<Int> = [
+            Int(HKWorkoutActivityType.cardioDance.rawValue),
+            Int(HKWorkoutActivityType.socialDance.rawValue)
+        ]
+        let records = try TrainingStore.fetchImportedHealthWorkouts(context: context)
+            .filter { danceRawValues.contains($0.activityTypeRaw) && $0.wasImported && !$0.isDuplicate }
+        guard !records.isEmpty else { return false }
+
+        for record in records {
+            try deleteImportedHealthLog(for: record, context: context)
+            record.wasImported = false
+            record.overlapsImportedWorkout = false
+        }
+        return true
     }
 
     private static func shouldRunYearBackfill(now: Date = .now) -> Bool {
