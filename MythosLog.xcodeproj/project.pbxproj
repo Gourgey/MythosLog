@@ -30,6 +30,13 @@
 		40271DE57E31CE1B375E6F7E /* HapticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58F4C7E7D2BB8B49849C202 /* HapticsService.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		40C7660AA0F973D3682D9011 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9057FB9C2D82CE89491F37FB /* GoalsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		411CECA79CF0C782F7684EFE /* TrainingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7AF49404A52A82E92ED73A /* TrainingStore.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		3CA66E176EC82A6DC8DE39B9 /* TrainingStore+Progression.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E02F4452EE96271BD8946 /* TrainingStore+Progression.swift */; };
+		8DD85D0C40500E3C6C445305 /* TrainingStore+Goals.swift in Sources */ = {isa = PBXBuildFile; fileRef = E711A9782498586B443D795B /* TrainingStore+Goals.swift */; };
+		8C960867AE73C476EA0F6A93 /* TrainingStore+Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E38AC5C51C627DC0C7F021 /* TrainingStore+Insights.swift */; };
+		5D6DFB9980FB6DCF65AB97F8 /* TrainingStore+Snapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CD6C6B511949FDDA26168E /* TrainingStore+Snapshots.swift */; };
+		7C9A44A467EE6C7DA2BFFB43 /* TrainingStore+Sync.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD14C5F956B80AF8D1D3DD98 /* TrainingStore+Sync.swift */; };
+		7DB0FC92C6E4F3C7375D593F /* TrainingStore+Transfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E6FCB9F67A6EBFBAC7B34B /* TrainingStore+Transfer.swift */; };
+		134C995BB4EA1679F8CC6C19 /* HealthImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3437697C533F9EB75A400723 /* HealthImportService.swift */; };
 		4324644800149CD3710CB681 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C66A6243D32FCD1D92C1819 /* DashboardView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		A1A2345678901ABCDEF11111 /* RankChangesReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2345678901ABCDEF22222 /* RankChangesReviewView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -119,6 +126,13 @@
 		493D2F793420E962EBAD0DF1 /* StreakService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreakService.swift; path = MythosLog/Domain/StreakService.swift; sourceTree = "<group>"; };
 		4A26C734A994699116F71229 /* MythosLogApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogApp.swift; path = MythosLog/MythosLogApp.swift; sourceTree = "<group>"; };
 		4A7AF49404A52A82E92ED73A /* TrainingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingStore.swift; path = MythosLog/Domain/TrainingStore.swift; sourceTree = "<group>"; };
+		B52E02F4452EE96271BD8946 /* TrainingStore+Progression.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Progression.swift"; path = "MythosLog/Domain/TrainingStore+Progression.swift"; sourceTree = "<group>"; };
+		E711A9782498586B443D795B /* TrainingStore+Goals.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Goals.swift"; path = "MythosLog/Domain/TrainingStore+Goals.swift"; sourceTree = "<group>"; };
+		36E38AC5C51C627DC0C7F021 /* TrainingStore+Insights.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Insights.swift"; path = "MythosLog/Domain/TrainingStore+Insights.swift"; sourceTree = "<group>"; };
+		D2CD6C6B511949FDDA26168E /* TrainingStore+Snapshots.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Snapshots.swift"; path = "MythosLog/Domain/TrainingStore+Snapshots.swift"; sourceTree = "<group>"; };
+		FD14C5F956B80AF8D1D3DD98 /* TrainingStore+Sync.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Sync.swift"; path = "MythosLog/Domain/TrainingStore+Sync.swift"; sourceTree = "<group>"; };
+		B2E6FCB9F67A6EBFBAC7B34B /* TrainingStore+Transfer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "TrainingStore+Transfer.swift"; path = "MythosLog/Domain/TrainingStore+Transfer.swift"; sourceTree = "<group>"; };
+		3437697C533F9EB75A400723 /* HealthImportService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "HealthImportService.swift"; path = "MythosLog/Domain/HealthImportService.swift"; sourceTree = "<group>"; };
 		549E045B5ABF1518B27118F0 /* RankArtworkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RankArtworkView.swift; path = MythosLog/Views/Components/RankArtworkView.swift; sourceTree = "<group>"; };
 		F4ABCDEF01234567890ABCD2 /* V4Style.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = V4Style.swift; path = MythosLog/Views/Components/V4Style.swift; sourceTree = "<group>"; };
 		56539AE7AFB8678EBCD34F20 /* TrainingModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingModels.swift; path = MythosLog/Models/TrainingModels.swift; sourceTree = "<group>"; };
@@ -375,6 +389,13 @@
 				493D2F793420E962EBAD0DF1 /* StreakService.swift */,
 				A37F0D265B4D62B47FD3ACCE /* TrainingArcConfig.swift */,
 				4A7AF49404A52A82E92ED73A /* TrainingStore.swift */,
+				B52E02F4452EE96271BD8946 /* TrainingStore+Progression.swift */,
+				E711A9782498586B443D795B /* TrainingStore+Goals.swift */,
+				36E38AC5C51C627DC0C7F021 /* TrainingStore+Insights.swift */,
+				D2CD6C6B511949FDDA26168E /* TrainingStore+Snapshots.swift */,
+				FD14C5F956B80AF8D1D3DD98 /* TrainingStore+Sync.swift */,
+				B2E6FCB9F67A6EBFBAC7B34B /* TrainingStore+Transfer.swift */,
+				3437697C533F9EB75A400723 /* HealthImportService.swift */,
 				48416C9F1CC9F8D5EF5914E6 /* WeekMath.swift */,
 			);
 			name = Domain;
@@ -594,6 +615,13 @@
 				3E7CB87CCD693B29A089E9B6 /* StreakService.swift in Sources */,
 				55481061F28A10E8A3990EF2 /* TrainingArcConfig.swift in Sources */,
 				411CECA79CF0C782F7684EFE /* TrainingStore.swift in Sources */,
+				3CA66E176EC82A6DC8DE39B9 /* TrainingStore+Progression.swift in Sources */,
+				8DD85D0C40500E3C6C445305 /* TrainingStore+Goals.swift in Sources */,
+				8C960867AE73C476EA0F6A93 /* TrainingStore+Insights.swift in Sources */,
+				5D6DFB9980FB6DCF65AB97F8 /* TrainingStore+Snapshots.swift in Sources */,
+				7C9A44A467EE6C7DA2BFFB43 /* TrainingStore+Sync.swift in Sources */,
+				7DB0FC92C6E4F3C7375D593F /* TrainingStore+Transfer.swift in Sources */,
+				134C995BB4EA1679F8CC6C19 /* HealthImportService.swift in Sources */,
 				52526327875F7AC47CB93560 /* WeekMath.swift in Sources */,
 				EA34464CB866136169AAECFE /* TrainingArcAppShortcuts.swift in Sources */,
 				EDCCCBC96E30AB4CCB831B7A /* TrainingArcIntents.swift in Sources */,
