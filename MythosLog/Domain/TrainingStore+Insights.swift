@@ -107,7 +107,7 @@ extension TrainingStore {
     }
 
     private static func computeDashboardHighlights(stats: [StatDomain]) -> [DashboardHighlight] {
-        let chargeMaximum = DashboardChargeDots.slotsPerSide
+        let chargeMaximum = ChargeMath.slotsPerSide
         var highlights: [DashboardHighlight] = []
 
         for stat in stats {
@@ -245,9 +245,10 @@ extension TrainingStore {
             return !skillsWithActivity.isEmpty
         }.count
 
+        let goalInputs = goalProgressInputs(context: context)
         let goalsAtRiskCount = goals.filter { goal in
             guard goal.status == .active else { return false }
-            let snapshot = goalProgress(for: goal, context: context, now: now)
+            let snapshot = goalProgress(for: goal, inputs: goalInputs, now: now)
             return snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind
         }.count
 

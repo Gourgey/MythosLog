@@ -256,6 +256,18 @@ enum ChargeMath {
     static func clampedCharge(_ charge: Int) -> Int {
         min(max(charge, -slotsPerSide), slotsPerSide)
     }
+
+    static func summaryLabel(for charge: Int) -> String {
+        let clamped = clampedCharge(charge)
+        switch clamped {
+        case let value where value > 0:
+            return "Charge +\(value)"
+        case let value where value < 0:
+            return "Charge \(value)"
+        default:
+            return "Charge 0"
+        }
+    }
 }
 
 // MARK: - Rank Changes

@@ -19,15 +19,7 @@ enum DashboardChargeDots {
     }
 
     static func summaryLabel(for charge: Int) -> String {
-        let clamped = clampedCharge(charge)
-        switch clamped {
-        case let value where value > 0:
-            return "Charge +\(value)"
-        case let value where value < 0:
-            return "Charge \(value)"
-        default:
-            return "Charge 0"
-        }
+        ChargeMath.summaryLabel(for: charge)
     }
 }
 

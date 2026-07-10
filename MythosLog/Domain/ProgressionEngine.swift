@@ -68,27 +68,27 @@ enum ProgressionEngine {
             return baselineChargeDelta >= 0 ? 1 : 0
         }()
         let weeklyChargeDelta = baselineChargeDelta + goalBonus
-        var resolvedCharge = DashboardChargeDots.clampedCharge(chargeAfterDecay + weeklyChargeDelta)
+        var resolvedCharge = ChargeMath.clampedCharge(chargeAfterDecay + weeklyChargeDelta)
         var levelAfter = levelBefore
         var expectedTargetAfter = expectedTargetBefore
         var didLevelUp = false
         var didLevelDown = false
 
-        if resolvedCharge >= DashboardChargeDots.slotsPerSide, levelBefore < TrainingArcConfig.maximumRankLevel {
+        if resolvedCharge >= ChargeMath.slotsPerSide, levelBefore < TrainingArcConfig.maximumRankLevel {
             levelAfter = levelBefore + 1
             expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: levelAfter)
             resolvedCharge = 0
             didLevelUp = true
         }
 
-        if allowRankDown, !didLevelUp, resolvedCharge <= -DashboardChargeDots.slotsPerSide, levelBefore > TrainingArcConfig.minimumRankLevel {
+        if allowRankDown, !didLevelUp, resolvedCharge <= -ChargeMath.slotsPerSide, levelBefore > TrainingArcConfig.minimumRankLevel {
             levelAfter = levelBefore - 1
             expectedTargetAfter = TrainingArcConfig.requiredWeeklyValue(for: statKey, level: levelAfter)
             resolvedCharge = 0
             didLevelDown = true
         }
 
-        let bankedUnitsAfter = Double(DashboardChargeDots.clampedCharge(resolvedCharge))
+        let bankedUnitsAfter = Double(ChargeMath.clampedCharge(resolvedCharge))
 
         let finalState = WeeklyProgressionState(
             level: levelAfter,

@@ -42,12 +42,21 @@ extension TrainingStore {
         let previousBankedUnits = stat.bankedProgressUnits
         let previousResolvedWeek = stat.lastResolvedWeekStart
         let previousPending = stat.pendingRankChange
-        let existingResolutions = stat.weeklyResolutions ?? []
-        let hadExistingResolutions = !existingResolutions.isEmpty
 
-        for resolution in existingResolutions {
-            context.delete(resolution)
+        // Reuse existing WeeklyResolution rows by week start so unchanged
+        // weeks produce no writes: identity stays stable for SwiftUI and
+        // CloudKit no longer sees a full delete-and-recreate of the history
+        // on every log mutation.
+        var reusableByWeekStart: [Date: WeeklyResolution] = [:]
+        var staleResolutions: [WeeklyResolution] = []
+        for resolution in (stat.weeklyResolutions ?? []).sorted(by: { $0.createdAt > $1.createdAt }) {
+            if reusableByWeekStart[resolution.weekStartDate] == nil {
+                reusableByWeekStart[resolution.weekStartDate] = resolution
+            } else {
+                staleResolutions.append(resolution)
+            }
         }
+        var resolutionsChanged = false
 
         var state = ProgressionEngine.initialState(for: statKey, startingBaseline: stat.startingBaseline)
         let completedWeeks = completedProgressionWeeks(for: stat, now: now)
@@ -67,32 +76,47 @@ extension TrainingStore {
                 isRecoveryGoal: activeGoal?.isRecoveryMode ?? false,
                 allowRankDown: allowRankDown
             )
-            let resolution = WeeklyResolution(
-                statKey: stat.key,
-                statName: stat.name,
-                weekStartDate: week.start,
-                weekEndDate: week.end,
-                baselineAtStart: state.expectedWeeklyTarget,
-                expectedTotal: result.expectedTotal,
-                actualCompletedValue: result.actualTotal,
-                weeklyDelta: result.weeklyDelta,
-                excessValue: result.weeklyDelta,
-                chargesEarned: result.weeklyChargeDelta,
-                chargesSpentOnLevelUp: (result.didLevelUp || result.didLevelDown) ? DashboardChargeDots.slotsPerSide : 0,
-                bankedUnitsBefore: result.bankedUnitsBefore,
-                bankedUnitsAfter: result.bankedUnitsAfter,
-                levelBefore: result.levelBefore,
-                levelAfter: result.levelAfter,
-                storedChargesAfter: result.visibleChargesAfter,
-                didDecay: result.didDecayTowardZero,
-                didLevelUp: result.didLevelUp,
-                didStagnate: result.weeklyChargeDelta == 0,
-                didRegress: result.didLevelDown,
-                summaryText: summaryText(for: stat, week: week, result: result),
-                statDomain: stat
-            )
-            context.insert(resolution)
+            let baselineAtStart = state.expectedWeeklyTarget
+            let summary = summaryText(for: stat, week: week, result: result)
+            if let existing = reusableByWeekStart.removeValue(forKey: week.start) {
+                if applyWeekResolution(result, week: week, baselineAtStart: baselineAtStart, summary: summary, stat: stat, to: existing) {
+                    resolutionsChanged = true
+                }
+            } else {
+                let resolution = WeeklyResolution(
+                    statKey: stat.key,
+                    statName: stat.name,
+                    weekStartDate: week.start,
+                    weekEndDate: week.end,
+                    baselineAtStart: baselineAtStart,
+                    expectedTotal: result.expectedTotal,
+                    actualCompletedValue: result.actualTotal,
+                    weeklyDelta: result.weeklyDelta,
+                    excessValue: result.weeklyDelta,
+                    chargesEarned: result.weeklyChargeDelta,
+                    chargesSpentOnLevelUp: (result.didLevelUp || result.didLevelDown) ? ChargeMath.slotsPerSide : 0,
+                    bankedUnitsBefore: result.bankedUnitsBefore,
+                    bankedUnitsAfter: result.bankedUnitsAfter,
+                    levelBefore: result.levelBefore,
+                    levelAfter: result.levelAfter,
+                    storedChargesAfter: result.visibleChargesAfter,
+                    didDecay: result.didDecayTowardZero,
+                    didLevelUp: result.didLevelUp,
+                    didStagnate: result.weeklyChargeDelta == 0,
+                    didRegress: result.didLevelDown,
+                    summaryText: summary,
+                    statDomain: stat
+                )
+                context.insert(resolution)
+                resolutionsChanged = true
+            }
             state = result.state
+        }
+
+        staleResolutions.append(contentsOf: reusableByWeekStart.values)
+        for stale in staleResolutions {
+            context.delete(stale)
+            resolutionsChanged = true
         }
 
         stat.rankLevel = state.level
@@ -123,7 +147,7 @@ extension TrainingStore {
             previousBankedUnits != stat.bankedProgressUnits ||
             previousResolvedWeek != stat.lastResolvedWeekStart ||
             previousPending != stat.pendingRankChange ||
-            hadExistingResolutions
+            resolutionsChanged
 
         if didChange {
             stat.updatedAt = .now
@@ -196,6 +220,51 @@ extension TrainingStore {
             return nil
         }
         return progressionWeek(containing: previousWeekStart)
+    }
+
+    /// Writes a recomputed week onto an existing resolution row, assigning
+    /// only fields that actually differ. Returns true when anything changed.
+    private static func applyWeekResolution(
+        _ result: WeeklyProgressionResult,
+        week: WeekRange,
+        baselineAtStart: Int,
+        summary: String,
+        stat: StatDomain,
+        to resolution: WeeklyResolution
+    ) -> Bool {
+        var changed = false
+        func assign<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<WeeklyResolution, T>, _ value: T) {
+            if resolution[keyPath: keyPath] != value {
+                resolution[keyPath: keyPath] = value
+                changed = true
+            }
+        }
+        assign(\.statKey, stat.key)
+        assign(\.statName, stat.name)
+        assign(\.weekStartDate, week.start)
+        assign(\.weekEndDate, week.end)
+        assign(\.baselineAtStart, baselineAtStart)
+        assign(\.expectedTotal, result.expectedTotal)
+        assign(\.actualCompletedValue, result.actualTotal)
+        assign(\.weeklyDelta, result.weeklyDelta)
+        assign(\.excessValue, result.weeklyDelta)
+        assign(\.chargesEarned, result.weeklyChargeDelta)
+        assign(\.chargesSpentOnLevelUp, (result.didLevelUp || result.didLevelDown) ? ChargeMath.slotsPerSide : 0)
+        assign(\.bankedUnitsBefore, result.bankedUnitsBefore)
+        assign(\.bankedUnitsAfter, result.bankedUnitsAfter)
+        assign(\.levelBefore, result.levelBefore)
+        assign(\.levelAfter, result.levelAfter)
+        assign(\.storedChargesAfter, result.visibleChargesAfter)
+        assign(\.didDecay, result.didDecayTowardZero)
+        assign(\.didLevelUp, result.didLevelUp)
+        assign(\.didStagnate, result.weeklyChargeDelta == 0)
+        assign(\.didRegress, result.didLevelDown)
+        assign(\.summaryText, summary)
+        if resolution.statDomain !== stat {
+            resolution.statDomain = stat
+            changed = true
+        }
+        return changed
     }
 
     static func summaryText(for stat: StatDomain, week: WeekRange, result: WeeklyProgressionResult) -> String {

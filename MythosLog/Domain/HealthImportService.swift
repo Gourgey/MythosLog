@@ -375,6 +375,7 @@ enum HealthImportService {
                 note: note,
                 source: .health,
                 healthWorkoutUUID: workout.uuid.uuidString,
+                refreshProgressAfterSave: false,
                 context: context
             )
 
@@ -395,6 +396,10 @@ enum HealthImportService {
             if overlappingRecord != nil {
                 overlapCount += 1
             }
+        }
+
+        if importedCount > 0 {
+            try TrainingStore.refreshAllProgress(context: context, reason: .logMutation)
         }
 
         if let newAnchor {
@@ -700,14 +705,7 @@ enum HealthImportService {
     }
 
     private static func loggedValue(for workout: HKWorkout, habit: Habit) -> Double {
-        switch habit.measurementType {
-        case .booleanSession:
-            return 1
-        case .minutes:
-            return max(1, (workout.duration / 60).rounded())
-        case .count, .customNumber, .pages:
-            return 1
-        }
+        TrainingStore.loggedValue(durationMinutes: workout.duration / 60, habit: habit)
     }
 
     private static func loadAnchor() -> HKQueryAnchor? {

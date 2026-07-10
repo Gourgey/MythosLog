@@ -123,7 +123,15 @@ enum TrainingStore {
             }
         }
 
+        // Last resort: never crash-loop the app over a broken store. Run
+        // in-memory so the app still opens; runtimeStoreInfo carries the
+        // reason for the sync diagnostics screen.
         let message = lastError.map { String(describing: $0) } ?? "Unknown SwiftData error"
+        let emergency = makeConfigurationCandidate(inMemory: true, useAppGroup: false, useCloudKit: false, allowsStoreReset: false)
+        if let container = try? ModelContainer(for: schema, configurations: emergency.configuration) {
+            recordRuntimeStoreInfo(candidate: emergency, fallbackReason: "All persistent store candidates failed; running in-memory. Last error: \(message)")
+            return container
+        }
         fatalError("Unable to create ModelContainer. \(message)")
     }
 
@@ -348,19 +356,32 @@ enum TrainingStore {
             URL(fileURLWithPath: storeURL.path + "-wal")
         ]
 
+        // Move the broken store aside instead of deleting it so the data can
+        // still be recovered manually if the reset turns out to be wrong.
+        let backupSuffix = "corrupt-\(Int(Date.now.timeIntervalSince1970))"
         for candidateURL in Set(candidateURLs) where fileManager.fileExists(atPath: candidateURL.path) {
-            try fileManager.removeItem(at: candidateURL)
+            let backupURL = candidateURL.appendingPathExtension(backupSuffix)
+            do {
+                try? fileManager.removeItem(at: backupURL)
+                try fileManager.moveItem(at: candidateURL, to: backupURL)
+            } catch {
+                try fileManager.removeItem(at: candidateURL)
+            }
         }
     }
 
     static func refreshAppState() {
         let context = ModelContext(sharedModelContainer)
-        _ = try? reconcileSyncedData(context: context)
-        try? synchronizeCatalog(context: context)
-        _ = try? drainQuickLogQueue(context: context)
-        try? refreshAllProgress(context: context, reason: .appRefresh)
-        try? refreshWidgetSnapshot(context: context)
+        do { _ = try reconcileSyncedData(context: context) } catch { logRefreshFailure("reconcileSyncedData", error) }
+        do { try synchronizeCatalog(context: context) } catch { logRefreshFailure("synchronizeCatalog", error) }
+        do { _ = try drainQuickLogQueue(context: context) } catch { logRefreshFailure("drainQuickLogQueue", error) }
+        do { try refreshAllProgress(context: context, reason: .appRefresh) } catch { logRefreshFailure("refreshAllProgress", error) }
+        do { try refreshWidgetSnapshot(context: context) } catch { logRefreshFailure("refreshWidgetSnapshot", error) }
         refreshHomeScreenQuickActions()
+    }
+
+    private static func logRefreshFailure(_ step: String, _ error: Error) {
+        syncLogger.error("refreshAppState step \(step, privacy: .public) failed: \(String(describing: error), privacy: .public)")
     }
 
     /// Applies any quick logs queued by the interactive widget. Runs synchronously
@@ -387,15 +408,19 @@ enum TrainingStore {
             if habit.measurementType == .booleanSession {
                 let sessions = max(1, Int(amount.rounded()))
                 for _ in 0..<sessions {
-                    _ = try log(habit: habit, value: 1, date: .now, note: "Quick log", source: .widget, context: context)
+                    _ = try log(habit: habit, value: 1, date: .now, note: "Quick log", source: .widget, refreshProgressAfterSave: false, context: context)
                 }
             } else {
-                _ = try log(habit: habit, value: amount, date: .now, note: "Quick log", source: .widget, context: context)
+                _ = try log(habit: habit, value: amount, date: .now, note: "Quick log", source: .widget, refreshProgressAfterSave: false, context: context)
             }
             appliedCount += 1
         }
 
         QuickLogQueue.clear()
+        if appliedCount > 0 {
+            try refreshAllProgress(context: context, reason: .logMutation)
+            try? refreshWidgetSnapshot(context: context)
+        }
         return appliedCount
     }
 
@@ -614,7 +639,6 @@ enum TrainingStore {
         stat.rankLevel = resolvedLevel
         stat.rankTitle = resolvedTitle
         stat.descriptor = resolvedDescriptor
-        stat.chargeValue = DashboardChargeDots.clampedCharge(stat.chargeValue)
         stat.acknowledgedRankLevel = max(stat.acknowledgedRankLevel, TrainingArcConfig.minimumRankLevel)
 
         if didMutate {
@@ -682,20 +706,7 @@ enum TrainingStore {
             // Optional skills are created archived with no habit; enabling one
             // later creates its starter habit on demand.
             if template.isCore {
-                let starter = TrainingArcConfig.definition(for: template.key).starterHabit
-                let habit = Habit(
-                    systemKey: starter.systemKey,
-                    name: starter.name,
-                    notes: starter.notes,
-                    measurementType: starter.measurementType,
-                    unitLabel: starter.unitLabel,
-                    scheduleType: starter.scheduleType,
-                    targetPerPeriod: starter.targetPerPeriod,
-                    active: true,
-                    sortOrder: (try? fetchHabits(context: context).count) ?? 0,
-                    statDomain: stat
-                )
-                context.insert(habit)
+                insertStarterHabit(for: template.key, stat: stat, context: context)
             }
         }
 
@@ -706,6 +717,9 @@ enum TrainingStore {
         }
     }
 
+    /// Pass `refreshProgressAfterSave: false` when logging a batch (Health
+    /// import, widget queue drain) and run one refreshAllProgress at the end;
+    /// each per-log refresh replays every completed week for the skill.
     @discardableResult
     static func log(
         habit: Habit,
@@ -715,6 +729,7 @@ enum TrainingStore {
         note: String,
         source: LogSourceType,
         healthWorkoutUUID: String? = nil,
+        refreshProgressAfterSave: Bool = true,
         context: ModelContext
     ) throws -> HabitLog {
         let numericValue = habit.measurementType == .booleanSession ? 1 : max(0, value)
@@ -731,10 +746,12 @@ enum TrainingStore {
         context.insert(log)
         try context.save()
         recordLocalWrite(reason: "logged habit entry")
-        if let stat = habit.statDomain {
-            try refreshProgress(for: stat, context: context, reason: .logMutation, now: max(date, .now))
+        if refreshProgressAfterSave {
+            if let stat = habit.statDomain {
+                try refreshProgress(for: stat, context: context, reason: .logMutation, now: max(date, .now))
+            }
+            try? refreshWidgetSnapshot(context: context)
         }
-        try refreshWidgetSnapshot(context: context)
         return log
     }
 
@@ -747,7 +764,7 @@ enum TrainingStore {
         if let stat {
             try refreshProgress(for: stat, context: context, reason: .deleteMutation, now: max(affectedDate, .now))
         }
-        try refreshWidgetSnapshot(context: context)
+        try? refreshWidgetSnapshot(context: context)
     }
 
     static func total(for habit: Habit, in interval: DateInterval) -> Double {
@@ -819,6 +836,16 @@ enum TrainingStore {
         return TrainingArcConfig.chargeProgress(for: key, bankedUnits: stat.bankedProgressUnits, level: stat.rankLevel)
     }
 
+    /// Converts a workout duration into the logged value for a habit's
+    /// measurement type (sessions and counts log 1; minutes log the duration).
+    static func loggedValue(durationMinutes: Double, habit: Habit) -> Double {
+        switch habit.measurementType {
+        case .booleanSession: return 1
+        case .minutes: return max(1, durationMinutes.rounded())
+        case .count, .customNumber, .pages: return 1
+        }
+    }
+
     static func normalizedSessionType(_ sessionType: String?) -> String? {
         guard let trimmed = sessionType?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
@@ -862,8 +889,13 @@ enum TrainingStore {
     /// are created without one). No-op if any habit already exists.
     private static func ensureStarterHabit(for stat: StatDomain, context: ModelContext) {
         guard let key = stat.statKey else { return }
-        let hasHabit = !(stat.habits ?? []).isEmpty
-        guard !hasHabit else { return }
+        guard (stat.habits ?? []).isEmpty else { return }
+        insertStarterHabit(for: key, stat: stat, context: context)
+    }
+
+    /// Inserts the catalog starter habit for a skill (used when a skill is
+    /// created or enabled without any habit of its own).
+    private static func insertStarterHabit(for key: StatKey, stat: StatDomain, context: ModelContext) {
         let starter = TrainingArcConfig.definition(for: key).starterHabit
         let habit = Habit(
             systemKey: starter.systemKey,

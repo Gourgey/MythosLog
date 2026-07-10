@@ -800,7 +800,7 @@ enum TrainingArcConfig {
     }
 
     static func displayedCharge(for statKey: StatKey, bankedUnits: Double, level: Int) -> Int {
-        DashboardChargeDots.clampedCharge(Int(bankedUnits.rounded(.towardZero)))
+        ChargeMath.clampedCharge(Int(bankedUnits.rounded(.towardZero)))
     }
 
     static func chargeProgress(for statKey: StatKey, bankedUnits: Double, level: Int) -> Double {

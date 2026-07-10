@@ -82,6 +82,7 @@ extension TrainingStore {
     static func applyAutomaticGoalTransitions(context: ModelContext, now: Date = .now) throws -> Int {
         let activeGoals = try fetchGoals(context: context).filter { $0.status == .active }
         var transitioned = 0
+        var inputs: GoalProgressInputs?
 
         for goal in activeGoals {
             guard let endDate = goal.endDate, endDate < now else { continue }
@@ -90,7 +91,9 @@ extension TrainingStore {
             if recurringGoalTypes.contains(goal.type) {
                 newStatus = .archived
             } else {
-                let progress = goalProgress(for: goal, context: context, now: now)
+                let resolvedInputs = inputs ?? goalProgressInputs(context: context)
+                inputs = resolvedInputs
+                let progress = goalProgress(for: goal, inputs: resolvedInputs, now: now)
                 newStatus = progress.progressRatio >= 1 ? .completed : .failed
             }
 
@@ -106,8 +109,29 @@ extension TrainingStore {
         return transitioned
     }
 
+    /// Everything goal-progress math reads, fetched once per batch instead of
+    /// once per goal (the full log table is the expensive fetch).
+    struct GoalProgressInputs {
+        var logs: [HabitLog]
+        var statsByKey: [String: StatDomain]
+    }
+
+    static func goalProgressInputs(context: ModelContext) -> GoalProgressInputs {
+        let logs = (try? fetchLogs(context: context)) ?? []
+        let stats = (try? fetchStats(context: context)) ?? []
+        let statsByKey = Dictionary(stats.compactMap { stat -> (String, StatDomain)? in
+            guard let key = stat.statKey?.rawValue else { return nil }
+            return (key, stat)
+        }) { lhs, _ in lhs }
+        return GoalProgressInputs(logs: logs, statsByKey: statsByKey)
+    }
+
     static func goalProgress(for goal: Goal, context: ModelContext, now: Date = .now) -> GoalProgressSnapshot {
-        let currentValue = computeGoalCurrentValue(for: goal, context: context, now: now)
+        goalProgress(for: goal, inputs: goalProgressInputs(context: context), now: now)
+    }
+
+    static func goalProgress(for goal: Goal, inputs: GoalProgressInputs, now: Date = .now) -> GoalProgressSnapshot {
+        let currentValue = computeGoalCurrentValue(for: goal, inputs: inputs, now: now)
         let target = max(goal.targetValue, 0)
         let ratio: Double
         if target > 0 {
@@ -138,8 +162,9 @@ extension TrainingStore {
     }
 
     static func goalProgressSnapshots(context: ModelContext, now: Date = .now) throws -> [GoalProgressSnapshot] {
-        try fetchGoals(context: context).map { goal in
-            goalProgress(for: goal, context: context, now: now)
+        let inputs = goalProgressInputs(context: context)
+        return try fetchGoals(context: context).map { goal in
+            goalProgress(for: goal, inputs: inputs, now: now)
         }
     }
 
@@ -160,29 +185,28 @@ extension TrainingStore {
         return eligible.max(by: { $0.targetValue < $1.targetValue })
     }
 
-    private static func computeGoalCurrentValue(for goal: Goal, context: ModelContext, now: Date) -> Double {
+    private static func computeGoalCurrentValue(for goal: Goal, inputs: GoalProgressInputs, now: Date) -> Double {
         switch goal.type {
         case .reachLevel, .reachRank:
             guard
                 let statKey = goal.linkedStatKey,
-                let stat = try? fetchStats(context: context).first(where: { $0.statKey == statKey })
+                let stat = inputs.statsByKey[statKey.rawValue]
             else {
                 return 0
             }
             return Double(stat.rankLevel)
         case .weeklyTarget:
-            return totalForGoal(goal, in: progressionWeekInterval(containing: now), context: context)
+            return totalForGoal(goal, in: progressionWeekInterval(containing: now), logs: inputs.logs)
         case .monthlyTotal:
-            return totalForGoal(goal, in: monthInterval(containing: now), context: context)
+            return totalForGoal(goal, in: monthInterval(containing: now), logs: inputs.logs)
         case .consistency, .maintainBaseline, .improveBalance, .custom:
             let interval = goalDateInterval(for: goal, now: now)
-            return totalForGoal(goal, in: interval, context: context)
+            return totalForGoal(goal, in: interval, logs: inputs.logs)
         }
     }
 
-    private static func totalForGoal(_ goal: Goal, in interval: DateInterval, context: ModelContext) -> Double {
-        let allLogs = (try? fetchLogs(context: context)) ?? []
-        let filtered = allLogs.filter { log in
+    private static func totalForGoal(_ goal: Goal, in interval: DateInterval, logs: [HabitLog]) -> Double {
+        let filtered = logs.filter { log in
             guard interval.contains(log.date) else { return false }
             if let habitID = goal.linkedHabitID {
                 return log.habit?.id == habitID

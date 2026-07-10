@@ -28,16 +28,26 @@ extension TrainingStore {
         return didMutate
     }
 
+    /// CloudKit dedupe keeper policy: newest updatedAt wins; ties fall back
+    /// to newest createdAt.
+    private static func newestRecord<T>(
+        of items: [T],
+        updatedAt: (T) -> Date,
+        createdAt: (T) -> Date
+    ) -> T? {
+        items.max {
+            if updatedAt($0) == updatedAt($1) {
+                return createdAt($0) < createdAt($1)
+            }
+            return updatedAt($0) < updatedAt($1)
+        }
+    }
+
     private static func reconcileSettings(context: ModelContext) throws -> Bool {
         let settings = try context.fetch(FetchDescriptor<AppSettings>())
         guard settings.count > 1 else { return false }
 
-        let keeper = settings.max {
-            if $0.updatedAt == $1.updatedAt {
-                return $0.createdAt < $1.createdAt
-            }
-            return $0.updatedAt < $1.updatedAt
-        }
+        let keeper = newestRecord(of: settings, updatedAt: \.updatedAt, createdAt: \.createdAt)
 
         guard let keeper else { return false }
 
@@ -53,12 +63,7 @@ extension TrainingStore {
         let groupedStats = Dictionary(grouping: try fetchStats(context: context), by: \.key)
 
         for stats in groupedStats.values where stats.count > 1 {
-            let keeper = stats.max {
-                if $0.updatedAt == $1.updatedAt {
-                    return $0.createdAt < $1.createdAt
-                }
-                return $0.updatedAt < $1.updatedAt
-            }
+            let keeper = newestRecord(of: stats, updatedAt: \.updatedAt, createdAt: \.createdAt)
 
             guard let keeper else { continue }
 
@@ -164,12 +169,7 @@ extension TrainingStore {
     private static func mergeDuplicateHabits(_ habits: [Habit], context: ModelContext) -> Bool {
         guard habits.count > 1 else { return false }
 
-        let keeper = habits.max {
-            if $0.updatedAt == $1.updatedAt {
-                return $0.createdAt < $1.createdAt
-            }
-            return $0.updatedAt < $1.updatedAt
-        }
+        let keeper = newestRecord(of: habits, updatedAt: \.updatedAt, createdAt: \.createdAt)
 
         guard let keeper else { return false }
 
@@ -268,6 +268,7 @@ extension TrainingStore {
                 note: note,
                 source: .health,
                 healthWorkoutUUID: record.workoutUUID,
+                refreshProgressAfterSave: false,
                 context: context
             )) != nil else {
                 continue
@@ -277,6 +278,10 @@ extension TrainingStore {
             record.wasImported = true
             record.awaitingHabitAssignment = false
             didMutate = true
+        }
+
+        if didMutate {
+            try refreshAllProgress(context: context, reason: .logMutation)
         }
 
         return didMutate
@@ -305,11 +310,7 @@ extension TrainingStore {
     }
 
     private static func loggedValue(for record: HealthImportedWorkout, habit: Habit) -> Double {
-        switch habit.measurementType {
-        case .booleanSession: return 1
-        case .minutes: return max(1, record.durationMinutes.rounded())
-        case .count, .customNumber, .pages: return 1
-        }
+        loggedValue(durationMinutes: record.durationMinutes, habit: habit)
     }
 
     private static func healthImportSortKey(_ record: HealthImportedWorkout) -> (priority: Int, createdAt: Date) {
@@ -372,12 +373,7 @@ extension TrainingStore {
     private static func reconcileGoals(context: ModelContext) throws -> Bool {
         var didMutate = false
         for goals in Dictionary(grouping: try fetchGoals(context: context), by: \.id).values where goals.count > 1 {
-            let keeper = goals.max {
-                if $0.updatedAt == $1.updatedAt {
-                    return $0.createdAt < $1.createdAt
-                }
-                return $0.updatedAt < $1.updatedAt
-            }
+            let keeper = newestRecord(of: goals, updatedAt: \.updatedAt, createdAt: \.createdAt)
             guard let keeper else { continue }
             for duplicate in goals where duplicate !== keeper {
                 context.delete(duplicate)

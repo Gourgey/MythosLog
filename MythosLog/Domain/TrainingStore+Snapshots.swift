@@ -166,10 +166,14 @@ extension TrainingStore {
         }
     }
 
-    static func nextEvaluationLabel(now: Date = .now) -> String {
+    private static let evaluationDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE 'at' HH:mm"
-        return "Resolves \(formatter.string(from: nextWeeklyEvaluationDate(now: now)))"
+        return formatter
+    }()
+
+    static func nextEvaluationLabel(now: Date = .now) -> String {
+        "Resolves \(evaluationDateFormatter.string(from: nextWeeklyEvaluationDate(now: now)))"
     }
 
     static func bankCountdownLabel(now: Date = .now) -> String {
@@ -299,7 +303,7 @@ extension TrainingStore {
         chargeValue: Int,
         nextRank: RankLevelDefinition?
     ) -> String {
-        let chargeLimit = DashboardChargeDots.slotsPerSide
+        let chargeLimit = ChargeMath.slotsPerSide
 
         if chargeValue <= -(chargeLimit - 1), stat.rankLevel > TrainingArcConfig.minimumRankLevel {
             let remainingDebt = chargeLimit - abs(chargeValue)
@@ -346,7 +350,7 @@ extension TrainingStore {
             return "Keep matching this pace to hold the maximum rank."
         }
 
-        let remainingCharges = max(DashboardChargeDots.slotsPerSide - max(chargeValue, 0), 0)
+        let remainingCharges = max(ChargeMath.slotsPerSide - max(chargeValue, 0), 0)
         if remainingCharges == 0 {
             return "Hold a strong week to convert this rank-up."
         }
@@ -417,7 +421,7 @@ extension TrainingStore {
         let chargeValue = currentCharge(for: stat, settings: settings, now: now)
         let chargeProgress = currentChargeProgress(for: stat, settings: settings, now: now)
         let pacing = pacingStatus(for: stat, settings: settings, now: now)
-        let chargeMaximum = DashboardChargeDots.slotsPerSide
+        let chargeMaximum = ChargeMath.slotsPerSide
         let focusState = focusState(for: stat, settings: settings, chargeProgress: chargeProgress, now: now)
         let weeklyTarget = max(Double(stat.currentBaseline), 1)
         let weeklyTargetProgress = min(max(currentWeekActual / weeklyTarget, 0), 1)
@@ -430,7 +434,7 @@ extension TrainingStore {
                 title: currentRank.title,
                 nextTitle: nextRank?.title,
                 progressValue: Double(max(chargeValue, 0)),
-                progressValueLabel: DashboardChargeDots.summaryLabel(for: chargeValue),
+                progressValueLabel: ChargeMath.summaryLabel(for: chargeValue),
                 progressRequiredLabel: nextRank == nil ? "Maximum rank" : "\(chargeMaximum) positive charge steps",
                 progressToNextLevel: chargeProgress,
                 isAtMaximumRank: currentLevel >= TrainingArcConfig.maximumRankLevel,
@@ -468,7 +472,7 @@ extension TrainingStore {
             } ?? nil,
             bankedChargeLabel: nextRank == nil && chargeValue == 0
                 ? "Stable at maximum rank"
-                : DashboardChargeDots.summaryLabel(for: chargeValue),
+                : ChargeMath.summaryLabel(for: chargeValue),
             nextRankStatusLabel: nextRankStatusLabel(
                 for: stat,
                 chargeValue: chargeValue,
@@ -495,7 +499,7 @@ extension TrainingStore {
         let currentWeekValue = currentWeekTotal(for: stat, settings: settings, now: now)
         let remainingToTarget = max(Double(stat.currentBaseline) - currentWeekValue, 0)
         let unitLabel = weeklyUnitLabel(for: stat)
-        let bankedChargeSummary = DashboardChargeDots.summaryLabel(for: snapshot.charge.current)
+        let bankedChargeSummary = ChargeMath.summaryLabel(for: snapshot.charge.current)
         let stayOnTargetSummary: String = {
             if remainingToTarget <= 0 {
                 return "On target this week"
@@ -542,12 +546,13 @@ extension TrainingStore {
             guard let key = stat.statKey else { return }
             items.append("\(key.displayName): \(stat.rankTitle)")
         }
+        guard !summary.isEmpty else { return "" }
         return summary.joined(separator: ". ") + "."
     }
 
     static func refreshWidgetSnapshot(context: ModelContext, now: Date = .now) throws {
-        _ = try fetchSettings(context: context)
-        let interval = currentWeekInterval(settings: nil, now: now)
+        let settings = try? fetchExistingSettings(context: context)
+        let interval = currentWeekInterval(settings: settings, now: now)
         let stats = try fetchActiveStats(context: context)
         let habits = try fetchActiveHabits(context: context)
         let momentum = try momentum(context: context, now: now)
@@ -613,7 +618,6 @@ extension TrainingStore {
             motivationColorToken = "focus"
         }
 
-        let settings = try? fetchExistingSettings(context: context)
         let recommendations = (try? trainTodayRecommendations(context: context, settings: settings, now: now, limit: 1)) ?? []
         let topRec = recommendations.first
         let goalSnapshots = (try? goalProgressSnapshots(context: context, now: now)) ?? []
