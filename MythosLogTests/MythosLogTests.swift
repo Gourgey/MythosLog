@@ -102,9 +102,9 @@ struct MythosLogTests {
         #expect(DashboardChargeDots.negativeDots(from: -9) == 4)
     }
 
-    @Test func dashboardLayoutModeDefaultsToCompactGrid() {
+    @Test func dashboardLayoutModeDefaultsToGameGrid() {
         let settings = AppSettings()
-        #expect(settings.dashboardLayoutMode == .compactGrid)
+        #expect(settings.dashboardLayoutMode == .gameGrid)
     }
 
     @Test @MainActor func reconcileSyncedDataKeepsNewestSettingsRecord() throws {

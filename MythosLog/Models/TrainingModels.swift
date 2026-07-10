@@ -1,6 +1,24 @@
 import Foundation
 import SwiftData
-import SwiftUI
+
+// TrainingModels.swift — the app's data vocabulary.
+//
+// Layout:
+//   1. Core enums          — persisted raw-value enums (raw values are schema; never rename cases)
+//   2. Charge math         — domain-owned charge meter constants
+//   3. Rank changes        — pending rank-change value types
+//   4. Persisted models    — SwiftData @Model classes (stored property names/types are schema)
+//   5. Goals               — goal enums + Goal model
+//   6. View snapshots      — immutable DTOs built by the store for the views
+//   7. Dashboard aggregates
+//   8. Export DTOs         — Codable mirror types for backup/restore
+//
+// Schema rules for every @Model below: all stored properties carry defaults and
+// relationships are optional so CloudKit mirroring and lightweight migration
+// keep working. Enum-backed fields store `*Raw` strings and expose typed
+// accessors that fall back to a safe default when the raw value is unknown.
+
+// MARK: - Core Enums
 
 enum StatKey: String, Codable, CaseIterable, Identifiable, Sendable {
     case strength
@@ -84,6 +102,10 @@ enum MeasurementType: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// A weekly baseline is treated as roughly this many taps' worth of
+    /// effort, so one quick-log tap ≈ one typical session.
+    private static let quickStepsPerBaseline: Double = 6
+
     /// Quick-log increments scaled to a skill's weekly baseline so the tap
     /// options are proportional to typical effort. A 120 min/week cardio skill
     /// yields ~+20/+40/+60; a 10/week cooking skill yields ~+1/+2/+3. Falls back
@@ -91,7 +113,7 @@ enum MeasurementType: String, Codable, CaseIterable, Identifiable, Sendable {
     func quickStepValues(weeklyBaseline: Int) -> [Double] {
         if self == .booleanSession { return [1] }
         guard weeklyBaseline > 0 else { return quickStepValues }
-        let unit = MeasurementType.niceStep(Double(weeklyBaseline) / 6)
+        let unit = MeasurementType.niceStep(Double(weeklyBaseline) / Self.quickStepsPerBaseline)
         return [unit, unit * 2, unit * 3]
     }
 
@@ -100,9 +122,11 @@ enum MeasurementType: String, Codable, CaseIterable, Identifiable, Sendable {
         guard value > 1 else { return 1 }
         if value >= 15 { return (value / 10).rounded() * 10 } // nearest 10
         if value >= 7 { return (value / 5).rounded() * 5 }    // nearest 5
-        return value.rounded(.down)                            // nearest whole
+        return value.rounded(.down)                            // whole number, rounded down
     }
 
+    /// Every current measurement type logs whole numbers; kept as a hook so a
+    /// future fractional unit (e.g. hours) only has to change this one switch.
     var prefersIntegerValue: Bool {
         true
     }
@@ -219,6 +243,23 @@ enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable 
     }
 }
 
+// MARK: - Charge Math
+
+/// Charge is a signed meter from -slotsPerSide to +slotsPerSide. Filling the
+/// positive side triggers a rank-up; draining the negative side risks a
+/// rank-down. These are game-balance constants, owned here by the domain;
+/// `DashboardChargeDots` (view layer) renders on top of them.
+enum ChargeMath {
+    static let slotsPerSide = 4
+    static let totalSlots = slotsPerSide * 2
+
+    static func clampedCharge(_ charge: Int) -> Int {
+        min(max(charge, -slotsPerSide), slotsPerSide)
+    }
+}
+
+// MARK: - Rank Changes
+
 enum RankChangeDirection: String, Codable, Sendable {
     case up
     case down
@@ -231,6 +272,18 @@ enum RankChangeReason: String, Codable, Sendable {
     case appRefresh
     case skillOpen
 }
+
+struct PendingRankChange: Sendable, Equatable {
+    var direction: RankChangeDirection
+    var fromLevel: Int
+    var toLevel: Int
+    var fromTitle: String
+    var toTitle: String
+    var recordedAt: Date
+    var reason: RankChangeReason?
+}
+
+// MARK: - Persisted Models
 
 @Model
 final class StatDomain {
@@ -345,6 +398,13 @@ final class StatDomain {
         set { parentSkillKeyRaw = newValue?.rawValue }
     }
 
+    /// The key used for rank-ladder lookups (titles, artwork, thresholds).
+    /// Custom skills have no `StatKey` of their own and inherit their parent
+    /// skill's ladder.
+    var rankKey: StatKey? {
+        statKey ?? parentSkillKey
+    }
+
     /// Visible in the main experience: enabled and not archived.
     var isActive: Bool {
         isEnabled && !isArchived
@@ -363,13 +423,23 @@ extension StatDomain {
     }
 
     var chargeValue: Int {
-        get { storedCharges }
-        set { storedCharges = DashboardChargeDots.clampedCharge(newValue) }
+        get { ChargeMath.clampedCharge(storedCharges) }
+        set { storedCharges = ChargeMath.clampedCharge(newValue) }
     }
 
     var acknowledgedRankLevel: Int {
         get { TrainingArcConfig.clampedRankLevel(lastAcknowledgedLevel) }
         set { lastAcknowledgedLevel = TrainingArcConfig.clampedRankLevel(newValue) }
+    }
+
+    /// Rank title from this skill's ladder at the given level. Falls back to a
+    /// plain level label when neither the skill nor its parent has a ladder.
+    func ladderRankTitle(level: Int) -> String {
+        let clamped = TrainingArcConfig.clampedRankLevel(level)
+        if let rankKey {
+            return TrainingArcConfig.rankTitle(for: rankKey, level: clamped)
+        }
+        return "Level \(clamped)"
     }
 
     var pendingRankChangeDirection: RankChangeDirection? {
@@ -385,7 +455,6 @@ extension StatDomain {
     var pendingRankChange: PendingRankChange? {
         guard
             let direction = pendingRankChangeDirection,
-            let statKey,
             let fromLevel = pendingRankChangeFromLevel,
             let toLevel = pendingRankChangeToLevel,
             let recordedAt = pendingRankChangeRecordedAt
@@ -397,8 +466,8 @@ extension StatDomain {
             direction: direction,
             fromLevel: TrainingArcConfig.clampedRankLevel(fromLevel),
             toLevel: TrainingArcConfig.clampedRankLevel(toLevel),
-            fromTitle: TrainingArcConfig.rankTitle(for: statKey, level: fromLevel),
-            toTitle: TrainingArcConfig.rankTitle(for: statKey, level: toLevel),
+            fromTitle: ladderRankTitle(level: fromLevel),
+            toTitle: ladderRankTitle(level: toLevel),
             recordedAt: recordedAt,
             reason: pendingRankChangeReason
         )
@@ -532,6 +601,8 @@ final class HabitLog {
 @Model
 final class WeeklyResolution {
     var id: UUID = UUID()
+    // statKey/statName are denormalized copies so a resolution stays readable
+    // in history even if its StatDomain is deleted (relationship is .nullify).
     var statKey: String = ""
     var statName: String = ""
     var weekStartDate: Date = Date.now
@@ -611,6 +682,7 @@ final class WeeklyResolution {
 
 @Model
 final class AppSettings {
+    // Single-row table: every fetch looks up this fixed id.
     var id: String = "app-settings"
     var hasCompletedOnboarding: Bool = false
     var enableDecay: Bool = true
@@ -623,6 +695,7 @@ final class AppSettings {
     var lockInWeeklyReview: Bool = true
     var healthAutoImportEnabled: Bool = true
     var lastHealthSyncAt: Date?
+    // Retained for schema stability; the app currently ships light-only.
     var themePreferenceRaw: String = "light"
     var dashboardLayoutModeRaw: String = DashboardLayoutMode.gameGrid.rawValue
     var disabledHealthWorkoutTypeKeysRaw: String = ""
@@ -667,7 +740,6 @@ final class AppSettings {
         self.lockInWeeklyReview = lockInWeeklyReview
         self.healthAutoImportEnabled = healthAutoImportEnabled
         self.lastHealthSyncAt = lastHealthSyncAt
-        self.themePreferenceRaw = "light"
         self.dashboardLayoutModeRaw = dashboardLayoutMode.rawValue
         self.disabledHealthWorkoutTypeKeysRaw = AppSettings.encodeWorkoutTypeKeys(disabledHealthWorkoutTypeKeys)
         self.createdAt = createdAt
@@ -679,6 +751,9 @@ final class AppSettings {
         set { dashboardLayoutModeRaw = newValue.rawValue }
     }
 
+    /// Setting strictness also rewrites `decaySensitivity`, which is what the
+    /// progression engine actually reads. Keep the pair in sync through this
+    /// accessor only.
     var progressionStrictness: ProgressionStrictness {
         get { ProgressionStrictness(rawValue: progressionStrictnessRaw) ?? .balanced }
         set {
@@ -692,6 +767,8 @@ final class AppSettings {
         set { regressionBehaviorRaw = newValue.rawValue }
     }
 
+    // Stored as sorted comma-separated keys (workout type keys never contain
+    // commas). Sorted so equal sets always serialize identically for CloudKit.
     var disabledHealthWorkoutTypeKeys: Set<String> {
         get {
             Set(disabledHealthWorkoutTypeKeysRaw
@@ -708,6 +785,8 @@ final class AppSettings {
 
 @Model
 final class HealthImportedWorkout {
+    // workoutUUID is the natural key; duplicates are prevented in the import
+    // path, not by the schema (unique constraints are unavailable with CloudKit).
     var workoutUUID: String = ""
     var statKeyRaw: String = ""
     var habitSystemKey: String?
@@ -758,6 +837,8 @@ final class HealthImportedWorkout {
         self.createdAt = createdAt
     }
 }
+
+// MARK: - Goals
 
 enum GoalScope: String, Codable, CaseIterable, Identifiable, Sendable {
     case skill
@@ -992,6 +1073,13 @@ final class Goal {
     }
 }
 
+// MARK: - View Snapshots
+//
+// Immutable DTOs the store builds for the views. Types that hold a live
+// SwiftData model (Habit, StatDomain, WeeklyResolution, Goal) are deliberately
+// NOT Sendable: models belong to their ModelContext and must stay on the main
+// actor. Pure value snapshots below remain Sendable.
+
 struct LogEntryDraft: Identifiable {
     let id = UUID()
     var habit: Habit
@@ -1024,13 +1112,13 @@ struct HabitStreakSummary: Sendable {
     var lastLoggedDate: Date?
 }
 
-struct WeeklyReviewBatch: Identifiable, Sendable {
+struct WeeklyReviewBatch: Identifiable {
     var id: Date { week.start }
     var week: WeekRange
     var resolutions: [WeeklyResolution]
 }
 
-struct StatProgressSnapshot: Identifiable, Sendable {
+struct StatProgressSnapshot: Identifiable {
     var id: UUID
     var stat: StatDomain
     var currentWeekActual: Double
@@ -1137,16 +1225,6 @@ struct SkillWeekSnapshot: Identifiable, Sendable {
     var logEntries: [SkillLogEntrySnapshot]
 }
 
-struct PendingRankChange: Sendable, Equatable {
-    var direction: RankChangeDirection
-    var fromLevel: Int
-    var toLevel: Int
-    var fromTitle: String
-    var toTitle: String
-    var recordedAt: Date
-    var reason: RankChangeReason?
-}
-
 struct RankSnapshot: Sendable {
     var level: Int
     var maximumLevel: Int
@@ -1189,6 +1267,8 @@ extension SkillProgressSnapshot {
         "\(MetricFormatting.shortMetric(currentWeekActual))/\(MetricFormatting.shortMetric(Double(baseline)))"
     }
 }
+
+// MARK: - Dashboard Aggregates
 
 struct DashboardCardPreview: Sendable {
     var rankSummary: String
@@ -1269,7 +1349,7 @@ struct TrainTodayRecommendation: Identifiable, Sendable {
     var hasReviewReady: Bool
 }
 
-struct GoalProgressSnapshot: Identifiable, Sendable {
+struct GoalProgressSnapshot: Identifiable {
     var id: UUID
     var goal: Goal
     var currentValue: Double
@@ -1383,6 +1463,12 @@ struct StandardDayAnalysis: Sendable {
     var suggestions: [String]
 }
 
+// MARK: - Export
+//
+// Codable mirrors of the persisted models for backup/restore. Optional fields
+// (`isCore: Bool?`, `progressionStrictnessRaw: String?`, ...) exist so exports
+// created by older app versions still decode; keep new fields optional too.
+
 nonisolated struct TrainingExportBundle: Codable, Sendable {
     var exportedAt: Date
     var stats: [StatExport]
@@ -1391,10 +1477,6 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
     var resolutions: [WeeklyResolutionExport]
     var settings: SettingsExport
     var goals: [GoalExport]?
-
-    enum CodingKeys: String, CodingKey {
-        case exportedAt, stats, habits, logs, resolutions, settings, goals
-    }
 
     init(
         exportedAt: Date,
@@ -1412,17 +1494,6 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
         self.resolutions = resolutions
         self.settings = settings
         self.goals = goals
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
-        stats = try container.decode([StatExport].self, forKey: .stats)
-        habits = try container.decode([HabitExport].self, forKey: .habits)
-        logs = try container.decode([HabitLogExport].self, forKey: .logs)
-        resolutions = try container.decode([WeeklyResolutionExport].self, forKey: .resolutions)
-        settings = try container.decode(SettingsExport.self, forKey: .settings)
-        goals = try container.decodeIfPresent([GoalExport].self, forKey: .goals)
     }
 
     static let empty = TrainingExportBundle(
@@ -1448,24 +1519,6 @@ nonisolated struct TrainingExportBundle: Codable, Sendable {
             disabledHealthWorkoutTypeKeysRaw: ""
         )
     )
-}
-
-enum SampleProfile: String, CaseIterable, Identifiable, Sendable {
-    case newUser
-    case streaking
-    case stagnating
-    case levelUpWeek
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .newUser: "New User"
-        case .streaking: "Streaking"
-        case .stagnating: "Stagnating"
-        case .levelUpWeek: "Level-Up Week"
-        }
-    }
 }
 
 nonisolated struct StatExport: Codable, Sendable {
@@ -1500,17 +1553,6 @@ nonisolated struct StatExport: Codable, Sendable {
     var isEnabled: Bool?
     var isCustom: Bool?
     var parentSkillKeyRaw: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, key, name, iconName, colorToken, descriptor, sortOrder,
-             currentLevel, currentTierName, startingBaseline, currentBaseline,
-             targetValue, personalMaxValue, maintenanceFloor,
-             storedCharges, bankedProgressUnits, lastResolvedWeekStart, lastAcknowledgedLevel,
-             pendingRankChangeDirectionRaw, pendingRankChangeFromLevel, pendingRankChangeToLevel,
-             pendingRankChangeRecordedAt, pendingRankChangeReasonRaw, pendingRankChangeViewedAt,
-             createdAt, updatedAt, isArchived,
-             isCore, isEnabled, isCustom, parentSkillKeyRaw
-    }
 
     init(
         id: UUID,
@@ -1576,41 +1618,6 @@ nonisolated struct StatExport: Codable, Sendable {
         self.isEnabled = isEnabled
         self.isCustom = isCustom
         self.parentSkillKeyRaw = parentSkillKeyRaw
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        key = try c.decode(String.self, forKey: .key)
-        name = try c.decode(String.self, forKey: .name)
-        iconName = try c.decode(String.self, forKey: .iconName)
-        colorToken = try c.decode(String.self, forKey: .colorToken)
-        descriptor = try c.decode(String.self, forKey: .descriptor)
-        sortOrder = try c.decode(Int.self, forKey: .sortOrder)
-        currentLevel = try c.decode(Int.self, forKey: .currentLevel)
-        currentTierName = try c.decode(String.self, forKey: .currentTierName)
-        startingBaseline = try c.decode(Int.self, forKey: .startingBaseline)
-        currentBaseline = try c.decode(Int.self, forKey: .currentBaseline)
-        targetValue = try c.decodeIfPresent(Int.self, forKey: .targetValue)
-        personalMaxValue = try c.decodeIfPresent(Int.self, forKey: .personalMaxValue)
-        maintenanceFloor = try c.decodeIfPresent(Int.self, forKey: .maintenanceFloor)
-        storedCharges = try c.decode(Int.self, forKey: .storedCharges)
-        bankedProgressUnits = try c.decode(Double.self, forKey: .bankedProgressUnits)
-        lastResolvedWeekStart = try c.decodeIfPresent(Date.self, forKey: .lastResolvedWeekStart)
-        lastAcknowledgedLevel = try c.decode(Int.self, forKey: .lastAcknowledgedLevel)
-        pendingRankChangeDirectionRaw = try c.decodeIfPresent(String.self, forKey: .pendingRankChangeDirectionRaw)
-        pendingRankChangeFromLevel = try c.decodeIfPresent(Int.self, forKey: .pendingRankChangeFromLevel)
-        pendingRankChangeToLevel = try c.decodeIfPresent(Int.self, forKey: .pendingRankChangeToLevel)
-        pendingRankChangeRecordedAt = try c.decodeIfPresent(Date.self, forKey: .pendingRankChangeRecordedAt)
-        pendingRankChangeReasonRaw = try c.decodeIfPresent(String.self, forKey: .pendingRankChangeReasonRaw)
-        pendingRankChangeViewedAt = try c.decodeIfPresent(Date.self, forKey: .pendingRankChangeViewedAt)
-        createdAt = try c.decode(Date.self, forKey: .createdAt)
-        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
-        isArchived = try c.decode(Bool.self, forKey: .isArchived)
-        isCore = try c.decodeIfPresent(Bool.self, forKey: .isCore)
-        isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled)
-        isCustom = try c.decodeIfPresent(Bool.self, forKey: .isCustom)
-        parentSkillKeyRaw = try c.decodeIfPresent(String.self, forKey: .parentSkillKeyRaw)
     }
 }
 
@@ -1713,4 +1720,24 @@ nonisolated struct SettingsExport: Codable, Sendable {
     var regressionBehaviorRaw: String? = nil
     var skillBehindPaceReminderEnabled: Bool? = nil
     var goalsAffectPacing: Bool? = nil
+}
+
+// MARK: - Sample Data
+
+enum SampleProfile: String, CaseIterable, Identifiable, Sendable {
+    case newUser
+    case streaking
+    case stagnating
+    case levelUpWeek
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .newUser: "New User"
+        case .streaking: "Streaking"
+        case .stagnating: "Stagnating"
+        case .levelUpWeek: "Level-Up Week"
+        }
+    }
 }

@@ -1,11 +1,13 @@
 import SwiftUI
 
+// Rendering vocabulary for the charge meter. The underlying game-balance
+// numbers live in ChargeMath (domain layer); this only adds presentation.
 enum DashboardChargeDots {
-    static let slotsPerSide = 4
-    static let totalDots = slotsPerSide * 2
+    static let slotsPerSide = ChargeMath.slotsPerSide
+    static let totalDots = ChargeMath.totalSlots
 
     static func clampedCharge(_ charge: Int) -> Int {
-        min(max(charge, -slotsPerSide), slotsPerSide)
+        ChargeMath.clampedCharge(charge)
     }
 
     static func positiveDots(from charge: Int) -> Int {
