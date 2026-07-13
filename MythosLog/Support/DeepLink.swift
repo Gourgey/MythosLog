@@ -18,12 +18,18 @@ enum TrainingDeepLink {
 enum DeepLinkRouter {
     static let scheme = TrainingRouteLink.scheme
 
+    /// Every URL scheme the app answers to. `trainingarc` is the original
+    /// (kept for existing user shortcuts and generated links); `mythoslog`
+    /// matches the current brand and the examples documented in
+    /// `ExternalEventService`. Both must stay registered in Info.plist.
+    static let acceptedSchemes: Set<String> = [TrainingRouteLink.scheme, "mythoslog"]
+
     static func url(for route: TrainingRoute) -> URL {
         TrainingRouteLink.url(for: route)
     }
 
     static func parse(_ url: URL) -> TrainingDeepLink? {
-        guard url.scheme == scheme else { return nil }
+        guard let scheme = url.scheme, acceptedSchemes.contains(scheme) else { return nil }
 
         if let route = TrainingRoute(rawValue: url.host ?? "") {
             return .route(route)

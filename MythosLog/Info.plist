@@ -24,6 +24,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>trainingarc</string>
+				<string>mythoslog</string>
 			</array>
 		</dict>
 	</array>
