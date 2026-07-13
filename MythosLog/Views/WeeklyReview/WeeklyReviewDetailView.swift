@@ -4,31 +4,45 @@ import SwiftUI
 struct WeeklyReviewDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var router: AppRouter
-    @Query(sort: \WeeklyResolution.weekStartDate, order: .reverse) private var resolutions: [WeeklyResolution]
-    @Query(sort: \HealthImportedWorkout.startDate, order: .reverse) private var healthWorkouts: [HealthImportedWorkout]
+    @Query private var resolutions: [WeeklyResolution]
+    @Query private var healthWorkouts: [HealthImportedWorkout]
     @Query private var settingsRecords: [AppSettings]
 
     let weekStart: Date
+    private let weekInterval: DateInterval
+
+    /// `resolutions`/`healthWorkouts` used to be unfiltered `@Query`s over the
+    /// entire table, so opening one week's detail screen walked every
+    /// resolution/import the app has ever recorded. `weekStart` is known at
+    /// init, so both queries are scoped to it (health imports get a 1-day
+    /// buffer on each side so an overlap's *related* workout — which can sit
+    /// just across a week boundary — still resolves).
+    init(weekStart: Date) {
+        self.weekStart = weekStart
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: weekStart)
+        let weekEndExclusive = calendar.date(byAdding: .day, value: 7, to: dayStart) ?? dayStart
+        self.weekInterval = DateInterval(start: dayStart, end: weekEndExclusive)
+        let bufferedStart = calendar.date(byAdding: .day, value: -1, to: dayStart) ?? dayStart
+        let bufferedEnd = calendar.date(byAdding: .day, value: 1, to: weekEndExclusive) ?? weekEndExclusive
+
+        _resolutions = Query(
+            filter: #Predicate<WeeklyResolution> { $0.weekStartDate == weekStart },
+            sort: [SortDescriptor(\.statName)]
+        )
+        _healthWorkouts = Query(
+            filter: #Predicate<HealthImportedWorkout> { $0.startDate >= bufferedStart && $0.startDate < bufferedEnd },
+            sort: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+    }
 
     private var settings: AppSettings? { settingsRecords.first }
 
-    private var weekResolutions: [WeeklyResolution] {
-        resolutions
-            .filter { $0.weekStartDate == weekStart }
-            .sorted { $0.statName < $1.statName }
-    }
-
-    private var weekInterval: DateInterval? {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: weekStart)
-        guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return nil }
-        return DateInterval(start: start, end: end)
-    }
+    private var weekResolutions: [WeeklyResolution] { resolutions }
 
     private var healthOverlapWarnings: [HealthImportedWorkout] {
-        guard let interval = weekInterval else { return [] }
-        return healthWorkouts
-            .filter { interval.contains($0.startDate) }
+        healthWorkouts
+            .filter { weekInterval.contains($0.startDate) }
             .filter { $0.wasImported && $0.overlapsImportedWorkout && !$0.isDuplicate }
             .sorted { $0.startDate > $1.startDate }
     }
@@ -43,10 +57,7 @@ struct WeeklyReviewDetailView: View {
     }
 
     private var healthWeekSummary: HealthWeekSummary {
-        guard let interval = weekInterval else {
-            return HealthWeekSummary(counted: 0, duplicates: 0, needsReview: 0, sources: [])
-        }
-        let weekWorkouts = healthWorkouts.filter { interval.contains($0.startDate) }
+        let weekWorkouts = healthWorkouts.filter { weekInterval.contains($0.startDate) }
         let counted = weekWorkouts.filter { $0.wasImported && !$0.isDuplicate }.count
         let duplicates = weekWorkouts.filter(\.isDuplicate).count
         let needsReview = weekWorkouts.filter { $0.wasImported && $0.overlapsImportedWorkout && !$0.isDuplicate }.count
@@ -58,8 +69,20 @@ struct WeeklyReviewDetailView: View {
     }
 
     private var weekTitle: String {
-        let end = Calendar.current.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
-        return WeekRange(start: weekStart, end: end).displayTitle
+        WeekMath.weekRange(startingAt: weekStart).displayTitle
+    }
+
+    /// `goalAwareStatus(for:)` used to call `TrainingStore.fetchGoals(for:context:)`
+    /// once per resolution row — each call walks the *entire* Goal table and
+    /// filters in memory (same N-fetch-per-row shape as `GoalCardView` in
+    /// GoalsView.swift). Fetched once per body render and grouped by stat key
+    /// instead.
+    private var goalsByStatKey: [StatKey: [Goal]] {
+        let goals = (try? TrainingStore.fetchGoals(context: modelContext)) ?? []
+        return Dictionary(grouping: goals.compactMap { goal -> (StatKey, Goal)? in
+            guard let key = goal.linkedStatKey else { return nil }
+            return (key, goal)
+        }, by: { $0.0 }).mapValues { $0.map(\.1) }
     }
 
     var body: some View {
@@ -88,8 +111,9 @@ struct WeeklyReviewDetailView: View {
                             .tracking(2.0)
                             .foregroundStyle(TrainingTheme.textMuted)
 
+                        let goalsByStatKey = goalsByStatKey
                         ForEach(weekResolutions) { resolution in
-                            perSkillCard(resolution)
+                            perSkillCard(resolution, goalsByStatKey: goalsByStatKey)
                         }
                     }
                 }
@@ -416,7 +440,7 @@ struct WeeklyReviewDetailView: View {
 
     // MARK: - Per-skill
 
-    private func perSkillCard(_ resolution: WeeklyResolution) -> some View {
+    private func perSkillCard(_ resolution: WeeklyResolution, goalsByStatKey: [StatKey: [Goal]]) -> some View {
         let accent = TrainingArcConfig.color(for: resolution.statDomain?.colorToken ?? "focus")
         return V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 10) {
@@ -444,7 +468,7 @@ struct WeeklyReviewDetailView: View {
                     V4StatusPill(text: "Below baseline this week", tint: TrainingTheme.warning, systemImage: "exclamationmark.triangle.fill")
                 }
 
-                Text(goalAwareStatus(for: resolution))
+                Text(goalAwareStatus(for: resolution, goalsByStatKey: goalsByStatKey))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
 
@@ -471,9 +495,9 @@ struct WeeklyReviewDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func goalAwareStatus(for resolution: WeeklyResolution) -> String {
+    private func goalAwareStatus(for resolution: WeeklyResolution, goalsByStatKey: [StatKey: [Goal]]) -> String {
         guard let statKey = StatKey(rawValue: resolution.statKey) else { return "" }
-        let goals = (try? TrainingStore.fetchGoals(for: statKey, context: modelContext)) ?? []
+        let goals = goalsByStatKey[statKey] ?? []
         let weeklyGoals = goals.filter { $0.status == .active && $0.type == .weeklyTarget }
 
         if let goal = weeklyGoals.first {

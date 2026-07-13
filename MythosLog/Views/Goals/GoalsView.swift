@@ -17,6 +17,14 @@ struct GoalsView: View {
     private var archivedGoals: [Goal] { goals.filter { $0.status == .archived || $0.status == .failed } }
 
     var body: some View {
+        // `GoalCardView` used to recompute `TrainingStore.goalProgress(for:context:)`
+        // itself (an @Environment-fetched context) — each access fetched the
+        // entire HabitLog + StatDomain tables, and the card read it 4 separate
+        // times (status pill, progress bar, current/target line, pace color),
+        // once per goal, on every render. Fetched once here and threaded down
+        // as a plain snapshot instead, mirroring the SkillGoalRow batching fix.
+        let inputs = TrainingStore.goalProgressInputs(context: modelContext)
+
         ZStack {
             LinearGradient(
                 colors: [TrainingTheme.background, TrainingTheme.backgroundSecondary],
@@ -33,16 +41,16 @@ struct GoalsView: View {
                         emptyState
                     } else {
                         if !activeGoals.isEmpty {
-                            section(title: "Active", goals: activeGoals)
+                            section(title: "Active", goals: activeGoals, inputs: inputs)
                         }
                         if !pausedGoals.isEmpty {
-                            section(title: "Paused", goals: pausedGoals)
+                            section(title: "Paused", goals: pausedGoals, inputs: inputs)
                         }
                         if !completedGoals.isEmpty {
-                            section(title: "Completed", goals: completedGoals)
+                            section(title: "Completed", goals: completedGoals, inputs: inputs)
                         }
                         if !archivedGoals.isEmpty {
-                            section(title: "Archived", goals: archivedGoals)
+                            section(title: "Archived", goals: archivedGoals, inputs: inputs)
                         }
                     }
                 }
@@ -153,7 +161,7 @@ struct GoalsView: View {
         }
     }
 
-    private func section(title: String, goals: [Goal]) -> some View {
+    private func section(title: String, goals: [Goal], inputs: TrainingStore.GoalProgressInputs) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
                 .font(.caption.weight(.heavy))
@@ -161,10 +169,9 @@ struct GoalsView: View {
                 .foregroundStyle(TrainingTheme.textMuted)
 
             ForEach(goals) { goal in
-                GoalCardView(goal: goal) {
+                GoalCardView(goal: goal, progress: TrainingStore.goalProgress(for: goal, inputs: inputs)) {
                     presentedEditor = GoalEditorSeed(goal: goal, initialStatKey: nil)
                 }
-                .environment(\.modelContext, modelContext)
             }
         }
     }
@@ -177,8 +184,8 @@ private struct GoalEditorSeed: Identifiable {
 }
 
 private struct GoalCardView: View {
-    @Environment(\.modelContext) private var modelContext
     let goal: Goal
+    let progress: GoalProgressSnapshot
     let onTap: () -> Void
 
     private var accent: Color {
@@ -186,10 +193,6 @@ private struct GoalCardView: View {
             return TrainingArcConfig.color(for: TrainingArcConfig.definition(for: key).colorToken)
         }
         return TrainingArcConfig.color(for: "focus")
-    }
-
-    private var progress: GoalProgressSnapshot {
-        TrainingStore.goalProgress(for: goal, context: modelContext)
     }
 
     var body: some View {

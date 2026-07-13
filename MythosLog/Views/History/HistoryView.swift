@@ -141,16 +141,68 @@ struct HistoryView: View {
         .pickerStyle(.segmented)
     }
 
+    /// Per-active-stat, range-filtered/sorted resolutions, computed once and
+    /// shared by every derived count/best/worst below. `improvedSkills()`,
+    /// `stagnatingSkills()`, `regressingSkills()`, `bestSkillName()`, and
+    /// `mostNeglectedSkillName()` each used to re-filter and re-sort every
+    /// stat's `weeklyResolutions` independently — 5 full passes over the same
+    /// data on every render of `overallSummary`.
+    private var skillRangeSummaries: [(stat: StatDomain, resolutions: [WeeklyResolution])] {
+        activeStats.map { stat in
+            let resolutions = (stat.weeklyResolutions ?? [])
+                .filter { rangeInterval.contains($0.weekStartDate) }
+                .sorted { $0.weekStartDate < $1.weekStartDate }
+            return (stat, resolutions)
+        }
+    }
+
+    private struct SkillTrendCounts {
+        var improved = 0
+        var stagnating = 0
+        var regressing = 0
+        var best: (name: String, ratio: Double)?
+        var worst: (name: String, ratio: Double)?
+    }
+
+    private func skillTrendCounts(from summaries: [(stat: StatDomain, resolutions: [WeeklyResolution])]) -> SkillTrendCounts {
+        var counts = SkillTrendCounts()
+        for (stat, resolutions) in summaries {
+            if resolutions.count >= 2 {
+                let firstHalf = resolutions.prefix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
+                let secondHalf = resolutions.suffix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
+                if secondHalf > firstHalf * 1.05 {
+                    counts.improved += 1
+                } else if secondHalf < firstHalf * 0.95 {
+                    counts.regressing += 1
+                }
+            }
+            if !resolutions.isEmpty, resolutions.allSatisfy({ $0.didStagnate || abs($0.weeklyDelta) < 0.001 }) {
+                counts.stagnating += 1
+            }
+
+            let total = resolutions.map(\.actualCompletedValue).reduce(0, +)
+            let ratio = total / max(Double(stat.currentBaseline), 1)
+            if counts.best == nil || ratio > counts.best!.ratio {
+                counts.best = (stat.name, ratio)
+            }
+            if counts.worst == nil || ratio < counts.worst!.ratio {
+                counts.worst = (stat.name, ratio)
+            }
+        }
+        return counts
+    }
+
     private var overallSummary: some View {
         let totalLogs = logsInRange.count
         let weeks = resolutionsInRange
         let weekCount = weeks.count
-        let improved = improvedSkills().count
-        let stagnating = stagnatingSkills().count
-        let regressing = regressingSkills().count
+        let counts = skillTrendCounts(from: skillRangeSummaries)
+        let improved = counts.improved
+        let stagnating = counts.stagnating
+        let regressing = counts.regressing
 
-        let best = bestSkillName()
-        let worst = mostNeglectedSkillName()
+        let best = counts.best?.name
+        let worst = counts.worst?.name
 
         return V4Card(accent: TrainingArcConfig.color(for: "focus")) {
             VStack(alignment: .leading, spacing: 14) {
@@ -403,62 +455,5 @@ struct HistoryView: View {
             return "\(stat.name) is up \(Int(change))% across this range."
         }
         return "\(stat.name) is down \(Int(abs(change)))% across this range."
-    }
-
-    private func improvedSkills() -> [StatDomain] {
-        activeStats.filter { stat in
-            let resolutions = (stat.weeklyResolutions ?? [])
-                .filter { rangeInterval.contains($0.weekStartDate) }
-                .sorted { $0.weekStartDate < $1.weekStartDate }
-            guard resolutions.count >= 2 else { return false }
-            let firstHalf = resolutions.prefix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
-            let secondHalf = resolutions.suffix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
-            return secondHalf > firstHalf * 1.05
-        }
-    }
-
-    private func stagnatingSkills() -> [StatDomain] {
-        activeStats.filter { stat in
-            let resolutions = (stat.weeklyResolutions ?? [])
-                .filter { rangeInterval.contains($0.weekStartDate) }
-            guard !resolutions.isEmpty else { return false }
-            return resolutions.allSatisfy { $0.didStagnate || abs($0.weeklyDelta) < 0.001 }
-        }
-    }
-
-    private func regressingSkills() -> [StatDomain] {
-        activeStats.filter { stat in
-            let resolutions = (stat.weeklyResolutions ?? [])
-                .filter { rangeInterval.contains($0.weekStartDate) }
-                .sorted { $0.weekStartDate < $1.weekStartDate }
-            guard resolutions.count >= 2 else { return false }
-            let firstHalf = resolutions.prefix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
-            let secondHalf = resolutions.suffix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
-            return secondHalf < firstHalf * 0.95
-        }
-    }
-
-    private func bestSkillName() -> String? {
-        let scored = activeStats.map { stat -> (StatDomain, Double) in
-            let total = (stat.weeklyResolutions ?? [])
-                .filter { rangeInterval.contains($0.weekStartDate) }
-                .map(\.actualCompletedValue)
-                .reduce(0, +)
-            let baseline = max(Double(stat.currentBaseline), 1)
-            return (stat, total / baseline)
-        }
-        return scored.max(by: { $0.1 < $1.1 })?.0.name
-    }
-
-    private func mostNeglectedSkillName() -> String? {
-        let scored = activeStats.compactMap { stat -> (StatDomain, Double)? in
-            let total = (stat.weeklyResolutions ?? [])
-                .filter { rangeInterval.contains($0.weekStartDate) }
-                .map(\.actualCompletedValue)
-                .reduce(0, +)
-            let baseline = max(Double(stat.currentBaseline), 1)
-            return (stat, total / baseline)
-        }
-        return scored.min(by: { $0.1 < $1.1 })?.0.name
     }
 }

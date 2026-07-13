@@ -649,6 +649,14 @@ struct MythosLogTests {
         #expect(ISO8601DateFormatter().string(from: range.end).hasPrefix("2026-03-22"))
     }
 
+    @Test func weekMathWeekRangeStartingAtBuildsSixDaySpan() {
+        let mondayStart = isoDate("2026-03-23T00:00:00Z")
+        let range = WeekMath.weekRange(startingAt: mondayStart, calendar: WeekMath.calendar(weekStartsOnMonday: true))
+
+        #expect(range.start == mondayStart)
+        #expect(ISO8601DateFormatter().string(from: range.end).hasPrefix("2026-03-29"))
+    }
+
     // MARK: - Wave A–E coverage
 
     @Test func calibrationClampingPreservesBaselinePrinciple() {

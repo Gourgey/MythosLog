@@ -364,9 +364,8 @@ struct WeeklyReviewView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 if let latestResolvedWeekStart {
-                    let end = Calendar.current.date(byAdding: .day, value: 6, to: latestResolvedWeekStart) ?? latestResolvedWeekStart
                     V4PageKicker(
-                        title: "Last Week · \(WeekRange(start: latestResolvedWeekStart, end: end).displayTitle)",
+                        title: "Last Week · \(WeekMath.weekRange(startingAt: latestResolvedWeekStart).displayTitle)",
                         accent: TrainingTheme.textMuted
                     )
                 } else {
@@ -695,8 +694,7 @@ struct WeeklyReviewHistoryView: View {
 
     private func historyRow(for weekStart: Date) -> some View {
         let weekResolutions = resolutions.filter { $0.weekStartDate == weekStart }
-        let end = Calendar.current.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
-        let title = WeekRange(start: weekStart, end: end).displayTitle
+        let title = WeekMath.weekRange(startingAt: weekStart).displayTitle
         let levelUps = weekResolutions.filter(\.didLevelUp).count
         let regressed = weekResolutions.filter(\.didRegress).count
 

@@ -28,6 +28,16 @@ enum WeekMath {
     static func weekRange(containing date: Date, weekStartsOnMonday: Bool, calendar baseCalendar: Calendar? = nil) -> WeekRange {
         let calendar = baseCalendar ?? self.calendar(weekStartsOnMonday: weekStartsOnMonday)
         let start = startOfWeek(for: date, weekStartsOnMonday: weekStartsOnMonday, calendar: calendar)
+        return weekRange(startingAt: start, calendar: calendar)
+    }
+
+    /// Builds the Mon-Sun (or Sun-Sat) display range for an already-resolved
+    /// week start, e.g. a stored `WeeklyResolution.weekStartDate`. Callers that
+    /// only have a week-start `Date` used to hand-roll `Calendar.current.date(byAdding:
+    /// .day, value: 6, to:)` at each call site; centralizing it keeps every
+    /// "week start -> week end" computation on the same calendar.
+    static func weekRange(startingAt start: Date, calendar baseCalendar: Calendar? = nil) -> WeekRange {
+        let calendar = baseCalendar ?? self.calendar(weekStartsOnMonday: true)
         let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
         return WeekRange(start: start, end: end)
     }
