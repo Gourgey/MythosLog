@@ -6,8 +6,12 @@ enum StreakCadence: Sendable {
 }
 
 enum StreakService {
-    static func summary(for dates: [Date], cadence: StreakCadence, referenceDate: Date = .now) -> HabitStreakSummary {
-        let calendar = Calendar(identifier: .gregorian)
+    static func summary(
+        for dates: [Date],
+        cadence: StreakCadence,
+        referenceDate: Date = .now,
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> HabitStreakSummary {
         let normalized = normalizedUnits(from: dates, cadence: cadence, calendar: calendar)
         guard !normalized.isEmpty else {
             return HabitStreakSummary(current: 0, longest: 0, lastLoggedDate: nil)
