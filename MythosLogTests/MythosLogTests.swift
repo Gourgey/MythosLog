@@ -2,6 +2,9 @@ import Foundation
 @testable import MythosLog
 import SwiftData
 import Testing
+#if canImport(HealthKit)
+import HealthKit
+#endif
 
 private let testCalendar = WeekMath.calendar(weekStartsOnMonday: true)
 
@@ -797,6 +800,51 @@ struct MythosLogTests {
         }
         #expect(goalID == id)
     }
+
+    #if canImport(HealthKit)
+    @Test func healthOverlapDurationComputesIntersection() {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        // [0,60] overlapping [30,90] shares 30 seconds.
+        #expect(HealthImportService.overlapDuration(
+            firstStart: base, firstEnd: base.addingTimeInterval(60),
+            secondStart: base.addingTimeInterval(30), secondEnd: base.addingTimeInterval(90)
+        ) == 30)
+        // Disjoint intervals share nothing.
+        #expect(HealthImportService.overlapDuration(
+            firstStart: base, firstEnd: base.addingTimeInterval(30),
+            secondStart: base.addingTimeInterval(60), secondEnd: base.addingTimeInterval(90)
+        ) == 0)
+    }
+
+    @Test func healthOverlapRatioIsRelativeToShorterInterval() {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        // A 50s window fully inside a 100s window overlaps 100% of the shorter.
+        #expect(HealthImportService.overlapRatio(
+            firstStart: base, firstEnd: base.addingTimeInterval(100),
+            secondStart: base.addingTimeInterval(50), secondEnd: base.addingTimeInterval(100)
+        ) == 1.0)
+        // A zero-length interval yields a safe 0 rather than dividing by zero.
+        #expect(HealthImportService.overlapRatio(
+            firstStart: base, firstEnd: base,
+            secondStart: base, secondEnd: base.addingTimeInterval(100)
+        ) == 0)
+    }
+
+    @Test func healthYearBackfillStartDateIsOneGregorianYearBack() {
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let expected = Calendar(identifier: .gregorian).date(byAdding: .year, value: -1, to: now)!
+        #expect(HealthImportService.yearBackfillStartDate(now: now) == expected)
+    }
+
+    @Test func healthWorkoutMappingRoutesActivityToStat() {
+        #expect(SupportedWorkoutType.mapping(for: .traditionalStrengthTraining)?.statKey == .strength)
+        #expect(SupportedWorkoutType.mapping(for: .running)?.statKey == .cardio)
+        #expect(SupportedWorkoutType.mapping(for: .tennis)?.statKey == .cardio)
+        #expect(SupportedWorkoutType.mapping(for: .yoga)?.statKey == .focus)
+        // An activity absent from the catalog is not importable.
+        #expect(SupportedWorkoutType.mapping(for: .americanFootball) == nil)
+    }
+    #endif
 
     @Test @MainActor func createGoalPersistsAllFields() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
