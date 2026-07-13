@@ -756,6 +756,48 @@ struct MythosLogTests {
         #expect(settings.decaySensitivity == 1.0)
     }
 
+    @Test func deepLinkParsesRouteHostsForBothSchemes() {
+        guard case .route(.dashboard)? = DeepLinkRouter.parse(URL(string: "trainingarc://dashboard")!) else {
+            Issue.record("Expected dashboard route from trainingarc scheme")
+            return
+        }
+        guard case .route(.goals)? = DeepLinkRouter.parse(URL(string: "mythoslog://goals")!) else {
+            Issue.record("Expected goals route from mythoslog scheme")
+            return
+        }
+    }
+
+    @Test func deepLinkRejectsUnknownScheme() {
+        #expect(DeepLinkRouter.parse(URL(string: "https://example.com/dashboard")!) == nil)
+    }
+
+    @Test func deepLinkParsesSkillDetailWithLogFlag() {
+        guard case let .skillDetail(statKey, openLog)? = DeepLinkRouter.parse(URL(string: "mythoslog://skill?key=strength&log=1")!) else {
+            Issue.record("Expected skillDetail deep link")
+            return
+        }
+        #expect(statKey == .strength)
+        #expect(openLog)
+    }
+
+    @Test func deepLinkClampsExternalLogValue() {
+        guard case let .externalLog(event)? = DeepLinkRouter.parse(URL(string: "mythoslog://log?stat=strength&value=1e12")!) else {
+            Issue.record("Expected externalLog deep link")
+            return
+        }
+        #expect(event.value == 100_000)
+        #expect(event.statKey == .strength)
+    }
+
+    @Test func deepLinkParsesGoalDetailID() {
+        let id = UUID()
+        guard case let .goalDetail(goalID)? = DeepLinkRouter.parse(URL(string: "mythoslog://goal?id=\(id.uuidString)")!) else {
+            Issue.record("Expected goalDetail deep link")
+            return
+        }
+        #expect(goalID == id)
+    }
+
     @Test @MainActor func createGoalPersistsAllFields() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let goal = try TrainingStore.createGoal(

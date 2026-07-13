@@ -11,8 +11,15 @@ enum MetricFormatting {
     }
 
     static func weekday(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
+        weekdayFormatter.string(from: date)
     }
+
+    // Cached: DateFormatter creation is expensive and `weekday` is called
+    // per-row in day summaries. Formatting reads happen on the main actor
+    // (view code), so a single shared instance is safe here.
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter
+    }()
 }

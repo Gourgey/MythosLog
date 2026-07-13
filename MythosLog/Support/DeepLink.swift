@@ -24,6 +24,13 @@ enum DeepLinkRouter {
     /// `ExternalEventService`. Both must stay registered in Info.plist.
     static let acceptedSchemes: Set<String> = [TrainingRouteLink.scheme, "mythoslog"]
 
+    /// Upper bound on a value supplied by an external `//log?value=` link.
+    private static let maxExternalLogValue: Double = 100_000
+
+    /// Reused across parses; allocating an ISO8601DateFormatter is costly and
+    /// deep links are handled on the main actor.
+    private static let isoDateFormatter = ISO8601DateFormatter()
+
     static func url(for route: TrainingRoute) -> URL {
         TrainingRouteLink.url(for: route)
     }
@@ -57,12 +64,15 @@ enum DeepLinkRouter {
 
         guard url.host == "log" else { return nil }
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let value = Double(components?.queryItems?.first(where: { $0.name == "value" })?.value ?? "1") ?? 1
+        let rawValue = Double(components?.queryItems?.first(where: { $0.name == "value" })?.value ?? "1") ?? 1
+        // An external caller controls this string; reject NaN/inf and cap the
+        // magnitude so a single link can't inject an absurd log value.
+        let value = rawValue.isFinite ? min(max(rawValue, 0), Self.maxExternalLogValue) : 1
         let note = components?.queryItems?.first(where: { $0.name == "note" })?.value ?? ""
         let habitSystemKey = components?.queryItems?.first(where: { $0.name == "habit" })?.value
         let statKey = components?.queryItems?.first(where: { $0.name == "stat" })?.value.flatMap(StatKey.init(rawValue:))
         let dateString = components?.queryItems?.first(where: { $0.name == "date" })?.value
-        let date = dateString.flatMap(ISO8601DateFormatter().date(from:)) ?? .now
+        let date = dateString.flatMap(isoDateFormatter.date(from:)) ?? .now
 
         return .externalLog(
             ExternalLogEvent(

@@ -58,15 +58,19 @@ struct PendingAppDestination: Codable, Equatable, Sendable {
     }
 }
 
+@MainActor
 enum PendingDestinationStore {
-    static let didQueueNotification = Notification.Name("PendingDestinationStore.didQueue")
-    static let didQueueGoalNotification = Notification.Name("PendingDestinationStore.didQueueGoal")
-    static let didQueueNewGoalNotification = Notification.Name("PendingDestinationStore.didQueueNewGoal")
+    nonisolated static let didQueueNotification = Notification.Name("PendingDestinationStore.didQueue")
+    nonisolated static let didQueueGoalNotification = Notification.Name("PendingDestinationStore.didQueueGoal")
+    nonisolated static let didQueueNewGoalNotification = Notification.Name("PendingDestinationStore.didQueueNewGoal")
 
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
     }
 
+    // Cross-process handoff (widget/quick-action -> app) rides UserDefaults;
+    // the in-process cache lets the same-process producer/consumer skip a
+    // round-trip. Both are main-actor state, so isolate the whole store.
     private static var inProcessDestination: PendingAppDestination?
     private static var inProcessGoalID: UUID?
     private static var inProcessNewGoalStatKey: String?

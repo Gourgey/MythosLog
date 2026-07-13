@@ -72,13 +72,20 @@ struct AppRootView: View {
     @StateObject private var router = AppRouter()
     @State private var settings: AppSettings?
     @State private var showOnboarding = false
+    @State private var goalsAtRiskCount = 0
 
-    private var goalsAtRiskCount: Int {
-        allGoals.filter { goal in
-            guard goal.status == .active else { return false }
+    /// Recomputes the Goals-tab badge. This walks every active goal's pace
+    /// through the store, so it must run on explicit change signals — never
+    /// from a computed property in `body`, which would re-run the whole walk on
+    /// every render (tab switches, router changes, animations included).
+    private func refreshGoalsAtRiskCount() {
+        goalsAtRiskCount = allGoals.reduce(into: 0) { count, goal in
+            guard goal.status == .active else { return }
             let snapshot = TrainingStore.goalProgress(for: goal, context: modelContext)
-            return snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind
-        }.count
+            if snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind {
+                count += 1
+            }
+        }
     }
 
     var body: some View {
@@ -108,10 +115,14 @@ struct AppRootView: View {
             consumeHomeScreenQuickActionIfNeeded()
             try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
             try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
+            refreshGoalsAtRiskCount()
             consumePendingDestinationIfNeeded()
         }
         .onChange(of: settingsRecords.map { "\($0.id)|\($0.hasCompletedOnboarding)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
             reloadSettings()
+        }
+        .onChange(of: allGoals.map { "\($0.id)|\($0.statusRaw)|\($0.targetValue)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
+            refreshGoalsAtRiskCount()
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             consumePendingDestinationIfNeeded()
@@ -132,6 +143,7 @@ struct AppRootView: View {
             case .externalLog(let event):
                 try? ExternalEventService.ingest(event, context: modelContext)
                 try? TrainingStore.refreshAllProgress(context: modelContext, reason: .logMutation)
+                refreshGoalsAtRiskCount()
             case .skillDetail(let statKey, let openLog):
                 router.open(
                     PendingAppDestination(
