@@ -324,6 +324,7 @@ struct OnboardingFlowView: View {
                     settings.dailyReminderEnabled = true
                     settings.eveningReminderEnabled = true
                     settings.weeklyReviewReminderEnabled = true
+                    settings.updatedAt = .now
                     try? modelContext.save()
                     TrainingStore.recordLocalWrite(reason: "enabled onboarding notifications")
                     NotificationService.refreshNotifications(using: settings)

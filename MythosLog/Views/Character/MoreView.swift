@@ -4,6 +4,7 @@ import SwiftUI
 struct MoreView: View {
     @Query private var allStats: [StatDomain]
     @Query private var resolutions: [WeeklyResolution]
+    @Query private var settingsRecords: [AppSettings]
 
     let onSettingsMutated: () -> Void
 
@@ -20,9 +21,9 @@ struct MoreView: View {
     }
 
     private var resolvedThisWeekCount: Int {
-        let calendar = Calendar.current
-        let weekRange = calendar.dateInterval(of: .weekOfYear, for: .now) ?? DateInterval(start: .now, duration: 0)
-        return resolutions.filter { weekRange.contains($0.weekStartDate) }.count
+        let weekStartsOnMonday = settingsRecords.first?.weekStartsOnMonday ?? true
+        let lastCompletedWeek = WeekMath.lastCompletedWeek(before: .now, weekStartsOnMonday: weekStartsOnMonday)
+        return resolutions.filter { $0.weekStartDate == lastCompletedWeek.start }.count
     }
 
     private var atBaselineCount: Int {
@@ -213,11 +214,13 @@ struct SkillCharacterRosterView: View {
     let stat: StatDomain
     @State private var activeStatID: UUID
     @State private var focusedLevel: Int
+    @State private var entries: [CharacterRosterEntry]
 
     init(stat: StatDomain) {
         self.stat = stat
         _activeStatID = State(initialValue: stat.id)
         _focusedLevel = State(initialValue: stat.rankLevel)
+        _entries = State(initialValue: TrainingArcConfig.characterRosterEntries(for: stat.statKey ?? .strength, currentLevel: stat.rankLevel))
     }
 
     private var activeStats: [StatDomain] {
@@ -243,10 +246,6 @@ struct SkillCharacterRosterView: View {
 
     private var currentLevel: Int {
         activeStat.rankLevel
-    }
-
-    private var entries: [CharacterRosterEntry] {
-        TrainingArcConfig.characterRosterEntries(for: statKey, currentLevel: currentLevel)
     }
 
     private var focusedEntry: CharacterRosterEntry {
@@ -289,6 +288,7 @@ struct SkillCharacterRosterView: View {
         }
         .onChange(of: activeStatID) { _, _ in
             focusedLevel = currentLevel
+            entries = TrainingArcConfig.characterRosterEntries(for: statKey, currentLevel: currentLevel)
         }
     }
 

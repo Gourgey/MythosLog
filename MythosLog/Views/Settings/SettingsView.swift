@@ -47,16 +47,8 @@ enum CloudSyncState: Equatable {
 }
 
 enum CloudSyncStatusService {
-    static func currentState() async -> CloudSyncState {
-        guard FileManager.default.ubiquityIdentityToken != nil else {
-            return .signedOut
-        }
-        guard TrainingStore.canAttemptCloudKitPersistence() else {
-            return .unknown
-        }
-
+    private static func accountStatus() async -> Result<CKAccountStatus, Error> {
         let container = CKContainer(identifier: AppIdentity.iCloudContainerIdentifier)
-
         do {
             let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CKAccountStatus, Error>) in
                 container.accountStatus { status, error in
@@ -67,22 +59,36 @@ enum CloudSyncStatusService {
                     }
                 }
             }
-
-            switch status {
-            case .available:
-                return .active
-            case .noAccount:
-                return .signedOut
-            case .restricted:
-                return .restricted
-            case .temporarilyUnavailable:
-                return .unavailable
-            case .couldNotDetermine:
-                return .unknown
-            @unknown default:
-                return .unknown
-            }
+            return .success(status)
         } catch {
+            return .failure(error)
+        }
+    }
+
+    static func currentState() async -> CloudSyncState {
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            return .signedOut
+        }
+        guard TrainingStore.canAttemptCloudKitPersistence() else {
+            return .unknown
+        }
+
+        guard case .success(let status) = await accountStatus() else {
+            return .unknown
+        }
+
+        switch status {
+        case .available:
+            return .active
+        case .noAccount:
+            return .signedOut
+        case .restricted:
+            return .restricted
+        case .temporarilyUnavailable:
+            return .unavailable
+        case .couldNotDetermine:
+            return .unknown
+        @unknown default:
             return .unknown
         }
     }
@@ -92,18 +98,8 @@ enum CloudSyncStatusService {
             return "No ubiquity identity token"
         }
 
-        let container = CKContainer(identifier: AppIdentity.iCloudContainerIdentifier)
-        do {
-            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CKAccountStatus, Error>) in
-                container.accountStatus { status, error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume(returning: status)
-                    }
-                }
-            }
-
+        switch await accountStatus() {
+        case .success(let status):
             switch status {
             case .available:
                 return "available"
@@ -118,7 +114,7 @@ enum CloudSyncStatusService {
             @unknown default:
                 return "unknown"
             }
-        } catch {
+        case .failure(let error):
             return "error: \(error.localizedDescription)"
         }
     }
@@ -155,10 +151,28 @@ struct SettingsView: View {
     @State private var healthStatusMessage: String?
     @State private var isSyncingHealth = false
     @State private var cloudSyncState: CloudSyncState = .checking
+    @State private var dataAlertMessage: String?
     #if DEBUG
     @State private var syncDiagnostics = SyncDiagnosticsSnapshot.empty
+    @State private var pendingDestructiveAction: DestructiveDataAction?
     #endif
     let onSettingsMutated: () -> Void
+
+    #if DEBUG
+    private enum DestructiveDataAction: Identifiable {
+        case clearAll
+        case resetDefaultProfile
+
+        var id: Self { self }
+
+        var confirmationTitle: String {
+            switch self {
+            case .clearAll: "Clear all data? This cannot be undone."
+            case .resetDefaultProfile: "Reset to the default profile? This cannot be undone."
+            }
+        }
+    }
+    #endif
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -324,16 +338,19 @@ struct SettingsView: View {
                     }
 
                     Button("Export JSON") {
-                        exportDocument = TrainingExportDocument(
-                            bundle: (try? TrainingStore.exportBundle(context: modelContext)) ?? .empty
-                        )
-                        isExporting = true
+                        do {
+                            exportDocument = TrainingExportDocument(bundle: try TrainingStore.exportBundle(context: modelContext))
+                            isExporting = true
+                        } catch {
+                            dataAlertMessage = "Export failed: \(error.localizedDescription)"
+                        }
                     }
                     Button("Import JSON") {
                         isImporting = true
                     }
                 }
 
+                #if DEBUG
                 Section("Debug Tools") {
                     ForEach(SampleProfile.allCases) { profile in
                         Button("Seed \(profile.displayName)") {
@@ -346,15 +363,13 @@ struct SettingsView: View {
                         onSettingsMutated()
                     }
                     Button("Clear All Data", role: .destructive) {
-                        try? TrainingStore.clearAll(context: modelContext)
-                        onSettingsMutated()
+                        pendingDestructiveAction = .clearAll
                     }
                     Button("Reset Default Profile") {
-                        try? TrainingStore.clearAll(context: modelContext)
-                        try? TrainingStore.seedDefaultProfile(context: modelContext, completeOnboarding: true)
-                        onSettingsMutated()
+                        pendingDestructiveAction = .resetDefaultProfile
                     }
                 }
+                #endif
 
                 #if DEBUG
                 Section("Sync Diagnostics") {
@@ -394,15 +409,64 @@ struct SettingsView: View {
             defaultFilename: "mythoslog-export"
         ) { _ in }
         .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json]) { result in
-            guard case .success(let url) = result else { return }
-            guard let data = try? Data(contentsOf: url) else { return }
+            switch result {
+            case .failure(let error):
+                dataAlertMessage = "Import failed: \(error.localizedDescription)"
+            case .success(let url):
+                importBundle(from: url)
+            }
+        }
+        .alert("Data", isPresented: Binding(
+            get: { dataAlertMessage != nil },
+            set: { if !$0 { dataAlertMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(dataAlertMessage ?? "")
+        }
+        #if DEBUG
+        .confirmationDialog(
+            pendingDestructiveAction?.confirmationTitle ?? "",
+            isPresented: Binding(
+                get: { pendingDestructiveAction != nil },
+                set: { if !$0 { pendingDestructiveAction = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDestructiveAction
+        ) { action in
+            Button(action == .clearAll ? "Clear All Data" : "Reset Default Profile", role: .destructive) {
+                performDestructiveAction(action)
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        #endif
+    }
+
+    private func importBundle(from url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            guard let bundle = try? decoder.decode(TrainingExportBundle.self, from: data) else { return }
-            try? TrainingStore.importBundle(bundle, context: modelContext)
+            let bundle = try decoder.decode(TrainingExportBundle.self, from: data)
+            try TrainingStore.importBundle(bundle, context: modelContext)
             onSettingsMutated()
+        } catch {
+            dataAlertMessage = "Import failed: \(error.localizedDescription)"
         }
     }
+
+    #if DEBUG
+    private func performDestructiveAction(_ action: DestructiveDataAction) {
+        switch action {
+        case .clearAll:
+            try? TrainingStore.clearAll(context: modelContext)
+        case .resetDefaultProfile:
+            try? TrainingStore.clearAll(context: modelContext)
+            try? TrainingStore.seedDefaultProfile(context: modelContext, completeOnboarding: true)
+        }
+        onSettingsMutated()
+    }
+    #endif
 
     private var strictnessBinding: Binding<ProgressionStrictness> {
         Binding(

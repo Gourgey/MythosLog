@@ -21,7 +21,7 @@
 		26C0CEC84BCFE4803E46DF9B /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CA89B3BC9EAB18E382089C /* HistoryView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		34CD9B23B1340C77CEEE68B6 /* MythosLogApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A26C734A994699116F71229 /* MythosLogApp.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		352018AA042D95986F98072F /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB8AF36764430C22FB504BB /* OnboardingFlowView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
-		39B8D298183823128080B18A /* CharacterSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AAE55141336C00AD01476D /* CharacterSheetView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		39B8D298183823128080B18A /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AAE55141336C00AD01476D /* MoreView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		3A701C87CACA2BEE076E2332 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BD43C2C892D162116C715EC /* Assets.xcassets */; };
 		3A73EFF81AB80952186F8837 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C923B522DDFF79E9808068D1 /* ContentView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		3AE7C62138E1339F1992965F /* HabitQuickLogRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7028EC241BF01806D897954F /* HabitQuickLogRow.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -145,7 +145,7 @@
 		837FA3AF2C10BB702C678A24 /* Formatting.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Formatting.swift; path = MythosLog/Support/Formatting.swift; sourceTree = "<group>"; };
 		871AAE9E3E57118456D0DBFD /* ParticleBurstView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleBurstView.swift; path = MythosLog/Views/Components/ParticleBurstView.swift; sourceTree = "<group>"; };
 		888CDCBB95F3BAC7518450F2 /* TrainingExportDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingExportDocument.swift; path = MythosLog/Support/TrainingExportDocument.swift; sourceTree = "<group>"; };
-		89AAE55141336C00AD01476D /* CharacterSheetView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CharacterSheetView.swift; path = MythosLog/Views/Character/CharacterSheetView.swift; sourceTree = "<group>"; };
+		89AAE55141336C00AD01476D /* MoreView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MoreView.swift; path = MythosLog/Views/Character/MoreView.swift; sourceTree = "<group>"; };
 		8F7170E3A54CFA45D8A8C87B /* MythosLogWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogWidgetsBundle.swift; path = MythosLogWidgets/MythosLogWidgetsBundle.swift; sourceTree = "<group>"; };
 		9057FB9C2D82CE89491F37FB /* GoalsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GoalsView.swift; path = MythosLog/Views/Goals/GoalsView.swift; sourceTree = "<group>"; };
 		A133997352A6FD4658EF9449 /* ProgressionEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ProgressionEngine.swift; path = MythosLog/Domain/ProgressionEngine.swift; sourceTree = "<group>"; };
@@ -412,7 +412,7 @@
 		F0DDBAC7A59894FDFCF571E7 /* Character */ = {
 			isa = PBXGroup;
 			children = (
-				89AAE55141336C00AD01476D /* CharacterSheetView.swift */,
+				89AAE55141336C00AD01476D /* MoreView.swift */,
 			);
 			name = Character;
 			sourceTree = "<group>";
@@ -634,7 +634,7 @@
 				19C31157A9C70EA0781D9B52 /* TrainingRoute.swift in Sources */,
 				855584B7FCC6AD0E6D95FC76 /* WidgetSnapshot.swift in Sources */,
 				857D54F0D1D91E181552D791 /* TrainingTheme.swift in Sources */,
-				39B8D298183823128080B18A /* CharacterSheetView.swift in Sources */,
+				39B8D298183823128080B18A /* MoreView.swift in Sources */,
 				85B2AED447054E0C4E3990A9 /* AuraView.swift in Sources */,
 				3AE7C62138E1339F1992965F /* HabitQuickLogRow.swift in Sources */,
 				95A079955E1F345A90B11C2F /* ParticleBurstView.swift in Sources */,
