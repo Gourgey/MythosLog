@@ -109,12 +109,9 @@ struct AppRootView: View {
         .environmentObject(router)
         .task {
             TrainingStore.startCloudKitEventObserver()
-            _ = try? TrainingStore.reconcileSyncedData(context: modelContext)
-            _ = try? TrainingStore.drainQuickLogQueue(context: modelContext)
+            TrainingStore.refreshAppState()
             reloadSettings()
             consumeHomeScreenQuickActionIfNeeded()
-            try? TrainingStore.refreshAllProgress(context: modelContext, reason: .appRefresh)
-            try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
             refreshGoalsAtRiskCount()
             consumePendingDestinationIfNeeded()
         }

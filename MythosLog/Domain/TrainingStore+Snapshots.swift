@@ -541,15 +541,6 @@ extension TrainingStore {
         count == 1 ? singular : "\(singular)s"
     }
 
-    static func selfSummary(from stats: [StatDomain]) -> String {
-        let summary = stats.reduce(into: [String]()) { items, stat in
-            guard let key = stat.statKey else { return }
-            items.append("\(key.displayName): \(stat.rankTitle)")
-        }
-        guard !summary.isEmpty else { return "" }
-        return summary.joined(separator: ". ") + "."
-    }
-
     static func refreshWidgetSnapshot(context: ModelContext, now: Date = .now) throws {
         let settings = try? fetchExistingSettings(context: context)
         let interval = currentWeekInterval(settings: settings, now: now)
@@ -621,19 +612,13 @@ extension TrainingStore {
         let recommendations = (try? trainTodayRecommendations(context: context, settings: settings, now: now, limit: 1)) ?? []
         let topRec = recommendations.first
         let goalSnapshots = (try? goalProgressSnapshots(context: context, now: now)) ?? []
-        let activeGoalCount = goalSnapshots.filter { $0.goal.status == .active }.count
-        let atRiskGoalSnapshots = goalSnapshots.filter {
+        let goalsAtRiskCount = goalSnapshots.filter {
             $0.goal.status == .active && ($0.paceStatus == .atRisk || $0.paceStatus == .behind)
-        }
-        let goalsAtRiskCount = atRiskGoalSnapshots.count
-        let topGoalAtRisk = atRiskGoalSnapshots.sorted { $0.progressRatio < $1.progressRatio }.first
+        }.count
 
         let snapshot = TrainingWidgetSnapshot(
             generatedAt: now,
             appName: AppIdentity.displayName,
-            momentumTitle: momentum.title,
-            momentumSubtitle: momentum.subtitle,
-            characterSummary: selfSummary(from: stats),
             motivationTitle: motivationTitle,
             motivationMessage: motivationMessage,
             motivationColorToken: motivationColorToken,
@@ -644,23 +629,12 @@ extension TrainingStore {
             trainTodayHeadline: topRec?.headline,
             trainTodayDetail: topRec?.detail,
             trainTodayColorToken: topRec?.colorToken,
-            activeGoalCount: activeGoalCount,
-            goalsAtRiskCount: goalsAtRiskCount,
-            topGoalAtRiskTitle: topGoalAtRisk?.goal.displayTitle,
-            topGoalAtRiskDetail: topGoalAtRisk.map { goalAtRiskWidgetDetail(for: $0) }
+            goalsAtRiskCount: goalsAtRiskCount
         )
 
         WidgetSnapshotStore.save(snapshot)
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-    }
-
-    private static func goalAtRiskWidgetDetail(for snapshot: GoalProgressSnapshot) -> String {
-        let remaining = MetricFormatting.shortMetric(snapshot.remainingValue)
-        if snapshot.timeRemainingLabel.isEmpty {
-            return "\(remaining) to go"
-        }
-        return "\(remaining) to go · \(snapshot.timeRemainingLabel)"
     }
 }

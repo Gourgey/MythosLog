@@ -419,6 +419,15 @@ struct SkillStayOnPaceIntent: AppIntent {
     }
 }
 
+// MARK: - Deprecated per-skill shims
+//
+// OpenSkillIntent(skill:) and SkillStayOnPaceIntent(skill:) below supersede
+// these hard-coded, one-skill-each intents. They're not wired into any
+// AppShortcut phrase (TrainingArcAppShortcuts already sits at the 10-shortcut
+// display cap) and exist only so a user's previously-built Shortcut that
+// references one of these by name keeps resolving. Do not add new per-skill
+// intents here — extend the generic ones instead.
+
 struct OpenStrengthIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Strength"
     static let description = IntentDescription("Open the Strength skill page.")

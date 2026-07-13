@@ -3,9 +3,6 @@ import Foundation
 struct TrainingWidgetSnapshot: Codable, Sendable {
     var generatedAt: Date
     var appName: String
-    var momentumTitle: String
-    var momentumSubtitle: String
-    var characterSummary: String
     var motivationTitle: String
     var motivationMessage: String
     var motivationColorToken: String
@@ -16,26 +13,19 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
     var trainTodayHeadline: String?
     var trainTodayDetail: String?
     var trainTodayColorToken: String?
-    var activeGoalCount: Int
     var goalsAtRiskCount: Int
-    var topGoalAtRiskTitle: String?
-    var topGoalAtRiskDetail: String?
 
     enum CodingKeys: String, CodingKey {
-        case generatedAt, appName, momentumTitle, momentumSubtitle, characterSummary,
+        case generatedAt, appName,
              motivationTitle, motivationMessage, motivationColorToken, pendingWeeklyReview,
              weakestStat, stats, todayHabits,
              trainTodayHeadline, trainTodayDetail, trainTodayColorToken,
-             activeGoalCount, goalsAtRiskCount,
-             topGoalAtRiskTitle, topGoalAtRiskDetail
+             goalsAtRiskCount
     }
 
     init(
         generatedAt: Date,
         appName: String,
-        momentumTitle: String,
-        momentumSubtitle: String,
-        characterSummary: String,
         motivationTitle: String,
         motivationMessage: String,
         motivationColorToken: String,
@@ -46,16 +36,10 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         trainTodayHeadline: String? = nil,
         trainTodayDetail: String? = nil,
         trainTodayColorToken: String? = nil,
-        activeGoalCount: Int = 0,
-        goalsAtRiskCount: Int = 0,
-        topGoalAtRiskTitle: String? = nil,
-        topGoalAtRiskDetail: String? = nil
+        goalsAtRiskCount: Int = 0
     ) {
         self.generatedAt = generatedAt
         self.appName = appName
-        self.momentumTitle = momentumTitle
-        self.momentumSubtitle = momentumSubtitle
-        self.characterSummary = characterSummary
         self.motivationTitle = motivationTitle
         self.motivationMessage = motivationMessage
         self.motivationColorToken = motivationColorToken
@@ -66,19 +50,13 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         self.trainTodayHeadline = trainTodayHeadline
         self.trainTodayDetail = trainTodayDetail
         self.trainTodayColorToken = trainTodayColorToken
-        self.activeGoalCount = activeGoalCount
         self.goalsAtRiskCount = goalsAtRiskCount
-        self.topGoalAtRiskTitle = topGoalAtRiskTitle
-        self.topGoalAtRiskDetail = topGoalAtRiskDetail
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         generatedAt = try c.decode(Date.self, forKey: .generatedAt)
         appName = try c.decode(String.self, forKey: .appName)
-        momentumTitle = try c.decode(String.self, forKey: .momentumTitle)
-        momentumSubtitle = try c.decode(String.self, forKey: .momentumSubtitle)
-        characterSummary = try c.decode(String.self, forKey: .characterSummary)
         motivationTitle = try c.decode(String.self, forKey: .motivationTitle)
         motivationMessage = try c.decode(String.self, forKey: .motivationMessage)
         motivationColorToken = try c.decode(String.self, forKey: .motivationColorToken)
@@ -89,18 +67,12 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         trainTodayHeadline = try c.decodeIfPresent(String.self, forKey: .trainTodayHeadline)
         trainTodayDetail = try c.decodeIfPresent(String.self, forKey: .trainTodayDetail)
         trainTodayColorToken = try c.decodeIfPresent(String.self, forKey: .trainTodayColorToken)
-        activeGoalCount = try c.decodeIfPresent(Int.self, forKey: .activeGoalCount) ?? 0
         goalsAtRiskCount = try c.decodeIfPresent(Int.self, forKey: .goalsAtRiskCount) ?? 0
-        topGoalAtRiskTitle = try c.decodeIfPresent(String.self, forKey: .topGoalAtRiskTitle)
-        topGoalAtRiskDetail = try c.decodeIfPresent(String.self, forKey: .topGoalAtRiskDetail)
     }
 
     static let empty = TrainingWidgetSnapshot(
         generatedAt: .now,
         appName: AppIdentity.displayName,
-        momentumTitle: "No data yet",
-        momentumSubtitle: "Complete onboarding to begin training.",
-        characterSummary: "Build the first version of yourself.",
         motivationTitle: "Start your training",
         motivationMessage: "Log your first session to build momentum.",
         motivationColorToken: "focus",
@@ -111,10 +83,7 @@ struct TrainingWidgetSnapshot: Codable, Sendable {
         trainTodayHeadline: nil,
         trainTodayDetail: nil,
         trainTodayColorToken: nil,
-        activeGoalCount: 0,
-        goalsAtRiskCount: 0,
-        topGoalAtRiskTitle: nil,
-        topGoalAtRiskDetail: nil
+        goalsAtRiskCount: 0
     )
 }
 
