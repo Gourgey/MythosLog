@@ -64,6 +64,7 @@ extension TrainingStore {
         let influenceEnabled = settings?.goalsCanAffectProgression ?? false
         let goalsForStat: [Goal] = influenceEnabled ? ((try? fetchGoals(for: statKey, context: context)) ?? []) : []
         let allowRankDown = settings?.regressionBehavior.allowsRankDown ?? true
+        let decayEnabled = settings?.enableDecay ?? true
 
         for week in completedWeeks {
             let actual = total(for: stat, in: WeekMath.dateInterval(for: week, calendar: progressionCalendar()))
@@ -74,7 +75,8 @@ extension TrainingStore {
                 actualTotal: actual,
                 activeGoalTarget: activeGoal.map { Int($0.targetValue.rounded()) },
                 isRecoveryGoal: activeGoal?.isRecoveryMode ?? false,
-                allowRankDown: allowRankDown
+                allowRankDown: allowRankDown,
+                decayEnabled: decayEnabled
             )
             let baselineAtStart = state.expectedWeeklyTarget
             let summary = summaryText(for: stat, week: week, result: result)

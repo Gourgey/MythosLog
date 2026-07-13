@@ -36,13 +36,20 @@ enum ProgressionEngine {
         )
     }
 
+    /// Replays one completed week of activity through the charge meter.
+    ///
+    /// `decayEnabled` mirrors `AppSettings.enableDecay`: when the user turns
+    /// decay off, an idle week no longer bleeds charge back toward zero. The
+    /// parameter defaults to `true` so the historical behaviour (and every
+    /// existing unit test) is preserved for callers that don't pass settings.
     static func evaluateWeek(
         statKey: StatKey,
         state: WeeklyProgressionState,
         actualTotal: Double,
         activeGoalTarget: Int? = nil,
         isRecoveryGoal: Bool = false,
-        allowRankDown: Bool = true
+        allowRankDown: Bool = true,
+        decayEnabled: Bool = true
     ) -> WeeklyProgressionResult {
         let levelBefore = TrainingArcConfig.clampedRankLevel(state.level)
         let expectedTargetBefore = max(state.expectedWeeklyTarget, TrainingArcConfig.minimumBaseline)
@@ -50,7 +57,7 @@ enum ProgressionEngine {
         let weeklyDelta = actualTotal - expectedTotal
         let bankedUnitsBefore = state.bankedProgressUnits
         let chargeBeforeDecay = TrainingArcConfig.displayedCharge(for: statKey, bankedUnits: bankedUnitsBefore, level: levelBefore)
-        let chargeAfterDecay = decayCharge(chargeBeforeDecay)
+        let chargeAfterDecay = decayEnabled ? decayCharge(chargeBeforeDecay) : chargeBeforeDecay
         let baselineChargeDelta = chargeDelta(
             statKey: statKey,
             level: levelBefore,

@@ -7,7 +7,8 @@ enum StreakCadence: Sendable {
 
 enum StreakService {
     static func summary(for dates: [Date], cadence: StreakCadence, referenceDate: Date = .now) -> HabitStreakSummary {
-        let normalized = normalizedUnits(from: dates, cadence: cadence)
+        let calendar = Calendar(identifier: .gregorian)
+        let normalized = normalizedUnits(from: dates, cadence: cadence, calendar: calendar)
         guard !normalized.isEmpty else {
             return HabitStreakSummary(current: 0, longest: 0, lastLoggedDate: nil)
         }
@@ -17,7 +18,7 @@ enum StreakService {
         var currentRun = 1
 
         for index in 1..<sorted.count {
-            if isNextUnit(after: sorted[index - 1], next: sorted[index], cadence: cadence) {
+            if isNextUnit(after: sorted[index - 1], next: sorted[index], cadence: cadence, calendar: calendar) {
                 currentRun += 1
                 longest = max(longest, currentRun)
             } else {
@@ -26,12 +27,11 @@ enum StreakService {
         }
 
         let latest = sorted.last ?? referenceDate
-        let current = currentStreakLength(from: sorted, cadence: cadence, referenceDate: referenceDate)
+        let current = currentStreakLength(from: sorted, cadence: cadence, referenceDate: referenceDate, calendar: calendar)
         return HabitStreakSummary(current: current, longest: longest, lastLoggedDate: latest)
     }
 
-    private static func normalizedUnits(from dates: [Date], cadence: StreakCadence) -> [Date] {
-        let calendar = Calendar(identifier: .gregorian)
+    private static func normalizedUnits(from dates: [Date], cadence: StreakCadence, calendar: Calendar) -> [Date] {
         let normalized = dates.map { date -> Date in
             switch cadence {
             case .daily:
@@ -43,18 +43,21 @@ enum StreakService {
         return Array(Set(normalized))
     }
 
-    private static func isNextUnit(after current: Date, next: Date, cadence: StreakCadence) -> Bool {
-        let calendar = Calendar(identifier: .gregorian)
+    /// Whether `next` is exactly one cadence unit after `current`. Compares
+    /// calendar-day distance rather than raw `Date` equality so daylight-saving
+    /// transitions (which shift wall-clock midnight by an hour in some zones)
+    /// can't silently break an otherwise-consecutive run.
+    private static func isNextUnit(after current: Date, next: Date, cadence: StreakCadence, calendar: Calendar) -> Bool {
+        let dayGap = calendar.dateComponents([.day], from: current, to: next).day
         switch cadence {
         case .daily:
-            return calendar.date(byAdding: .day, value: 1, to: current) == next
+            return dayGap == 1
         case .weekly:
-            return calendar.date(byAdding: .day, value: 7, to: current) == next
+            return dayGap == 7
         }
     }
 
-    private static func currentStreakLength(from dates: [Date], cadence: StreakCadence, referenceDate: Date) -> Int {
-        let calendar = Calendar(identifier: .gregorian)
+    private static func currentStreakLength(from dates: [Date], cadence: StreakCadence, referenceDate: Date, calendar: Calendar) -> Int {
         let referenceUnit: Date
         let graceUnit: Date
 
@@ -73,7 +76,7 @@ enum StreakService {
         var streak = 1
         var cursor = latest
         for candidate in dates.dropLast().reversed() {
-            if isNextUnit(after: candidate, next: cursor, cadence: cadence) {
+            if isNextUnit(after: candidate, next: cursor, cadence: cadence, calendar: calendar) {
                 streak += 1
                 cursor = candidate
             } else {

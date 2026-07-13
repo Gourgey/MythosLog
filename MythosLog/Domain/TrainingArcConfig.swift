@@ -87,14 +87,14 @@ enum TrainingArcConfig {
     static let minimumRankLevel = 1
     static let maximumRankLevel = 10
     static let defaultRollingWindowWeeks = 4
-    static let defaultChargeMaximum = 4
+    // Single source of truth: the progress bar fills over the same number of
+    // charge slots the domain meter uses to trigger a rank-up.
+    static let defaultChargeMaximum = ChargeMath.slotsPerSide
     static let defaultRankThresholds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     static let focusRankThresholds = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150]
     static let intellectRankThresholds = [0, 10, 20, 30, 45, 60, 80, 100, 130, 170]
     static let cardioRankThresholds = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240]
     static let readingRankThresholds = [0, 30, 60, 90, 120, 180, 240, 300, 360, 480]
-    private static let strengthSourceLockedLevels: Set<Int> = Set(2...10)
-    private static let creativitySourceLockedLevels: Set<Int> = Set(2...10)
 
     static let habitDefinitions: [HabitProgressionDefinition] = [
         HabitProgressionDefinition(
@@ -655,8 +655,6 @@ enum TrainingArcConfig {
             return .asset(name: "StrengthFrailElderPrototype")
         case (.strength, 4):
             return .asset(name: "StrengthStrongHumanPrototype")
-        case (.focus, 2):
-            return .asset(name: "StrengthFrailElderPrototype")
         default:
             return nil
         }
@@ -671,34 +669,20 @@ enum TrainingArcConfig {
     }
 
     private static func bundledProgressionAssetName(for statKey: StatKey, level: Int, isLocked: Bool) -> String? {
+        let assetPrefix: String
         switch statKey {
-        case .strength:
-            let unlockedName = "Strength_Level_\(level)"
-
-            if isLocked {
-                guard level != minimumRankLevel else { return nil }
-                if strengthSourceLockedLevels.contains(level) {
-                    return "Strength_Level_\(level)_Locked"
-                }
-                return unlockedName
-            }
-
-            return unlockedName
-        case .creativity:
-            let unlockedName = "Creativity_Level_\(level)"
-
-            if isLocked {
-                guard level != minimumRankLevel else { return nil }
-                if creativitySourceLockedLevels.contains(level) {
-                    return "Creativity_Level_\(level)_Locked"
-                }
-                return unlockedName
-            }
-
-            return unlockedName
+        case .strength: assetPrefix = "Strength"
+        case .creativity: assetPrefix = "Creativity"
         case .intellect, .emotional, .focus, .curiosity, .cardio, .cooking, .reading:
             return nil
         }
+
+        let unlockedName = "\(assetPrefix)_Level_\(level)"
+        guard isLocked else { return unlockedName }
+        // Level 1 art is never shown in a locked state; every higher locked
+        // level uses a dimmed "_Locked" variant.
+        guard level != minimumRankLevel else { return nil }
+        return "\(unlockedName)_Locked"
     }
 
     static func lowerRankThreshold(for statKey: StatKey, level: Int) -> Int? {
@@ -791,12 +775,6 @@ enum TrainingArcConfig {
         guard let lowerTarget = previousRankChargeRequirement(for: statKey, level: clampedLevel) else { return nil }
         let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel)
         return max(currentTarget - lowerTarget, 1)
-    }
-
-    static func progressionBridgeUnits(for statKey: StatKey, fromLevel: Int, toLevel: Int) -> Double {
-        let fromTarget = effectiveWeeklyTarget(for: statKey, level: fromLevel)
-        let toTarget = effectiveWeeklyTarget(for: statKey, level: toLevel)
-        return Double(fromTarget * toTarget)
     }
 
     static func displayedCharge(for statKey: StatKey, bankedUnits: Double, level: Int) -> Int {
