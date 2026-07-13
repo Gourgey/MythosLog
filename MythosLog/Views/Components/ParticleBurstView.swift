@@ -25,7 +25,10 @@ struct ParticleBurstView: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { context in
+        // Pause the 60fps redraw loop whenever there is nothing to animate.
+        // Particles live ~1.6s; without this the Canvas kept repainting every
+        // frame for as long as the burst view stayed on screen.
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: particles.isEmpty)) { context in
             Canvas { canvasContext, size in
                 guard !particles.isEmpty else { return }
                 let elapsed = context.date.timeIntervalSince(startTime)
@@ -74,11 +77,13 @@ struct ParticleBurstView: View {
                 }
             }
         }
-        .onChange(of: triggerToken) { _, _ in
+        .task(id: triggerToken) {
             generateParticles()
-        }
-        .onAppear {
-            generateParticles()
+            // Clear once the longest-lived particle has expired, which flips the
+            // TimelineView above back to paused until the next trigger.
+            let maxLifespan = (particles.map(\.lifespan).max() ?? 0) + 0.15
+            try? await Task.sleep(for: .seconds(maxLifespan))
+            particles = []
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

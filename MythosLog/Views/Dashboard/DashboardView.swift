@@ -70,9 +70,17 @@ struct DashboardView: View {
     }
 
     private var focusTargetID: UUID? {
+        // Compute each stat's snapshot exactly once. The previous form built a
+        // fresh snapshot inside both the filter and each `focusPriority` call,
+        // and callers evaluated this property per grid tile — so a dashboard of
+        // n skills paid ~3n^2 snapshot computations per render.
         activeStats
-            .filter { !snapshot(for: $0).rank.isAtMaximumRank }
-            .max(by: { focusPriority(for: $0) < focusPriority(for: $1) })?
+            .compactMap { stat -> (id: UUID, priority: Double)? in
+                let itemSnapshot = snapshot(for: stat)
+                guard !itemSnapshot.rank.isAtMaximumRank else { return nil }
+                return (stat.id, focusPriority(from: itemSnapshot))
+            }
+            .max { $0.priority < $1.priority }?
             .id
     }
 
@@ -685,6 +693,8 @@ struct DashboardView: View {
     private var detailedDashboard: some View {
         let attention = needsAttentionStatKeys
         let unmatched = awaitingAttributionStatKeys
+        // Evaluate once per render, not once per tile (see focusTargetID).
+        let focusID = focusTargetID
         return VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Skills")
             Text("Tap a skill card to open the character sheet. Use the action tray when you want to log immediately.")
@@ -702,7 +712,7 @@ struct DashboardView: View {
                         snapshot: itemSnapshot,
                         trend: trend,
                         habits: habits,
-                        isFocusTarget: stat.id == focusTargetID,
+                        isFocusTarget: stat.id == focusID,
                         showLogFeedback: flashedStatID == stat.id,
                         needsAttention: attention.contains(stat.key),
                         hasUnmatchedImports: unmatched.contains(stat.key),
@@ -996,8 +1006,7 @@ struct DashboardView: View {
         TrainingStore.progressSnapshot(for: stat, settings: settings)
     }
 
-    private func focusPriority(for stat: StatDomain) -> Double {
-        let itemSnapshot = snapshot(for: stat)
+    private func focusPriority(from itemSnapshot: SkillProgressSnapshot) -> Double {
         var score = itemSnapshot.rank.progressToNextLevel
 
         switch itemSnapshot.focusState {
