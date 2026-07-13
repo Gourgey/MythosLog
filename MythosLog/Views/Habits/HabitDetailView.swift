@@ -144,7 +144,7 @@ struct HabitDetailView: View {
         .sheet(item: $logDraft) { draft in
             NavigationStack {
                 LogEntrySheetView(draft: draft, accent: accent) { submittedDraft in
-                    _ = try? TrainingStore.log(
+                    let saved = try? TrainingStore.log(
                         habit: submittedDraft.habit,
                         value: submittedDraft.value,
                         date: submittedDraft.date,
@@ -154,7 +154,7 @@ struct HabitDetailView: View {
                         context: modelContext
                     )
 
-                    if settings?.hapticsEnabled ?? true {
+                    if saved != nil, settings?.hapticsEnabled ?? true {
                         HapticsService.logSuccess()
                     }
                 }
@@ -170,6 +170,7 @@ struct LogEntrySheetView: View {
     @Query private var settingsRecords: [AppSettings]
     @FocusState private var focusedField: FocusField?
     @State private var workingDraft: LogEntryDraft
+    @State private var isSaving = false
     let accent: Color
     let onSave: (LogEntryDraft) -> Void
 
@@ -370,6 +371,7 @@ struct LogEntrySheetView: View {
                         Capsule().fill(accent)
                     )
                 }
+                .disabled(isSaving)
                 .buttonStyle(.plain)
 
                 Button {
@@ -442,6 +444,9 @@ struct LogEntrySheetView: View {
 
 
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
+
         if habit.measurementType == .booleanSession {
             workingDraft.value = 1
         } else {

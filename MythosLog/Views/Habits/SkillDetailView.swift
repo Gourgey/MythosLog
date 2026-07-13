@@ -4,6 +4,8 @@ import SwiftUI
 struct SkillDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsRecords: [AppSettings]
+    @Query private var skillGoals: [Goal]
+    @Query private var unmatchedWorkouts: [HealthImportedWorkout]
 
     let stat: StatDomain
     let opensLogSheetOnAppear: Bool
@@ -24,9 +26,27 @@ struct SkillDetailView: View {
     @State private var showingUnmatched = false
     @State private var scrollOffset: CGFloat = 0
 
+    /// `skillGoals`/`unmatchedWorkouts` are `@Query`-backed (not manual
+    /// `context.fetch`/`fetchCount` calls) so scroll-driven re-renders of this
+    /// view (see `scrollOffset` below) don't re-run a database round trip on
+    /// every frame — SwiftData only re-evaluates them when the underlying
+    /// model type actually changes.
     init(stat: StatDomain, opensLogSheetOnAppear: Bool = false) {
         self.stat = stat
         self.opensLogSheetOnAppear = opensLogSheetOnAppear
+        let statKeyRaw = stat.statKey?.rawValue ?? "__none__"
+        _skillGoals = Query(
+            filter: #Predicate<Goal> { $0.linkedStatKeyRaw == statKeyRaw },
+            sort: [SortDescriptor(\Goal.statusRaw), SortDescriptor(\Goal.createdAt, order: .reverse)]
+        )
+        let statKey = stat.key
+        _unmatchedWorkouts = Query(
+            filter: #Predicate<HealthImportedWorkout> { record in
+                record.statKeyRaw == statKey &&
+                record.awaitingHabitAssignment == true &&
+                record.isDuplicate == false
+            }
+        )
     }
 
     private var settings: AppSettings? {
@@ -45,12 +65,8 @@ struct SkillDetailView: View {
         linkedHabits.first
     }
 
-    private var snapshot: SkillProgressSnapshot {
-        TrainingStore.progressSnapshot(for: stat, settings: settings)
-    }
-
     private var unmatchedCount: Int {
-        TrainingStore.unmatchedWorkoutCount(forStatKey: stat.key, context: modelContext)
+        unmatchedWorkouts.count
     }
 
     private var unmatchedImportsBanner: some View {
@@ -105,27 +121,35 @@ struct SkillDetailView: View {
         TrainingStore.progressionWeek(containing: selectedWeekStart)
     }
 
-    private var selectedWeekSnapshot: SkillWeekSnapshot {
-        TrainingStore.weekSnapshot(for: stat, week: selectedWeek, context: modelContext)
-    }
-
-    private var effectiveSelectedDay: Date {
+    private func effectiveSelectedDay(in weekSnapshot: SkillWeekSnapshot) -> Date {
         let calendar = TrainingStore.progressionCalendar()
         let normalizedSelectedDay = calendar.startOfDay(for: selectedDay)
 
-        if selectedWeekSnapshot.daySummaries.contains(where: { calendar.isDate($0.date, inSameDayAs: normalizedSelectedDay) }) {
+        if weekSnapshot.daySummaries.contains(where: { calendar.isDate($0.date, inSameDayAs: normalizedSelectedDay) }) {
             return normalizedSelectedDay
         }
 
         return defaultSelectedDay(for: selectedWeek)
     }
 
-    private var selectedDayLogs: [SkillLogEntrySnapshot] {
+    private func selectedDayLogs(in weekSnapshot: SkillWeekSnapshot, day: Date) -> [SkillLogEntrySnapshot] {
         let calendar = TrainingStore.progressionCalendar()
-        return selectedWeekSnapshot.logEntries.filter { calendar.isDate($0.date, inSameDayAs: effectiveSelectedDay) }
+        return weekSnapshot.logEntries.filter { calendar.isDate($0.date, inSameDayAs: day) }
     }
 
     var body: some View {
+        // Computed once per body evaluation rather than as instance computed
+        // properties: `scrollOffset` (below) changes on every scroll frame,
+        // and each of these previously re-ran its full TrainingStore query on
+        // every access from every section — the classic per-render O(n)
+        // blowup already fixed elsewhere in this audit (Dashboard, goal
+        // badge). Threading single values through keeps it to one query per
+        // render regardless of how many sections read it.
+        let snapshot = TrainingStore.progressSnapshot(for: stat, settings: settings)
+        let weekSnapshot = TrainingStore.weekSnapshot(for: stat, week: selectedWeek, context: modelContext)
+        let effectiveDay = effectiveSelectedDay(in: weekSnapshot)
+        let dayLogs = selectedDayLogs(in: weekSnapshot, day: effectiveDay)
+
         ScrollView(showsIndicators: false) {
             GeometryReader { proxy in
                 Color.clear.preference(
@@ -136,18 +160,18 @@ struct SkillDetailView: View {
             .frame(height: 0)
 
             VStack(alignment: .leading, spacing: 18) {
-                heroSection
+                heroSection(snapshot: snapshot)
 
                 if unmatchedCount > 0 {
                     unmatchedImportsBanner
                 }
 
-                weeklyHistorySection
-                calibrationSection
-                chargeSection
+                weeklyHistorySection(snapshot: snapshot, weekSnapshot: weekSnapshot, effectiveDay: effectiveDay, dayLogs: dayLogs)
+                calibrationSection(snapshot: snapshot)
+                chargeSection(snapshot: snapshot)
 
                 if let nextTitle = snapshot.rank.nextTitle, !snapshot.rank.isAtMaximumRank {
-                    nextRankSection(nextTitle: nextTitle)
+                    nextRankSection(snapshot: snapshot, nextTitle: nextTitle)
                 }
 
                 goalsSection
@@ -209,7 +233,7 @@ struct SkillDetailView: View {
         .sheet(item: $logDraft) { draft in
             NavigationStack {
                 LogEntrySheetView(draft: draft, accent: accent) { submittedDraft in
-                    _ = try? TrainingStore.log(
+                    let saved = try? TrainingStore.log(
                         habit: submittedDraft.habit,
                         value: submittedDraft.value,
                         date: submittedDraft.date,
@@ -219,7 +243,7 @@ struct SkillDetailView: View {
                         context: modelContext
                     )
 
-                    if settings?.hapticsEnabled ?? true {
+                    if saved != nil, settings?.hapticsEnabled ?? true {
                         HapticsService.logSuccess()
                     }
                 }
@@ -290,7 +314,7 @@ struct SkillDetailView: View {
         }
     }
 
-    private var heroSection: some View {
+    private func heroSection(snapshot: SkillProgressSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: stat.iconName)
@@ -330,7 +354,7 @@ struct SkillDetailView: View {
                 Rectangle()
                     .fill(TrainingTheme.border.opacity(0.4))
                     .frame(width: 1, height: 36)
-                heroPaceMetric(title: "Pace", status: snapshot.pacingStatus, tint: paceTint)
+                heroPaceMetric(title: "Pace", status: snapshot.pacingStatus, tint: paceTint(for: snapshot))
             }
             .padding(.vertical, 4)
         }
@@ -359,12 +383,7 @@ struct SkillDetailView: View {
         logDraft = LogEntryDraft(habit: primaryHabit)
     }
 
-    private var skillGoals: [Goal] {
-        guard let statKey = stat.statKey else { return [] }
-        return (try? TrainingStore.fetchGoals(for: statKey, context: modelContext)) ?? []
-    }
-
-    private var calibrationSection: some View {
+    private func calibrationSection(snapshot: SkillProgressSnapshot) -> some View {
         V4Card(padding: 16, accent: TrainingTheme.textMuted) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -414,7 +433,7 @@ struct SkillDetailView: View {
                     }
                 }
 
-                Text(calibrationStatusLabel)
+                Text(calibrationStatusLabel(snapshot: snapshot))
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -438,7 +457,7 @@ struct SkillDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var calibrationStatusLabel: String {
+    private func calibrationStatusLabel(snapshot: SkillProgressSnapshot) -> String {
         let actual = TrainingStore.currentWeekTotal(for: stat, settings: settings)
         let baseline = Double(stat.currentBaseline)
         let target = stat.targetValue.map(Double.init)
@@ -494,8 +513,13 @@ struct SkillDetailView: View {
                     }
                 }
             } else {
+                // One shared fetch of logs/stats for every goal row instead of
+                // each SkillGoalRow independently re-fetching the whole log
+                // table (goalProgress(for:context:) fetches every HabitLog in
+                // the store) on every access.
+                let inputs = TrainingStore.goalProgressInputs(context: modelContext)
                 ForEach(skillGoals) { goal in
-                    SkillGoalRow(goal: goal, accent: accent) {
+                    SkillGoalRow(goal: goal, accent: accent, progress: TrainingStore.goalProgress(for: goal, inputs: inputs)) {
                         editingGoal = goal
                     }
                 }
@@ -503,7 +527,7 @@ struct SkillDetailView: View {
         }
     }
 
-    private var chargeSection: some View {
+    private func chargeSection(snapshot: SkillProgressSnapshot) -> some View {
         V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -528,7 +552,7 @@ struct SkillDetailView: View {
                     .font(.system(.title3, design: .serif).weight(.regular))
                     .foregroundStyle(TrainingTheme.textPrimary)
 
-                chargeDots
+                chargeDots(snapshot: snapshot)
                     .frame(maxWidth: .infinity)
 
                 Text(snapshot.nextRankStatusLabel)
@@ -539,7 +563,7 @@ struct SkillDetailView: View {
         }
     }
 
-    private func nextRankSection(nextTitle: String) -> some View {
+    private func nextRankSection(snapshot: SkillProgressSnapshot, nextTitle: String) -> some View {
         V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -661,7 +685,12 @@ struct SkillDetailView: View {
         }
     }
 
-    private var weeklyHistorySection: some View {
+    private func weeklyHistorySection(
+        snapshot: SkillProgressSnapshot,
+        weekSnapshot: SkillWeekSnapshot,
+        effectiveDay: Date,
+        dayLogs: [SkillLogEntrySnapshot]
+    ) -> some View {
         V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -740,11 +769,11 @@ struct SkillDetailView: View {
                 }
 
                 HStack(spacing: 6) {
-                    ForEach(selectedWeekSnapshot.daySummaries) { day in
+                    ForEach(weekSnapshot.daySummaries) { day in
                         WeekDaySummaryView(
                             summary: day,
                             accent: accent,
-                            isSelected: isSelectedDay(day.date)
+                            isSelected: isSelectedDay(day.date, effectiveDay: effectiveDay)
                         ) {
                             selectedDay = TrainingStore.progressionCalendar().startOfDay(for: day.date)
                         }
@@ -752,16 +781,16 @@ struct SkillDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(selectedDayLogTitle)
+                    Text(selectedDayLogTitle(for: effectiveDay))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(TrainingTheme.textPrimary)
 
-                    if selectedDayLogs.isEmpty {
+                    if dayLogs.isEmpty {
                         Text("No logs on this day.")
                             .font(.subheadline)
                             .foregroundStyle(TrainingTheme.textSecondary)
                     } else {
-                        ForEach(selectedDayLogs) { entry in
+                        ForEach(dayLogs) { entry in
                             SkillLogEntryRow(entry: entry, accent: accent)
                         }
                     }
@@ -770,7 +799,7 @@ struct SkillDetailView: View {
         }
     }
 
-    private var paceTint: Color {
+    private func paceTint(for snapshot: SkillProgressSnapshot) -> Color {
         switch snapshot.pacingStatus {
         case .ahead:
             return TrainingTheme.positiveStrong
@@ -781,13 +810,13 @@ struct SkillDetailView: View {
         }
     }
 
-    private var chargeDots: some View {
+    private func chargeDots(snapshot: SkillProgressSnapshot) -> some View {
         SignedChargeMeter(charge: snapshot.charge.current, pendingProgress: snapshot.weeklyTargetProgress, socketSize: 14, spacing: 7)
     }
 
-    private var selectedDayLogTitle: String {
-        let weekday = effectiveSelectedDay.formatted(.dateTime.weekday(.wide))
-        let date = effectiveSelectedDay.formatted(.dateTime.month(.abbreviated).day())
+    private func selectedDayLogTitle(for day: Date) -> String {
+        let weekday = day.formatted(.dateTime.weekday(.wide))
+        let date = day.formatted(.dateTime.month(.abbreviated).day())
         return "\(weekday) Logs · \(date)"
     }
 
@@ -852,8 +881,8 @@ struct SkillDetailView: View {
         selectedWeekStart = TrainingStore.progressionWeek(containing: boundedDate).start
     }
 
-    private func isSelectedDay(_ date: Date) -> Bool {
-        TrainingStore.progressionCalendar().isDate(date, inSameDayAs: effectiveSelectedDay)
+    private func isSelectedDay(_ date: Date, effectiveDay: Date) -> Bool {
+        TrainingStore.progressionCalendar().isDate(date, inSameDayAs: effectiveDay)
     }
 
     private func defaultSelectedDay(for week: WeekRange) -> Date {
@@ -867,7 +896,10 @@ struct SkillDetailView: View {
     private func helpBody(for topic: SkillHelpTopic) -> String {
         switch topic {
         case .charge:
-            return snapshot.chargeExplanation
+            // Only evaluated when the help sheet is actually opened (a rare,
+            // user-initiated event), so a fresh snapshot here is fine — no
+            // need to thread it through from `body`.
+            return TrainingStore.progressSnapshot(for: stat, settings: settings).chargeExplanation
         default:
             return topic.body
         }
@@ -1610,14 +1642,10 @@ private struct RankChangeRevealView: View {
 }
 
 struct SkillGoalRow: View {
-    @Environment(\.modelContext) private var modelContext
     let goal: Goal
     let accent: Color
+    let progress: GoalProgressSnapshot
     let onTap: () -> Void
-
-    private var progress: GoalProgressSnapshot {
-        TrainingStore.goalProgress(for: goal, context: modelContext)
-    }
 
     var body: some View {
         Button(action: onTap) {

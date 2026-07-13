@@ -105,7 +105,16 @@ struct HabitEditorView: View {
             habit.active = active
             habit.updatedAt = .now
         } else {
-            let nextOrder = (try? TrainingStore.fetchHabits(context: modelContext).count) ?? 0
+            // Match UnmatchedWorkoutSheet's per-stat ordering (max sortOrder
+            // among the stat's own active habits + 1) rather than a global
+            // habit count, so habits created from either path sort correctly
+            // against each other within a skill's Log Actions list.
+            let nextOrder: Int
+            if let selectedStat {
+                nextOrder = (TrainingStore.activeHabits(for: selectedStat).map(\.sortOrder).max() ?? -1) + 1
+            } else {
+                nextOrder = (try? TrainingStore.fetchHabits(context: modelContext).count) ?? 0
+            }
             let created = Habit(
                 name: name,
                 notes: notes,

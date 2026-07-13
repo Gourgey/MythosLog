@@ -153,14 +153,28 @@ struct UnmatchedWorkoutSheet: View {
         let records = matchingWorkouts(for: record)
         guard !records.isEmpty else { return }
 
+        // `TrainingStore.log(refreshProgressAfterSave:)` exists precisely for
+        // this: bulk-resolving N matched workouts must not replay every
+        // completed week N separate times. Log all of them first, then run a
+        // single refresh, matching how HealthImportService.performSync
+        // batches its own import loop.
+        var loggedAny = false
         for pendingRecord in records {
-            attributeSingle(record: pendingRecord, to: habit)
+            if attributeSingle(record: pendingRecord, to: habit) {
+                loggedAny = true
+            }
         }
 
         try? modelContext.save()
+
+        if loggedAny, let stat = habit.statDomain {
+            try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .logMutation)
+        }
+        try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
     }
 
-    private func attributeSingle(record: HealthImportedWorkout, to habit: Habit) {
+    @discardableResult
+    private func attributeSingle(record: HealthImportedWorkout, to habit: Habit) -> Bool {
         let value = loggedValue(for: record, habit: habit)
         let sessionType = record.sourceName ?? "Apple Health"
         let note = "Imported from Apple Health\(record.sourceName.map { " via \($0)" } ?? "")"
@@ -172,14 +186,16 @@ struct UnmatchedWorkoutSheet: View {
             note: note,
             source: .health,
             healthWorkoutUUID: record.workoutUUID,
+            refreshProgressAfterSave: false,
             context: modelContext
         )) != nil else {
-            return
+            return false
         }
 
         record.habitSystemKey = habit.systemKey
         record.wasImported = true
         record.awaitingHabitAssignment = false
+        return true
     }
 
     private func createNewHabitAndAttribute(record: HealthImportedWorkout, name: String) {

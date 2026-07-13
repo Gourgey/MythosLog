@@ -13,7 +13,7 @@
 		F4ABCDEF01234567890ABCD1 /* V4Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ABCDEF01234567890ABCD2 /* V4Style.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		07E326B84A8EBEE6A9C71496 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		0811AFEEAB80192DF010F288 /* QuickLogQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9264404321E24DACA79BC5E /* QuickLogQueue.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
-		0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B3E749B226B28FFD6C254EF /* HabitsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		0FFF6C47A1E4F738A5026A9D /* SkillDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B3E749B226B28FFD6C254EF /* SkillDetailView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		10DFA06751FD7A19038CD4F2 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF805E77B318F72532C010DD /* AppRouter.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		1728F4FD12D71E1ADCD8D3DE /* TrainingRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		1933A3EC1686E7A8AB227C2D /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653EE227BF3CD8B846AB8E3C /* AppRootView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -108,7 +108,7 @@
 /* Begin PBXFileReference section */
 		095CA864B310FECAF52C1896 /* WeeklyReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewView.swift; path = MythosLog/Views/WeeklyReview/WeeklyReviewView.swift; sourceTree = "<group>"; };
 		0A4F6FBD69F334171568AB69 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = MythosLog/Views/Settings/SettingsView.swift; sourceTree = "<group>"; };
-		0B3E749B226B28FFD6C254EF /* HabitsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HabitsView.swift; path = MythosLog/Views/Habits/HabitsView.swift; sourceTree = "<group>"; };
+		0B3E749B226B28FFD6C254EF /* SkillDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SkillDetailView.swift; path = MythosLog/Views/Habits/SkillDetailView.swift; sourceTree = "<group>"; };
 		15CA89B3BC9EAB18E382089C /* HistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistoryView.swift; path = MythosLog/Views/History/HistoryView.swift; sourceTree = "<group>"; };
 		197BCDB44EA7C44A3C658961 /* MythosLogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MythosLogTests.swift; path = MythosLogTests/MythosLogTests.swift; sourceTree = "<group>"; };
 		1E293A1C5102B19F4C827A15 /* TrainingRoute.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TrainingRoute.swift; path = MythosLog/Support/TrainingRoute.swift; sourceTree = "<group>"; };
@@ -220,7 +220,7 @@
 			children = (
 				D44BA13C7F904A1CA1833BA3 /* HabitDetailView.swift */,
 				3F3F74149B8AD41174B04B60 /* HabitEditorView.swift */,
-				0B3E749B226B28FFD6C254EF /* HabitsView.swift */,
+				0B3E749B226B28FFD6C254EF /* SkillDetailView.swift */,
 				D7E3456789012ABCDEF54321 /* UnmatchedWorkoutSheet.swift */,
 			);
 			name = Habits;
@@ -648,7 +648,7 @@
 				B7D73B8A964E8CD5F64735D3 /* HabitDetailView.swift in Sources */,
 				D7E3456789012ABCDEF12345 /* UnmatchedWorkoutSheet.swift in Sources */,
 				4E4E7C74650A66D4EBF1840F /* HabitEditorView.swift in Sources */,
-				0FFF6C47A1E4F738A5026A9D /* HabitsView.swift in Sources */,
+				0FFF6C47A1E4F738A5026A9D /* SkillDetailView.swift in Sources */,
 				26C0CEC84BCFE4803E46DF9B /* HistoryView.swift in Sources */,
 				352018AA042D95986F98072F /* OnboardingFlowView.swift in Sources */,
 				ABA7595EC94E23F9DB47397B /* SettingsView.swift in Sources */,
