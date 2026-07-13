@@ -42,6 +42,11 @@ enum ProgressionEngine {
     /// decay off, an idle week no longer bleeds charge back toward zero. The
     /// parameter defaults to `true` so the historical behaviour (and every
     /// existing unit test) is preserved for callers that don't pass settings.
+    ///
+    /// `decaySensitivity` mirrors `AppSettings.decaySensitivity`
+    /// (Forgiving 0.7 / Balanced 1.0 / Strict 1.3) and scales how far charge
+    /// bleeds toward zero on a completed week — see `decayCharge`. It defaults
+    /// to `1.0` (Balanced), the historical behaviour.
     static func evaluateWeek(
         statKey: StatKey,
         state: WeeklyProgressionState,
@@ -49,7 +54,8 @@ enum ProgressionEngine {
         activeGoalTarget: Int? = nil,
         isRecoveryGoal: Bool = false,
         allowRankDown: Bool = true,
-        decayEnabled: Bool = true
+        decayEnabled: Bool = true,
+        decaySensitivity: Double = 1.0
     ) -> WeeklyProgressionResult {
         let levelBefore = TrainingArcConfig.clampedRankLevel(state.level)
         let expectedTargetBefore = max(state.expectedWeeklyTarget, TrainingArcConfig.minimumBaseline)
@@ -57,7 +63,7 @@ enum ProgressionEngine {
         let weeklyDelta = actualTotal - expectedTotal
         let bankedUnitsBefore = state.bankedProgressUnits
         let chargeBeforeDecay = TrainingArcConfig.displayedCharge(for: statKey, bankedUnits: bankedUnitsBefore, level: levelBefore)
-        let chargeAfterDecay = decayEnabled ? decayCharge(chargeBeforeDecay) : chargeBeforeDecay
+        let chargeAfterDecay = decayEnabled ? decayCharge(chargeBeforeDecay, sensitivity: decaySensitivity) : chargeBeforeDecay
         let baselineChargeDelta = chargeDelta(
             statKey: statKey,
             level: levelBefore,
@@ -145,14 +151,37 @@ enum ProgressionEngine {
         )
     }
 
-    private static func decayCharge(_ charge: Int) -> Int {
-        switch charge {
-        case let value where value > 0:
-            return value - 1
-        case let value where value < 0:
-            return value + 1
-        default:
-            return 0
+    /// Bleeds the signed charge meter toward zero for one completed week, with
+    /// the step size chosen by progression strictness (`decaySensitivity`).
+    /// The rule is deliberately discrete so charge stays an integer — no
+    /// fractional accumulator to persist:
+    ///
+    /// - **Strict** (`>= 1.15`): two steps toward zero. Earned charge and debt
+    ///   both bleed off twice as fast when a week goes unworked.
+    /// - **Balanced** (`~1.0`): one step toward zero — the original behaviour.
+    /// - **Forgiving** (`< 0.85`): one step, but only once charge is at least
+    ///   two away from zero. The point nearest zero is "sticky", so a single
+    ///   idle week never erases your last foothold of progress (or your last
+    ///   unit of debt).
+    ///
+    /// Decay never crosses zero: a positive charge floors at 0 and a negative
+    /// charge ceilings at 0.
+    private static func decayCharge(_ charge: Int, sensitivity: Double) -> Int {
+        guard charge != 0 else { return 0 }
+
+        let magnitude: Int
+        if sensitivity >= 1.15 {
+            magnitude = 2
+        } else if sensitivity < 0.85 {
+            magnitude = abs(charge) >= 2 ? 1 : 0
+        } else {
+            magnitude = 1
+        }
+
+        if charge > 0 {
+            return max(0, charge - magnitude)
+        } else {
+            return min(0, charge + magnitude)
         }
     }
 

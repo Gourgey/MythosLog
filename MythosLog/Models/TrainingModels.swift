@@ -193,9 +193,9 @@ enum ProgressionStrictness: String, Codable, CaseIterable, Identifiable, Sendabl
 
     var detail: String {
         switch self {
-        case .forgiving: "Slower decay. Missing baseline costs less charge."
+        case .forgiving: "Slower decay. Charge near zero holds through an unworked week."
         case .balanced: "Default behavior. One step toward zero each completed week."
-        case .strict: "Faster decay. Missing baseline costs more charge."
+        case .strict: "Faster decay. Two steps toward zero each completed week."
         }
     }
 }

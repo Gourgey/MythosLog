@@ -448,6 +448,56 @@ struct MythosLogTests {
         #expect(week.visibleChargesAfter == 2)
     }
 
+    @Test func forgivingStrictnessKeepsChargeNearZeroThroughIdleWeek() {
+        // Charge of +1, an idle week (actual == target). Forgiving strictness
+        // makes the last point sticky; Balanced bleeds it to zero.
+        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 1)
+
+        let forgiving = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 0.7
+        )
+        #expect(forgiving.chargeBeforeDecay == 1)
+        #expect(forgiving.chargeAfterDecay == 1)
+        #expect(forgiving.visibleChargesAfter == 1)
+
+        let balanced = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 1.0
+        )
+        #expect(balanced.chargeAfterDecay == 0)
+        #expect(balanced.visibleChargesAfter == 0)
+    }
+
+    @Test func strictStrictnessDecaysChargeTwoStepsPerWeek() {
+        // Charge of +3, an idle week. Strict removes two steps; the near-zero
+        // floor still holds (never crosses zero).
+        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3)
+
+        let strict = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 1.3
+        )
+        #expect(strict.chargeBeforeDecay == 3)
+        #expect(strict.chargeAfterDecay == 1)
+        #expect(strict.visibleChargesAfter == 1)
+
+        let lowCharge = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 1)
+        let clampedAtZero = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: lowCharge, actualTotal: 5, decaySensitivity: 1.3
+        )
+        #expect(clampedAtZero.chargeAfterDecay == 0)
+    }
+
+    @Test func disablingDecayFreezesChargeRegardlessOfSensitivity() {
+        // enableDecay == false must short-circuit decay entirely, so an idle
+        // week neither bleeds charge nor honors the strictness step size.
+        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3)
+        let frozen = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: state, actualTotal: 5, decayEnabled: false, decaySensitivity: 1.3
+        )
+        #expect(frozen.chargeBeforeDecay == 3)
+        #expect(frozen.chargeAfterDecay == 3)
+        #expect(frozen.visibleChargesAfter == 3)
+    }
+
     @Test func negativeWeekCreatesDebtAndSingleRankDownPerWeek() {
         let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: -3)
         let result = ProgressionEngine.evaluateWeek(statKey: .strength, state: state, actualTotal: 0)
