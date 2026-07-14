@@ -96,14 +96,6 @@ struct AppRootView: View {
                 }
             } else {
                 tabContent
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        CompactRootTabBar(
-                            selection: router.selectedRoute,
-                            goalsBadgeCount: goalsAtRiskCount
-                        ) { route in
-                            router.open(route)
-                        }
-                    }
             }
         }
         .environmentObject(router)
@@ -192,6 +184,7 @@ struct AppRootView: View {
     private var dashboardStack: some View {
         NavigationStack(path: $router.rootPath) {
             DashboardView()
+                .safeAreaInset(edge: .bottom, spacing: 0) { rootTabBar }
                 .navigationDestination(for: DashboardNavigationDestination.self) { destination in
                     switch destination {
                     case .skillDetail(let destination):
@@ -204,12 +197,14 @@ struct AppRootView: View {
     private var weeklyReviewStack: some View {
         NavigationStack {
             WeeklyReviewView()
+                .safeAreaInset(edge: .bottom, spacing: 0) { rootTabBar }
         }
     }
 
     private var goalsStack: some View {
         NavigationStack {
             GoalsView()
+                .safeAreaInset(edge: .bottom, spacing: 0) { rootTabBar }
         }
     }
 
@@ -218,6 +213,25 @@ struct AppRootView: View {
             MoreView {
                 reloadSettings()
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { rootTabBar }
+        }
+    }
+
+    /// Attached to each tab's root content view, never to a pushed
+    /// `navigationDestination`. A `safeAreaInset` applied outside the
+    /// `NavigationStack` still visually renders on top of pushed
+    /// destinations, but pushed views don't inherit its safe-area report —
+    /// so a detail screen's own bottom-pinned controls (e.g.
+    /// `SkillDetailView`'s sticky log button) land directly underneath the
+    /// still-visible bar instead of above it. Scoping the inset to the root
+    /// view makes the bar disappear entirely once something is pushed,
+    /// which is both correct and the standard pattern for detail screens.
+    private var rootTabBar: some View {
+        CompactRootTabBar(
+            selection: router.selectedRoute,
+            goalsBadgeCount: goalsAtRiskCount
+        ) { route in
+            router.open(route)
         }
     }
 }

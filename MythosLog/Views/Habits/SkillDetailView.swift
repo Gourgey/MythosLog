@@ -179,7 +179,7 @@ struct SkillDetailView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, primaryHabit == nil ? 118 : 36)
+            .padding(.bottom, 36)
         }
         .coordinateSpace(name: "skillDetailScroll")
         .background(
