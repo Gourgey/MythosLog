@@ -154,6 +154,14 @@ struct RankArtworkView: View {
         .shadow(color: accent.opacity(0.24), radius: 16, x: 0, y: 8)
     }
 
+    // WS13: skills with commissioned character art and skills on the icon
+    // fallback used to read as two different families on the dashboard grid
+    // — the fallback drew itself inside a circle, but the character image
+    // rendered at a fixed 147pt height regardless of the ring it sat inside,
+    // so it could overflow the ring the tile drew around it (most visibly on
+    // tall art like Strength). Filling the actual space the parent gives this
+    // view and clipping both branches to the same circle makes every tile's
+    // art fill its ring identically, with nothing spilling past the edge.
     private var dashboardBareArtwork: some View {
         ZStack {
             if let image {
@@ -162,8 +170,8 @@ struct RankArtworkView: View {
                 barePlaceholderArtwork
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 147)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(Circle())
     }
 
     private var backgroundOrnament: some View {

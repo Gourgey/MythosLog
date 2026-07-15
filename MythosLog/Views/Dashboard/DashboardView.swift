@@ -1437,13 +1437,14 @@ private struct GameDashboardTile: View {
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-                    // Reserves a fixed gutter for the rank-change badge
-                    // (anchored top-trailing on the tile below) so it never
-                    // overlaps the last letters of a wide name like
-                    // "Creativity" or "Intellect" — reserved unconditionally
-                    // rather than only when a badge is present, so the label
-                    // doesn't shift when one appears or clears.
-                    .padding(.trailing, 26)
+                    // Reserves a symmetric gutter on both sides for the
+                    // rank-change badge and attention dot (each anchored to a
+                    // top corner of the tile below) so neither ever overlaps
+                    // the name — reserved unconditionally rather than only
+                    // when a badge/dot is present, so the label doesn't shift
+                    // when one appears or clears, and stays visually centered
+                    // (WS13) instead of drifting toward the unreserved side.
+                    .padding(.horizontal, 26)
                     .frame(maxWidth: .infinity)
 
                 ZStack {
@@ -1492,6 +1493,11 @@ private struct GameDashboardTile: View {
                 DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 9, spacing: 3)
                     .frame(height: 12)
                     .frame(maxWidth: .infinity)
+                    // Charged tiles should stand out against neutral ones —
+                    // at charge 0 every tile carried the same visual weight,
+                    // so the grid couldn't be scanned for what needs
+                    // attention at a glance.
+                    .opacity(snapshot.charge.current == 0 ? 0.6 : 1)
             }
             .frame(maxWidth: .infinity, minHeight: 182, alignment: .top)
             .contentShape(Rectangle())
