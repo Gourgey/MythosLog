@@ -109,6 +109,8 @@ struct MoreView: View {
         }
         .navigationTitle("More")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
     }
 
     private var morePageHeader: some View {

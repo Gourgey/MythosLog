@@ -122,6 +122,8 @@ struct WeeklyReviewDetailView: View {
         }
         .navigationTitle(weekTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
     }
 
     // MARK: - Verdict

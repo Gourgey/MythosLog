@@ -185,6 +185,21 @@ struct DashboardView: View {
             }
             .coordinateSpace(name: "dashboardScroll")
         }
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [
+                    TrainingTheme.background.opacity(0.98),
+                    TrainingTheme.background.opacity(0.82),
+                    TrainingTheme.background.opacity(0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private var todayKicker: some View {

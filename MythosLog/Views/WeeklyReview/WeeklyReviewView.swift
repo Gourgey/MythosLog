@@ -55,6 +55,8 @@ struct WeeklyReviewView: View {
         }
         .navigationTitle("Review")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .navigationDestination(item: $detailWeekStart) { weekStart in
             WeeklyReviewDetailView(weekStart: weekStart)
         }

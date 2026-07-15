@@ -55,6 +55,8 @@ struct ManageSkillsView: View {
         .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .navigationTitle("Manage Skills")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 EditButton()

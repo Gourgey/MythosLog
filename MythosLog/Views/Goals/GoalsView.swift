@@ -61,6 +61,8 @@ struct GoalsView: View {
         }
         .navigationTitle("Goals")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

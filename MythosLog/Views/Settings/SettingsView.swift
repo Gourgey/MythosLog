@@ -395,6 +395,8 @@ struct SettingsView: View {
         .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(TrainingTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .task {
             _ = try? TrainingStore.fetchSettings(context: modelContext)
             await refreshCloudSyncStatus()
