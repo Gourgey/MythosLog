@@ -131,7 +131,7 @@ struct WeeklyReviewDetailView: View {
         case heldForm = "Held Form"
         case mixed = "Mixed Week"
         case lostMomentum = "Lost Momentum"
-        case regressionRisk = "Regression Risk"
+        case regressionRisk = "At Risk"
 
         var color: Color {
             switch self {
@@ -463,7 +463,10 @@ struct WeeklyReviewDetailView: View {
                 if resolution.didLevelUp {
                     V4StatusPill(text: "Ranked up this week", tint: TrainingTheme.positiveStrong, systemImage: "arrow.up")
                 } else if resolution.didRegress {
-                    V4StatusPill(text: "Ranked down this week", tint: TrainingTheme.warning, systemImage: "arrow.down")
+                    // Danger, not warning — an actual rank drop is a
+                    // stronger event than a routine below-baseline miss and
+                    // shouldn't share that pill's amber tint.
+                    V4StatusPill(text: "Ranked down this week", tint: TrainingTheme.danger, systemImage: "arrow.down")
                 } else if resolution.weeklyDelta < 0 {
                     V4StatusPill(text: "Below baseline this week", tint: TrainingTheme.warning, systemImage: "exclamationmark.triangle.fill")
                 }

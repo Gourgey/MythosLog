@@ -271,7 +271,7 @@ extension TrainingStore {
         return changed
     }
 
-    static func summaryText(for stat: StatDomain, week: WeekRange, result: WeeklyProgressionResult) -> String {
+    static func summaryText(for stat: StatDomain, week _: WeekRange, result: WeeklyProgressionResult) -> String {
         let actualLabel = MetricFormatting.shortMetric(result.actualTotal)
         let expectedLabel = MetricFormatting.shortMetric(result.expectedTotal)
         let goalSuffix = result.goalBonusApplied
@@ -279,21 +279,21 @@ extension TrainingStore {
             : (result.goalTargetMet ? " Goal target met." : "")
 
         if result.didLevelUp {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) advanced \(stat.name) to Level \(result.levelAfter) after reaching +4 charge.\(goalSuffix)"
+            return "\(actualLabel) of \(expectedLabel) logged — \(stat.name) advanced to Level \(result.levelAfter) after reaching +4 charge.\(goalSuffix)"
         }
         if result.didLevelDown {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) dropped \(stat.name) to Level \(result.levelAfter) after reaching -4 charge.\(goalSuffix)"
+            return "\(actualLabel) of \(expectedLabel) logged — \(stat.name) dropped to Level \(result.levelAfter) after reaching -4 charge.\(goalSuffix)"
         }
         if result.weeklyChargeDelta > 0 {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added +\(result.weeklyChargeDelta) charge.\(goalSuffix)"
+            return "Logged \(actualLabel) of \(expectedLabel) — charge +\(result.weeklyChargeDelta).\(goalSuffix)"
         }
         if result.weeklyChargeDelta < 0 {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) added \(result.weeklyChargeDelta) charge."
+            return "Logged \(actualLabel) of \(expectedLabel) — charge \(result.weeklyChargeDelta)."
         }
         if result.didDecayTowardZero {
-            return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held steady while charge drifted 1 step back toward zero.\(goalSuffix)"
+            return "Logged \(actualLabel) of \(expectedLabel) — charge moved 1 step toward zero.\(goalSuffix)"
         }
-        return "Week of \(week.displayTitle): \(actualLabel) against \(expectedLabel) held this rank steady.\(goalSuffix)"
+        return "Logged \(actualLabel) of \(expectedLabel) — rank held steady.\(goalSuffix)"
     }
 
     static func pendingWeek(context: ModelContext, now: Date = .now) throws -> WeekRange? {

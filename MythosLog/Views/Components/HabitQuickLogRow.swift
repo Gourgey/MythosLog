@@ -82,7 +82,7 @@ struct HabitQuickActionButtons: View {
                             Text("+\(Int(step))")
                                 .font(.system(.headline, design: .rounded).weight(.bold))
                                 .foregroundStyle(accent)
-                            Text(habit.measurementType.defaultUnitLabel)
+                            Text(habit.measurementType.displayUnitLabel(for: step))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textSecondary)
                         }
@@ -98,7 +98,7 @@ struct HabitQuickActionButtons: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Log \(Int(step)) \(habit.measurementType.defaultUnitLabel)")
+                    .accessibilityLabel("Log \(Int(step)) \(habit.measurementType.displayUnitLabel(for: step))")
                 }
             }
         }

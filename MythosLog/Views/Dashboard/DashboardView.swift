@@ -604,7 +604,7 @@ struct DashboardView: View {
             tint = TrainingArcConfig.color(for: "focus")
             icon = "bolt.fill"
         case .losingMomentum:
-            label = "Losing momentum"
+            label = "At risk"
             tint = TrainingTheme.warning
             icon = "arrow.down"
         }
@@ -724,7 +724,7 @@ struct DashboardView: View {
         let focusID = focusTargetID
         return VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Skills")
-            Text("Tap a skill card to open the character sheet. Use the action tray when you want to log immediately.")
+            Text("Tap a skill card to open its detail. Use the button on each card to log a session directly.")
                 .font(.subheadline)
                 .foregroundStyle(TrainingTheme.textSecondary)
 
@@ -1717,9 +1717,12 @@ private struct DashboardInsightSheet: View {
             VStack(alignment: .leading, spacing: 18) {
                 SurfaceCard(accent: accent) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label(option.title, systemImage: option.systemImage)
+                        // The navigation bar already shows `option.title` —
+                        // repeating it here as a second heading was pure
+                        // duplication. Keep just the icon as a visual accent.
+                        Image(systemName: option.systemImage)
                             .font(.system(.title3, design: .rounded).weight(.black))
-                            .foregroundStyle(TrainingTheme.textPrimary)
+                            .foregroundStyle(accent)
 
                         Text(headline)
                             .font(.headline)

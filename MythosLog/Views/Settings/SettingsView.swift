@@ -228,7 +228,7 @@ struct SettingsView: View {
                     Text("Notifies you mid-week if any active goal is at risk of being missed.")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)
-                    Toggle("Skill behind pace reminder", isOn: binding(\.skillBehindPaceReminderEnabled))
+                    Toggle("Skill behind reminder", isOn: binding(\.skillBehindPaceReminderEnabled))
                     Text("Notifies you mid-week if any skill is tracking below its weekly baseline.")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)

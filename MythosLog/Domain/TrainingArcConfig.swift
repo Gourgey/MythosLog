@@ -111,7 +111,7 @@ enum TrainingArcConfig {
                 statKey: .creativity,
                 measurementType: .booleanSession,
                 scheduleType: .weekly,
-                unitLabel: "session",
+                unitLabel: "sessions",
                 targetPerPeriod: 3,
                 notes: "Sketching, design work, or creative practice."
             ),
@@ -156,7 +156,7 @@ enum TrainingArcConfig {
                 statKey: .curiosity,
                 measurementType: .booleanSession,
                 scheduleType: .weekly,
-                unitLabel: "session",
+                unitLabel: "sessions",
                 targetPerPeriod: 2,
                 notes: "Deep dives into topics that expand your range and perspective."
             ),
@@ -201,7 +201,7 @@ enum TrainingArcConfig {
                 statKey: .emotional,
                 measurementType: .booleanSession,
                 scheduleType: .weekly,
-                unitLabel: "session",
+                unitLabel: "sessions",
                 targetPerPeriod: 4,
                 notes: "Reflection, emotional processing, or personal writing."
             ),
@@ -336,7 +336,7 @@ enum TrainingArcConfig {
                 statKey: .strength,
                 measurementType: .booleanSession,
                 scheduleType: .weekly,
-                unitLabel: "session",
+                unitLabel: "sessions",
                 targetPerPeriod: 3,
                 notes: "Strength training, sports, or any session that builds physical capacity."
             ),

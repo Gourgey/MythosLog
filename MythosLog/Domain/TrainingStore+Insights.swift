@@ -85,7 +85,7 @@ extension TrainingStore {
             headline = "Fresh week — nothing logged yet"
         } else if behind > ahead + onPace {
             kind = .atRisk
-            headline = "Behind pace this week"
+            headline = "Behind this week"
         } else if ahead > 0, behind == 0 {
             kind = .ahead
             headline = "Ahead of pace this week"
@@ -154,7 +154,7 @@ extension TrainingStore {
                         statName: stat.name,
                         colorToken: stat.colorToken,
                         kind: .losingMomentum,
-                        text: "Losing momentum — close to ranking down"
+                        text: "At risk — close to ranking down"
                     )
                 )
             }
@@ -348,7 +348,7 @@ extension TrainingStore {
                         statName: stat.name,
                         colorToken: stat.colorToken,
                         iconName: stat.iconName,
-                        headline: "\(stat.name) behind pace",
+                        headline: "\(stat.name) is behind",
                         detail: "\(remainingLabel) \(unit) needed to stay on baseline.",
                         reason: .behindBaseline,
                         priority: 60,
@@ -366,7 +366,7 @@ extension TrainingStore {
                         statName: stat.name,
                         colorToken: stat.colorToken,
                         iconName: stat.iconName,
-                        headline: "\(stat.name) losing momentum",
+                        headline: "\(stat.name) is at risk",
                         detail: "Charge is at \(charge). One strong week resets the trend.",
                         reason: .lowCharge,
                         priority: 55,

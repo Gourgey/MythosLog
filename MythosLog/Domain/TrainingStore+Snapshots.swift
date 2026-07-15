@@ -130,17 +130,17 @@ extension TrainingStore {
     static func weeklyCounterLabel(for stat: StatDomain) -> String {
         switch primaryHabit(for: stat)?.measurementType {
         case .booleanSession:
-            return "Weekly Sessions"
+            return "Baseline Sessions"
         case .pages:
-            return "Weekly Pages"
+            return "Baseline Pages"
         case .minutes:
-            return "Weekly Minutes"
+            return "Baseline Minutes"
         case .count:
-            return "Weekly Count"
+            return "Baseline Count"
         case .customNumber:
-            return "Weekly Progress"
+            return "Baseline Progress"
         case .none:
-            return "Weekly Total"
+            return "Baseline Total"
         }
     }
 

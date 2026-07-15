@@ -361,7 +361,26 @@ struct GoalEditorView: View {
     }
 
     private var autoDerivedTitlePreview: String {
-        Goal.autoDerivedTitle(
+        // Before a target is entered, `Goal.autoDerivedTitle` would render
+        // literal nonsense like "0 count this week" as the field's
+        // placeholder. Show a unit-aware example until there's a real target
+        // to preview, then live-update to the generated title as before.
+        guard resolvedTarget > 0 else {
+            let exampleTarget: Double = switch measurementType {
+            case .booleanSession, .count: 3
+            case .pages: 20
+            case .minutes: 30
+            case .customNumber: 10
+            }
+            let exampleTitle = Goal.autoDerivedTitle(
+                type: type,
+                measurementType: measurementType,
+                targetValue: exampleTarget,
+                linkedStatKey: linkedStatKey
+            )
+            return "e.g. \(exampleTitle)"
+        }
+        return Goal.autoDerivedTitle(
             type: type,
             measurementType: measurementType,
             targetValue: resolvedTarget,

@@ -70,10 +70,21 @@ enum MeasurementType: String, Codable, CaseIterable, Identifiable, Sendable {
     var defaultUnitLabel: String {
         switch self {
         case .booleanSession: "session"
-        case .count: "count"
+        case .count: "times"
         case .pages: "pages"
         case .minutes: "min"
         case .customNumber: "points"
+        }
+    }
+
+    func displayUnitLabel(for value: Double) -> String {
+        let isSingular = value == 1
+        return switch self {
+        case .booleanSession: isSingular ? "session" : "sessions"
+        case .count: isSingular ? "time" : "times"
+        case .pages: isSingular ? "page" : "pages"
+        case .minutes: "min"
+        case .customNumber: isSingular ? "point" : "points"
         }
     }
 
@@ -191,11 +202,15 @@ enum ProgressionStrictness: String, Codable, CaseIterable, Identifiable, Sendabl
         }
     }
 
+    // All three describe decay behavior specifically, which is exactly what
+    // the separate "Enable decay" toggle turns off — each needs to say so,
+    // or the Balanced description in particular reads as a false claim
+    // ("one step toward zero each week") when decay is disabled.
     var detail: String {
         switch self {
-        case .forgiving: "Slower decay. Charge near zero holds through an unworked week."
-        case .balanced: "Default behavior. One step toward zero each completed week."
-        case .strict: "Faster decay. Two steps toward zero each completed week."
+        case .forgiving: "Slower decay when decay is on. Charge near zero holds through an unworked week."
+        case .balanced: "Default behavior when decay is on. One step toward zero each completed week."
+        case .strict: "Faster decay when decay is on. Two steps toward zero each completed week."
         }
     }
 }
@@ -1049,7 +1064,7 @@ final class Goal {
     ) -> String {
         let prefix = linkedStatKey?.displayName
         let target = formatTarget(targetValue, measurementType: measurementType)
-        let unit = measurementType.defaultUnitLabel
+        let unit = measurementType.displayUnitLabel(for: targetValue)
         let suffix: String
 
         switch type {
@@ -1161,7 +1176,7 @@ enum SkillPacingStatus: String, Sendable {
     var label: String {
         switch self {
         case .behind:
-            return "Behind Pace"
+            return "Behind"
         case .onPace:
             return "On Pace"
         case .ahead:

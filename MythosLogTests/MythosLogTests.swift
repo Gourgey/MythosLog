@@ -689,7 +689,7 @@ struct SnapshotsAndWidgetsTests {
         let fixture = try makeStrengthFixture(baseline: 3)
         let snapshot = TrainingStore.progressSnapshot(for: fixture.stat, settings: nil, now: isoDate("2026-03-30T12:00:00Z"))
 
-        #expect(snapshot.weeklyCounterLabel == "Weekly Sessions")
+        #expect(snapshot.weeklyCounterLabel == "Baseline Sessions")
         #expect(snapshot.weeklyCounterValueLabel == "0 / 3")
         #expect(snapshot.chargeExplanation.contains("Level 4"))
         #expect(snapshot.chargeExplanation.contains("+4 ranks you up"))
@@ -1848,4 +1848,3 @@ struct SkillTaxonomyTests {
     }
 
 }
-

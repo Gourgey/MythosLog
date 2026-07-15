@@ -168,7 +168,7 @@ struct WeeklyReviewView: View {
                 HStack(alignment: .top, spacing: 0) {
                     V4StatTile(value: V4Style.displayNumber(skillsBehindCount), label: "behind", tint: skillsBehindCount > 0 ? TrainingTheme.warning : TrainingTheme.textPrimary)
                     V4StatTile(value: V4Style.displayNumber(skillsOnPaceOrCompleteCount), label: "on pace", tint: TrainingTheme.textPrimary)
-                    V4StatTile(value: V4Style.displayNumber(skillsAtRegressionRiskCount), label: "risk", tint: skillsAtRegressionRiskCount > 0 ? TrainingTheme.danger : TrainingTheme.textPrimary)
+                    V4StatTile(value: V4Style.displayNumber(skillsAtRegressionRiskCount), label: "at risk", tint: skillsAtRegressionRiskCount > 0 ? TrainingTheme.danger : TrainingTheme.textPrimary)
                 }
 
                 Text(diagnosticSummaryText)
@@ -295,8 +295,8 @@ struct WeeklyReviewView: View {
     }
 
     private var diagnosticHeadline: String {
-        if skillsAtRegressionRiskCount > 0 { return "Recovery" }
-        if skillsBehindCount > 0 { return "Behind Pace" }
+        if skillsAtRegressionRiskCount > 0 { return "At risk" }
+        if skillsBehindCount > 0 { return "Behind" }
         return "On Track"
     }
 
@@ -308,12 +308,12 @@ struct WeeklyReviewView: View {
 
     private var diagnosticSummaryText: String {
         if let risk = currentReviewItems.first(where: { $0.urgency == .regressionRisk }) {
-            return "\(risk.stat.name) is the closest regression risk. Stabilize it before adding extra stretch work."
+            return "\(risk.stat.name) is closest to ranking down. Stabilize it before adding extra stretch work."
         }
         if let behind = currentReviewItems.first(where: { $0.urgency == .behindPace }) {
-            return "\(behind.stat.name) is most behind pace this week. \(taskText(for: behind))"
+            return "\(behind.stat.name) is furthest behind this week. \(taskText(for: behind))"
         }
-        return "No skill is behind pace or at regression risk. Keep the baseline rhythm steady."
+        return "No skill is behind or at risk. Keep the baseline rhythm steady."
     }
 
     private func reviewUrgency(for snapshot: SkillProgressSnapshot) -> ReviewSkillUrgency {
@@ -612,7 +612,7 @@ struct WeeklyReviewView: View {
         let aboveBaseline = resolutions.filter { $0.weeklyDelta > 0 }.count
 
         if regressed > 0 {
-            return VerdictDescriptor(rawValue: "Regression Risk", color: TrainingTheme.danger, description: "Skills ranked down or are close to dropping.", icon: "arrow.down.right.circle.fill")
+            return VerdictDescriptor(rawValue: "At Risk", color: TrainingTheme.danger, description: "Skills ranked down or are close to dropping.", icon: "arrow.down.right.circle.fill")
         }
         if levelUps > 0, belowBaseline == 0 {
             return VerdictDescriptor(rawValue: "Advanced", color: TrainingTheme.positiveStrong, description: "Skills moved forward this week.", icon: "arrow.up.right.circle.fill")
@@ -662,7 +662,7 @@ private enum ReviewSkillUrgency: Equatable {
 
     func label(for pacing: SkillPacingStatus) -> String {
         switch self {
-        case .regressionRisk: return "Risk"
+        case .regressionRisk: return "At risk"
         case .behindPace: return "Behind"
         case .steady: return pacing.label
         case .complete: return "Complete"

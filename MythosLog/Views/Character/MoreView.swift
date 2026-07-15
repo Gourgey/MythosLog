@@ -95,7 +95,7 @@ struct MoreView: View {
                     } label: {
                         destinationCard(
                             title: "Settings",
-                            detail: "Notifications, theme, exports, and progression preferences.",
+                            detail: "Notifications, exports, and progression preferences.",
                             icon: "gearshape.fill",
                             accent: TrainingArcConfig.color(for: "curiosity")
                         )
@@ -137,7 +137,7 @@ struct MoreView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("OVERALL STANDING")
+                        Text("OVERALL RANK")
                             .font(.caption.weight(.heavy))
                             .tracking(2.0)
                             .foregroundStyle(TrainingTheme.textMuted)

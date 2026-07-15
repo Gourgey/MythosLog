@@ -646,6 +646,9 @@ struct SkillDetailView: View {
                 }
             } else {
                 ForEach(linkedHabits) { habit in
+                    let progressUnit = habit.measurementType == .booleanSession
+                        ? (habit.targetPerPeriod == 1 ? "session" : "sessions")
+                        : habit.unitLabel
                     V4Card(accent: accent) {
                         VStack(spacing: 12) {
                             VStack(spacing: 4) {
@@ -653,11 +656,15 @@ struct SkillDetailView: View {
                                     .font(.system(.headline, design: .serif).weight(.regular))
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                     .multilineTextAlignment(.center)
-                                Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(habit.unitLabel) this week")
+                                Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(progressUnit) this week")
                                     .font(.caption)
                                     .foregroundStyle(TrainingTheme.textSecondary)
                                     .multilineTextAlignment(.center)
                                     .monospacedDigit()
+                                Text("Counts toward your weekly baseline (\(stat.currentBaseline)/week).")
+                                    .font(.caption2)
+                                    .foregroundStyle(TrainingTheme.textMuted)
+                                    .multilineTextAlignment(.center)
                             }
                             .frame(maxWidth: .infinity)
 
@@ -1375,11 +1382,11 @@ private struct RankChangeRevealView: View {
         switch phase {
         case .summary:
             return change.direction == .up
-                ? "Your past week pushed this skill above its current rank. Tap Reveal to see the new form."
-                : "Your past week pulled this skill below its rank target. Tap Reveal to see the new form."
+                ? "Your past week pushed this skill above its current rank. Tap Reveal to see the new rank."
+                : "Your past week pulled this skill below its rank target. Tap Reveal to see the new rank."
         case .revealing, .resolved:
             return change.direction == .up
-                ? "Your weekly surplus pushed this skill into a stronger form."
+                ? "Your weekly surplus pushed this skill into a higher rank."
                 : "Recent weekly debt pulled this skill down. Keep going and build it back."
         }
     }
@@ -1499,7 +1506,7 @@ private struct RankChangeRevealView: View {
             Button {
                 triggerReveal()
             } label: {
-                Label("Reveal", systemImage: change.direction == .up ? "sparkles" : "cloud.fill")
+                Label("Reveal", systemImage: change.direction == .up ? "sparkles" : "arrow.down.circle.fill")
                     .font(.headline.weight(.bold))
                     .frame(maxWidth: 280)
             }
@@ -1558,9 +1565,13 @@ private struct RankChangeRevealView: View {
                 Spacer(minLength: 8)
                 summaryStat(
                     label: "Final Charge",
-                    value: DashboardChargeDots.summaryLabel(for: resolution.storedChargesAfter)
+                    value: "\(resolution.storedChargesAfter)"
                 )
             }
+
+            Text("Charge resets to 0 after a rank change.")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textSecondary)
 
             if !resolution.summaryText.isEmpty {
                 Text(resolution.summaryText)

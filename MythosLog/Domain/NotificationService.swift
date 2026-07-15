@@ -75,7 +75,7 @@ enum NotificationService {
             schedule(
                 on: center,
                 identifier: "training.skillBehindPace",
-                title: skillsBehindPaceCount == 1 ? "1 skill behind pace" : "\(skillsBehindPaceCount) skills behind pace",
+                title: skillsBehindPaceCount == 1 ? "1 skill behind" : "\(skillsBehindPaceCount) skills behind",
                 body: "A short session now keeps these skills on track for the week.",
                 weekday: 3 + weekdayShift,
                 hour: 18
