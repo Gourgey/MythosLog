@@ -579,36 +579,50 @@ struct DashboardView: View {
         }
     }
 
+    // WS14: highlights can mix kinds (a skill ranking up, another one strong
+    // week from ranking up, another close to a drop) — the card used to show
+    // one pill for whichever kind sorted first and then repeat that kind's
+    // fixed sentence on every row of that kind ("At risk — close to ranking
+    // down" 4 times over). Grouping by kind states each shared fact once, in
+    // its group header, and drops the per-row repeat — except .rankedUp,
+    // whose text varies per skill ("Ranked up to X") and stays on the row.
     private func highlightsCard(_ highlights: [DashboardHighlight]) -> some View {
-        V4Card {
+        let visible = Array(highlights.prefix(4))
+        let orderedKinds: [DashboardHighlight.Kind] = [.rankedUp, .nearRankUp, .losingMomentum]
+        let groups: [(kind: DashboardHighlight.Kind, items: [DashboardHighlight])] = orderedKinds.compactMap { kind in
+            let items = visible.filter { $0.kind == kind }
+            return items.isEmpty ? nil : (kind, items)
+        }
+
+        return V4Card {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("RANK & CHARGE")
-                        .font(.caption.weight(.heavy))
-                        .tracking(2.0)
-                        .foregroundStyle(TrainingTheme.textMuted)
-                    Spacer()
-                    if let topKind = highlights.first?.kind {
-                        topHighlightTagline(for: topKind)
-                    }
-                }
+                Text("RANK & CHARGE")
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
 
                 Divider()
                     .overlay(TrainingTheme.border.opacity(0.5))
 
-                VStack(spacing: 12) {
-                    ForEach(Array(highlights.prefix(4).enumerated()), id: \.element.id) { index, highlight in
-                        Button {
-                            openHighlight(highlight)
-                        } label: {
-                            highlightRow(highlight)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < highlights.prefix(4).count - 1 {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(groups.enumerated()), id: \.offset) { groupIndex, group in
+                        if groupIndex > 0 {
                             Divider()
                                 .overlay(TrainingTheme.border.opacity(0.3))
+                        }
+
+                        highlightGroupHeader(group.kind, count: group.items.count)
+
+                        VStack(spacing: 10) {
+                            ForEach(group.items) { highlight in
+                                Button {
+                                    openHighlight(highlight)
+                                } label: {
+                                    highlightRow(highlight, showsCaption: group.kind == .rankedUp)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
 
@@ -627,28 +641,38 @@ struct DashboardView: View {
         }
     }
 
-    private func topHighlightTagline(for kind: DashboardHighlight.Kind) -> some View {
-        let label: String
-        let tint: Color
-        let icon: String
-        switch kind {
-        case .rankedUp:
-            label = "Gaining ground"
-            tint = TrainingTheme.positiveStrong
-            icon = "arrow.up"
-        case .nearRankUp:
-            label = "Close to ranking up"
-            tint = TrainingArcConfig.color(for: "focus")
-            icon = "bolt.fill"
-        case .losingMomentum:
-            label = "At risk"
-            tint = TrainingTheme.warning
-            icon = "arrow.down"
+    private func highlightGroupHeader(_ kind: DashboardHighlight.Kind, count: Int) -> some View {
+        let tint = highlightGroupTint(kind)
+        return HStack(spacing: 6) {
+            Image(systemName: highlightIcon(kind))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(tint)
+            Text(highlightGroupLabel(kind, count: count))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
         }
-        return V4StatusPill(text: label, tint: tint, systemImage: icon)
     }
 
-    private func highlightRow(_ highlight: DashboardHighlight) -> some View {
+    private func highlightGroupLabel(_ kind: DashboardHighlight.Kind, count: Int) -> String {
+        switch kind {
+        case .rankedUp:
+            return count == 1 ? "Ranked up" : "Ranked up (\(count))"
+        case .nearRankUp:
+            return "One strong week from ranking up (\(count))"
+        case .losingMomentum:
+            return "At risk — close to ranking down (\(count))"
+        }
+    }
+
+    private func highlightGroupTint(_ kind: DashboardHighlight.Kind) -> Color {
+        switch kind {
+        case .rankedUp: return TrainingTheme.positiveStrong
+        case .nearRankUp: return TrainingArcConfig.color(for: "focus")
+        case .losingMomentum: return TrainingTheme.warning
+        }
+    }
+
+    private func highlightRow(_ highlight: DashboardHighlight, showsCaption: Bool) -> some View {
         let accent = TrainingArcConfig.color(for: highlight.colorToken)
         let level = activeStats.first(where: { $0.key == highlight.statKeyRaw })?.rankLevel ?? 0
         return HStack(spacing: 14) {
@@ -675,10 +699,12 @@ struct DashboardView: View {
                         V4LevelBadge(level: level, tint: accent, compact: true)
                     }
                 }
-                Text(highlight.text)
-                    .font(.caption)
-                    .foregroundStyle(TrainingTheme.textSecondary)
-                    .lineLimit(2)
+                if showsCaption {
+                    Text(highlight.text)
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .lineLimit(2)
+                }
             }
 
             Spacer()
