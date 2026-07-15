@@ -735,6 +735,27 @@ and do not "compromise" by half-keeping serif rows.
 
 ## WS10 — P0: Typography — demote the serif to display-only (rule R1)
 
+✅ **DONE — commit `ac99cc3`** (2026-07-15). Converted all row/data-scale serif
+call sites to sans (semibold row titles, `.monospacedDigit()` values) per the
+line list below. Two judgment calls beyond the plan's explicit list: kept
+`SkillDetailView.swift:837` (hero baseline/pace metric) and
+`DashboardView.swift:425`/`:549` (the "Rank changes to review" banner title and
+WEEKLY STANDING ahead/on-pace/behind counts) serif — all four are stat-tile-analog
+readouts rendered once per screen, not repeated rows, so they fall under the same
+carve-out as `V4StatTile`. Also overrode the plan's instruction for
+`HistoryView.swift:369`: re-reading the code showed it renders
+`stat.currentTierName` (e.g. "Practicing") next to a level badge — an actual rank
+title, not a "resolved-week card title" as originally described — so it was kept
+serif per the rank-title carve-out instead of converted. Also converted the
+week-date navigator at `SkillDetailView.swift:755` (not in the original numbered
+list but an italic serif date, squarely R1's "dates go sans" rule) and dropped
+`.italic()` from the two editable text fields in `HabitDetailView.swift`
+(:339/:345) since italic serif on a live-typing field reads oddly once the
+field itself is sans. `grep -rn "design: .serif" MythosLog/Views` now returns
+only `V4Style.swift`, the kept call sites above, `MoreView.swift` (untouched, the
+page the user said works), and `OnboardingFlowView.swift`. 96/96 tests green;
+widget-inclusive app build succeeds.
+
 **What the user sees today**: serif skill names on every Review row, every RANK &
 CHARGE row, every dashboard tile, Manage Skills rows, goal cards, habit-log card
 titles, the "Charge +1" data readout, italic serif dates on History cards — the
@@ -791,6 +812,22 @@ dashboard "No skills yet" / "Reorder Skills", onboarding.
 ---
 
 ## WS11 — P0: Review page consolidation (rules R2, R3, R5)
+
+✅ **DONE — commit `8b5c729`** (2026-07-15). Implemented per the plan: deleted
+the second kicker, replaced the bordered summary card with a flat strip (status
+pill + inline "N behind · N on pace · N at risk" via concatenated `Text` +
+`monospacedDigit()`, still derived from `reviewUrgency`'s disjoint buckets),
+deleted the NEXT MOVES card and moved its log action onto at-risk/behind rows
+(same accessibility label/hint preserved), regrouped the flat 7-row list into
+AT RISK / BEHIND / ON PACE sections with group headers replacing the per-row
+`V4StatusPill`, and slimmed the Last Week card (deleted the recovery chip strip,
+made `verdict.description` conditional on `belowBaseline == 0` so the at-risk
+copy isn't stated twice). Removed the now-dead `ReviewSkillUrgency.icon`/`.tint`/
+`.label(for:)` members (only called by the deleted rows) and added a
+`ReviewUrgencyGroup` enum for the grouping. 96/96 tests green; app builds clean.
+Not yet done as part of this commit: a live simulator walkthrough — deferred to
+the Phase 2 final QA pass (see bottom of this file) so it covers WS10-WS17 in
+one sweep against the current `Screenshots/` set.
 
 **What the user sees today** (top→bottom): kicker "WEEKLY DIAGNOSTIC" → second
 kicker "THIS WEEK · LIVE" → summary card (3 stat tiles + narrative sentence) →
@@ -850,6 +887,22 @@ past-reviews link. The at-risk story is told **three times**.
 
 ## WS12 — P1: Skill detail de-duplication (rules R2, R3, R4)
 
+✅ **DONE — commit `30062dc`** (2026-07-15). Merged CHARGE + NEXT RANK into one
+`progressionSection` (crest shown only when not at max rank, single
+`nextRankStatusLabel` sentence, one help button). Collapsed the two help
+topics into `.progression`, whose `helpBody` concatenates the live charge
+explanation with the next-rank static copy so both stay reachable from one
+(?) tap. Deleted calibration's permanent unit-explainer sentence (its
+guidance now lives in the Recalibrate sheet's existing "Measurement Unit"
+section footer) and deleted `calibrationStatusLabel`/its call entirely — it
+restated the hero's baseline fraction + pace pill. `calibrationSection()`
+dropped its now-unused `snapshot` parameter. Goals empty state is a flat
+sentence instead of a bordered two-line card. The LOG ACTIONS baseline
+caption now renders once above the list for multi-habit skills instead of
+once per card (kept per-card for the single-habit case). 96/96 tests green;
+app builds clean. Live-simulator confirmation deferred to the Phase 2 final
+QA pass (bottom of this file), same as WS11.
+
 **What the user sees today**: hero (rank art + baseline/pace) → week strip →
 CALIBRATION card (permanent explainer sentence + 3 stat cells + status sentence)
 → CHARGE card ("Charge +1" + meter + `nextRankStatusLabel`) → NEXT RANK card
@@ -897,6 +950,20 @@ deleted strings first).
 
 ## WS13 — P1: Dashboard game-grid readability
 
+✅ **DONE — commit `0ad6e29`** (2026-07-15). `RankArtworkView.dashboardBareArtwork`
+now fills whatever space the parent ring gives it and clips both the
+character-image and icon-fallback branches to the same `Circle()` (confirmed
+via grep that `.dashboardBare` is only used by the game-grid tile, so this
+doesn't touch the compact/detailed layouts). The tile name label's gutter is
+now symmetric (`.padding(.horizontal, 26)`, was trailing-only) so the
+top-leading attention dot/unmatched badge and the top-trailing rank badge both
+clear the name and it reads centered. The charge meter dims to 60% opacity at
+charge 0 so charged tiles stand out. Did not fork or touch the WS6 shared
+meter component itself, per the plan's guardrail. 96/96 tests green; app
+builds clean. Live simulator confirmation (including the AX5 honeycomb
+collision spot-check the plan calls for) deferred to the Phase 2 final QA
+pass, same as WS11/WS12.
+
 **What the user sees today**: two tiles have full illustrated characters
 (Creativity, Strength) while five have flat SF-symbol crests at a visibly
 different scale; the attention dot touches the first letter of the name
@@ -935,6 +1002,16 @@ check).
 
 ## WS14 — P1: "This Week" sheet de-duplication (rules R2, R5)
 
+✅ **DONE — commit `244354c`** (2026-07-15). Confirmed via the domain code
+(`computeDashboardHighlights` in `TrainingStore+Insights.swift`) that the
+highlight list genuinely mixes kinds, so implemented the plan's fallback:
+grouped visible rows by kind with one header per group stating the shared
+fact once, kept the per-row caption only for `.rankedUp` (its text varies per
+skill), and removed the single top-right tagline pill (it could only reflect
+one kind and became redundant/misleading once groups had their own headers).
+The existing "prefix(4) + un-silenced +N more" truncation from WS4.6 is
+unchanged. 96/96 tests green; app builds clean.
+
 `DashboardView.swift` `statsSheet` :237 / `weeklyStatusCardBody` :481 /
 `highlightsCard` :582.
 
@@ -956,6 +1033,21 @@ check).
 ---
 
 ## WS15 — P2: History page polish
+
+✅ **DONE — commit `396017c`** (2026-07-15). Dropped the in-scroll serif
+"History" hero (kept the kicker), matching Review/Goals which have no
+in-scroll hero above the nav title. **Deviated from the plan's chart
+instruction after reading the actual code**: `statChart` already tints its
+actual-value bars with the skill's accent via `.gradient` — the "flat dark
+ink" the screenshot showed was the neutral baseline reference `LineMark`,
+visible on its own only because that particular week's actual values were
+all zero (invisible zero-height bars), not a missing tint. Retinting that
+reference line would have made it indistinguishable from the accent-colored
+bars it's meant to contrast against, so instead added a soft accent-tinted
+`.chartPlotStyle` background wash behind the whole plot — keeps the skill's
+identity present even in a zero-activity week without touching the
+actual/baseline color distinction. Pure visual change. 96/96 tests green;
+app builds clean.
 
 `HistoryView.swift`.
 
@@ -983,6 +1075,14 @@ skill accent; switching skills in the picker re-tints the chart.
 
 ## WS16 — P2: Settings — knit into the app's visual language
 
+✅ **DONE — commit `f64c242`** (2026-07-15). Added
+`.tint(TrainingArcConfig.color(for: "focus"))` to the `List` root — the same
+generic accent `OnboardingFlowView` already uses for non-skill-specific
+controls. Confirmed the Workout Types disclosure-group toggles are in the
+same `List` hierarchy (not a separate pushed view), so one tint covers them
+too; no per-control changes needed. Left copy/structure/footers untouched
+per the plan. 96/96 tests green; app builds clean.
+
 `SettingsView.swift`. The page is stock-iOS (green toggles) inside a parchment
 app. Minimal knit, not a redesign:
 
@@ -1000,6 +1100,17 @@ against `Screenshot …14.06.17.png`/`14.06.22.png`); everything else pixel-same
 ---
 
 ## WS17 — P2: Goals page balance
+
+✅ **DONE — commit `e82a01d`** (2026-07-15). Section headers ("ACTIVE") now
+only render when `nonEmptyGoalGroupCount > 1` — a single-group screen relies
+on the page kicker alone, matching the plan's intent; multi-group screens
+keep headers since they're then load-bearing. The progress bar now clamps to
+a minimum 3pt accent fill at 0% instead of a literal zero-width bar.
+Investigated the footer-link item: grepped the codebase and confirmed no
+goals-affect-pacing explainer sheet exists anywhere (only a Settings toggle
+with its own inline description) — per the plan's explicit fallback, skipped
+building new navigation; the existing per-card "Tracking only…" caption
+already covers it. 96/96 tests green; app builds clean.
 
 `GoalsView.swift`. The page is one card floating in a full screen of empty
 parchment (opposite problem from Review).
