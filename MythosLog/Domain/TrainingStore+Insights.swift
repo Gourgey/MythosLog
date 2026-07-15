@@ -527,7 +527,13 @@ extension TrainingStore {
             }
 
         if rankUps.isEmpty == false {
-            bullets.append("Rank gains landed in \(rankUps.map(\.statName).joined(separator: ", ")).")
+            let gainsBySkill = Dictionary(grouping: rankUps, by: \.statName)
+            bullets.append(contentsOf: gainsBySkill.keys.sorted().map { statName in
+                let count = gainsBySkill[statName]?.count ?? 0
+                return count == 1
+                    ? "\(statName) gained a rank."
+                    : "\(statName) gained \(count) ranks."
+            })
         }
 
         if bullets.isEmpty {

@@ -1325,7 +1325,15 @@ private struct DashboardPresentationModifier: ViewModifier {
                     DashboardInsightSheet(
                         option: insight,
                         settings: settings,
-                        modelContext: modelContext
+                        modelContext: modelContext,
+                        onLogStat: { stat in
+                            guard let habit = TrainingStore.primaryHabit(for: stat) else { return }
+                            presentedInsight = nil
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(300))
+                                presentedLogDraft = LogEntryDraft(habit: habit)
+                            }
+                        }
                     )
                 }
                 .presentationDetents([.medium, .large])
@@ -1717,10 +1725,12 @@ private struct CenteredDashboardGridLayout: Layout {
 
 private struct DashboardInsightSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Query private var stats: [StatDomain]
 
     let option: DashboardInsightOption
     let settings: AppSettings?
     let modelContext: ModelContext
+    let onLogStat: (StatDomain) -> Void
 
     private var workAnalysis: WorkFocusAnalysis {
         (try? TrainingStore.workFocusAnalysis(context: modelContext, settings: settings)) ??
@@ -1761,19 +1771,31 @@ private struct DashboardInsightSheet: View {
 
                 SurfaceCard(accent: accent) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Insights")
+                        Text(option == .standardDay ? "Tips" : "Insights")
                             .font(.headline)
                             .foregroundStyle(TrainingTheme.textPrimary)
 
                         ForEach(bullets, id: \.self) { bullet in
-                            HStack(alignment: .top, spacing: 10) {
-                                Circle()
-                                    .fill(accent)
-                                    .frame(width: 8, height: 8)
-                                    .padding(.top, 6)
-                                Text(bullet)
-                                    .font(.subheadline)
-                                    .foregroundStyle(TrainingTheme.textSecondary)
+                            if let stat = workStat(for: bullet) {
+                                Button {
+                                    onLogStat(stat)
+                                } label: {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        insightBullet(bullet)
+                                        Spacer(minLength: 8)
+                                        Text(logActionTitle(for: stat))
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(accent)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Capsule().fill(accent.opacity(0.12)))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(logActionTitle(for: stat)) \(stat.name)")
+                                .accessibilityHint(bullet)
+                            } else {
+                                insightBullet(bullet)
                             }
                         }
                     }
@@ -1833,6 +1855,30 @@ private struct DashboardInsightSheet: View {
             return monthlyAnalysis.improvedSkills
         case .standardDay:
             return standardDayAnalysis.suggestions
+        }
+    }
+
+    private func workStat(for bullet: String) -> StatDomain? {
+        guard option == .whatToWorkOn,
+              let name = bullet.split(separator: ":", maxSplits: 1).first.map(String.init)
+        else { return nil }
+        return stats.first { $0.isActive && $0.name == name }
+    }
+
+    private func logActionTitle(for stat: StatDomain) -> String {
+        TrainingStore.primaryHabit(for: stat)?.measurementType == .booleanSession ? "Log" : "Update"
+    }
+
+    private func insightBullet(_ bullet: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(accent)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+            Text(bullet)
+                .font(.subheadline)
+                .foregroundStyle(TrainingTheme.textSecondary)
+                .multilineTextAlignment(.leading)
         }
     }
 }
