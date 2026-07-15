@@ -16,6 +16,14 @@ struct GoalsView: View {
     private var pausedGoals: [Goal] { goals.filter { $0.status == .paused } }
     private var archivedGoals: [Goal] { goals.filter { $0.status == .archived || $0.status == .failed } }
 
+    // WS17: with only one status group on screen, its section label ("ACTIVE")
+    // is a third layer of chrome stacked under the page kicker for a single
+    // card — the kicker already sets the context. Section labels earn their
+    // place once there's more than one group to tell apart.
+    private var nonEmptyGoalGroupCount: Int {
+        [activeGoals, pausedGoals, completedGoals, archivedGoals].filter { !$0.isEmpty }.count
+    }
+
     var body: some View {
         // `GoalCardView` used to recompute `TrainingStore.goalProgress(for:context:)`
         // itself (an @Environment-fetched context) — each access fetched the
@@ -40,17 +48,18 @@ struct GoalsView: View {
                     if goals.isEmpty {
                         emptyState
                     } else {
+                        let showsSectionHeaders = nonEmptyGoalGroupCount > 1
                         if !activeGoals.isEmpty {
-                            section(title: "Active", goals: activeGoals, inputs: inputs)
+                            section(title: "Active", goals: activeGoals, inputs: inputs, showsHeader: showsSectionHeaders)
                         }
                         if !pausedGoals.isEmpty {
-                            section(title: "Paused", goals: pausedGoals, inputs: inputs)
+                            section(title: "Paused", goals: pausedGoals, inputs: inputs, showsHeader: showsSectionHeaders)
                         }
                         if !completedGoals.isEmpty {
-                            section(title: "Completed", goals: completedGoals, inputs: inputs)
+                            section(title: "Completed", goals: completedGoals, inputs: inputs, showsHeader: showsSectionHeaders)
                         }
                         if !archivedGoals.isEmpty {
-                            section(title: "Archived", goals: archivedGoals, inputs: inputs)
+                            section(title: "Archived", goals: archivedGoals, inputs: inputs, showsHeader: showsSectionHeaders)
                         }
                     }
                 }
@@ -163,12 +172,14 @@ struct GoalsView: View {
         }
     }
 
-    private func section(title: String, goals: [Goal], inputs: TrainingStore.GoalProgressInputs) -> some View {
+    private func section(title: String, goals: [Goal], inputs: TrainingStore.GoalProgressInputs, showsHeader: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title.uppercased())
-                .font(.caption.weight(.heavy))
-                .tracking(2.0)
-                .foregroundStyle(TrainingTheme.textMuted)
+            if showsHeader {
+                Text(title.uppercased())
+                    .font(.caption.weight(.heavy))
+                    .tracking(2.0)
+                    .foregroundStyle(TrainingTheme.textMuted)
+            }
 
             ForEach(goals) { goal in
                 GoalCardView(goal: goal, progress: TrainingStore.goalProgress(for: goal, inputs: inputs)) {
@@ -269,12 +280,17 @@ private struct GoalCardView: View {
 
     private var progressBar: some View {
         GeometryReader { proxy in
+            // A 0%-progress goal rendered a literal empty track — same gray
+            // as an unstyled placeholder. A small accent spark at the
+            // leading edge (WS17) reads as "an accent-colored bar at zero"
+            // instead of "nothing drawn here yet".
+            let fillWidth = max(proxy.size.width * progress.progressRatio, 3)
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(TrainingTheme.backgroundTertiary.opacity(0.4))
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(accent)
-                    .frame(width: proxy.size.width * progress.progressRatio)
+                    .frame(width: fillWidth)
             }
         }
         .frame(height: 8)
