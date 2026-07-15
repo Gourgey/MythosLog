@@ -94,7 +94,7 @@ struct HabitDetailView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(MetricFormatting.metric(log.numericValue, unit: habit.unitLabel))
-                                    .font(.system(.subheadline, design: .serif).weight(.regular))
+                                    .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                     .monospacedDigit()
                                 Spacer()
@@ -291,7 +291,8 @@ struct LogEntrySheetView: View {
                             TextField("0", value: $workingDraft.value, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
-                                .font(.system(.title3, design: .serif).weight(.regular))
+                                .font(.title3.weight(.semibold))
+                                .monospacedDigit()
                                 .focused($focusedField, equals: .amount)
                                 .frame(maxWidth: 120)
                             Text(habit.unitLabel)
@@ -336,14 +337,12 @@ struct LogEntrySheetView: View {
                         .focused($focusedField, equals: .sessionType)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
-                        .font(.system(.subheadline, design: .serif))
-                        .italic()
+                        .font(.subheadline)
 
                     TextField("Notes (optional)", text: $workingDraft.note, axis: .vertical)
                         .focused($focusedField, equals: .note)
                         .lineLimit(2...4)
-                        .font(.system(.subheadline, design: .serif))
-                        .italic()
+                        .font(.subheadline)
                 }
             }
             .padding(.horizontal, 20)

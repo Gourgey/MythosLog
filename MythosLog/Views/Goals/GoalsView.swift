@@ -155,7 +155,7 @@ struct GoalsView: View {
     private func explainerRow(title: String, body: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(.subheadline, design: .serif).weight(.regular))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(TrainingTheme.textPrimary)
             Text(body)
                 .font(.footnote)
@@ -204,7 +204,7 @@ private struct GoalCardView: View {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(goal.displayTitle)
-                                .font(.system(.headline, design: .serif).weight(.regular))
+                                .font(.headline.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textPrimary)
                             Text(subtitle)
                                 .font(.caption.weight(.semibold))

@@ -67,7 +67,7 @@ struct RankChangesReviewView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text(stat.name)
-                                .font(.system(.headline, design: .serif).weight(.regular))
+                                .font(.headline.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textPrimary)
                             Spacer()
                             HStack(spacing: 6) {

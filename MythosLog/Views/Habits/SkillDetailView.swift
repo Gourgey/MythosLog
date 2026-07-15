@@ -505,7 +505,7 @@ struct SkillDetailView: View {
                 V4Card(accent: accent) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("No growth goal set. \(stat.name) is currently only tracking your weekly baseline.")
-                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .font(.subheadline)
                             .foregroundStyle(TrainingTheme.textPrimary)
                         Text("Create a goal when you want to push beyond your current weekly normal.")
                             .font(.caption)
@@ -549,8 +549,9 @@ struct SkillDetailView: View {
                 Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                 Text(snapshot.bankedChargeLabel)
-                    .font(.system(.title3, design: .serif).weight(.regular))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
+                    .monospacedDigit()
 
                 chargeDots(snapshot: snapshot)
                     .frame(maxWidth: .infinity)
@@ -653,7 +654,7 @@ struct SkillDetailView: View {
                         VStack(spacing: 12) {
                             VStack(spacing: 4) {
                                 Text(habit.name)
-                                    .font(.system(.headline, design: .serif).weight(.regular))
+                                    .font(.headline.weight(.semibold))
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                     .multilineTextAlignment(.center)
                                 Text("\(MetricFormatting.shortMetric(TrainingStore.total(for: habit, in: TrainingStore.currentWeekInterval(settings: settings)))) / \(MetricFormatting.shortMetric(habit.targetPerPeriod)) \(progressUnit) this week")
@@ -752,8 +753,7 @@ struct SkillDetailView: View {
 
                     VStack(spacing: 2) {
                         Text(selectedWeek.displayTitle)
-                            .font(.system(.subheadline, design: .serif).weight(.regular))
-                            .italic()
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(TrainingTheme.textPrimary)
                         Text("\(snapshot.weeklyCounterValueLabel) logged")
                             .font(.caption2.weight(.semibold))
@@ -1036,8 +1036,9 @@ private struct WeekDaySummaryView: View {
                     tint: summary.totalValue > 0 ? accent : TrainingTheme.textMuted.opacity(0.7)
                 )
                 Text(String(Calendar.current.component(.day, from: summary.date)))
-                    .font(.system(.headline, design: .serif).weight(.regular))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
+                    .monospacedDigit()
                 Text(MetricFormatting.weekday(summary.date))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textSecondary)

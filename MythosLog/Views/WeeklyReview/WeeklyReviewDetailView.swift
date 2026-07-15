@@ -320,7 +320,7 @@ struct WeeklyReviewDetailView: View {
                     .tracking(1.4)
                     .foregroundStyle(TrainingTheme.textMuted)
                 Text(value)
-                    .font(.system(.subheadline, design: .serif).weight(.regular))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .multilineTextAlignment(.leading)
             }
@@ -363,7 +363,7 @@ struct WeeklyReviewDetailView: View {
                 ForEach(Array(healthOverlapWarnings.prefix(4)), id: \.workoutUUID) { workout in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(healthWarningTitle(for: workout))
-                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(TrainingTheme.textPrimary)
                         Text(healthWarningDetail(for: workout))
                             .font(.caption)
@@ -448,7 +448,7 @@ struct WeeklyReviewDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(resolution.statName)
-                        .font(.system(.headline, design: .serif).weight(.regular))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(TrainingTheme.textPrimary)
                     Spacer()
                     V4LevelBadge(level: resolution.levelAfter, tint: accent, compact: true)
@@ -491,7 +491,7 @@ struct WeeklyReviewDetailView: View {
                 .tracking(1.4)
                 .foregroundStyle(TrainingTheme.textMuted)
             Text(value)
-                .font(.system(.title3, design: .serif).weight(.regular))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(tint)
                 .monospacedDigit()
                 .lineLimit(1)

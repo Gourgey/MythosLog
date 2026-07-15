@@ -669,7 +669,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(highlight.statName)
-                        .font(.system(.headline, design: .serif).weight(.regular))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(TrainingTheme.textPrimary)
                     if level > 0 {
                         V4LevelBadge(level: level, tint: accent, compact: true)
@@ -1433,7 +1433,7 @@ private struct GameDashboardTile: View {
     private var tileContent: some View {
             VStack(spacing: 7) {
                 Text(stat.name)
-                    .font(.system(size: 15, weight: .regular, design: .serif))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)

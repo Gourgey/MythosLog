@@ -242,7 +242,7 @@ struct HistoryView: View {
                             .tracking(1.6)
                             .foregroundStyle(TrainingTheme.textMuted)
                         Text(best)
-                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(TrainingTheme.positiveStrong)
                     }
                 }
@@ -253,7 +253,7 @@ struct HistoryView: View {
                             .tracking(1.6)
                             .foregroundStyle(TrainingTheme.textMuted)
                         Text(worst)
-                            .font(.system(.subheadline, design: .serif).weight(.regular))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(TrainingTheme.warning)
                     }
                 }
@@ -403,8 +403,7 @@ struct HistoryView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(WeekRange(start: resolution.weekStartDate, end: resolution.weekEndDate).displayTitle)
-                                    .font(.system(.subheadline, design: .serif).weight(.regular))
-                                    .italic()
+                                    .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(TrainingTheme.textPrimary)
                                 Spacer()
                                 V4LevelBadge(level: resolution.levelAfter, tint: accent, compact: true)

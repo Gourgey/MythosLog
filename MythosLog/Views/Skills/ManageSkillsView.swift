@@ -79,7 +79,7 @@ struct ManageSkillsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(stat.name)
-                        .font(.system(.headline, design: .serif).weight(.regular))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(isActive ? TrainingTheme.textPrimary : TrainingTheme.textSecondary)
                     if !stat.isCore {
                         Text("OPTIONAL")
