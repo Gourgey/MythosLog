@@ -196,10 +196,16 @@ struct RankArtworkView: View {
         }
     }
 
+    // Skills without commissioned artwork fall back to a crest built from
+    // the skill's own icon and its current rank title — never a literal
+    // "Placeholder" label, which previously shipped verbatim on the rank-
+    // change ceremony (the single most emotionally loaded screen in the
+    // app) and on the skill detail hero.
     private var placeholderArtwork: some View {
         VStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 96, weight: .light))
+            Image(systemName: statFallbackIcon)
+                .font(.system(size: 88, weight: .light))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(
                     LinearGradient(
                         colors: [accent.opacity(0.95), .white.opacity(0.7)],
@@ -208,7 +214,7 @@ struct RankArtworkView: View {
                     )
                 )
 
-            Text("Placeholder Artwork")
+            Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(TrainingTheme.textSecondary)
         }
@@ -218,8 +224,9 @@ struct RankArtworkView: View {
 
     private var compactPlaceholderArtwork: some View {
         VStack(spacing: 10) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 34, weight: .light))
+            Image(systemName: statFallbackIcon)
+                .font(.system(size: 30, weight: .light))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(
                     LinearGradient(
                         colors: [accent.opacity(0.92), .white.opacity(0.72)],
@@ -228,9 +235,11 @@ struct RankArtworkView: View {
                     )
                 )
 
-            Text("Placeholder")
+            Text(title)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(TrainingTheme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(
@@ -377,8 +386,9 @@ struct RankArtworkView: View {
                             .strokeBorder(TrainingTheme.borderStrong.opacity(0.20), lineWidth: 1)
                     )
 
-                Text(habitInitial)
-                    .font(.system(size: crestSize * 0.42, design: .rounded).weight(.black))
+                Image(systemName: statFallbackIcon)
+                    .font(.system(size: crestSize * 0.4, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(accent.opacity(0.88))
             }
             .frame(width: crestSize, height: crestSize)

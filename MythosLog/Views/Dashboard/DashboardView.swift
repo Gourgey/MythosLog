@@ -1423,7 +1423,7 @@ private struct GameDashboardTile: View {
                     Text("·")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(TrainingTheme.textMuted)
-                    Text("L\(V4Style.displayNumber(snapshot.rank.level))")
+                    Text("LV \(V4Style.displayNumber(snapshot.rank.level))")
                         .font(.caption.weight(.heavy))
                         .foregroundStyle(accent)
                         .lineLimit(1)

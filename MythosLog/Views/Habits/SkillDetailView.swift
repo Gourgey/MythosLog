@@ -1446,7 +1446,10 @@ private struct RankChangeRevealView: View {
                     accent: highlight,
                     style: .compact
                 )
-                .overlay(alignment: .top) {
+                .overlay(alignment: .topTrailing) {
+                    // topTrailing (not .top) so this doesn't sit on top of
+                    // the "LV n" pill, which RankArtworkView's .compact
+                    // style renders at topLeading.
                     Image(systemName: change.direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                         .font(.system(size: 44, weight: .black))
                         .foregroundStyle(highlight)
@@ -1455,7 +1458,7 @@ private struct RankChangeRevealView: View {
                                 .fill(.white)
                                 .frame(width: 50, height: 50)
                         )
-                        .offset(y: -22)
+                        .offset(x: 12, y: -18)
                 }
                 .transition(.opacity)
             }
@@ -1521,11 +1524,11 @@ private struct RankChangeRevealView: View {
 
     private var deltaPills: some View {
         HStack(spacing: 10) {
-            rankDeltaPill(title: "From", value: "Lv \(change.fromLevel)\n\(change.fromTitle)")
+            rankDeltaPill(title: "From", value: "LV \(change.fromLevel)\n\(change.fromTitle)")
             Image(systemName: change.direction == .up ? "arrow.right" : "arrow.right")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(highlight)
-            rankDeltaPill(title: "To", value: "Lv \(change.toLevel)\n\(change.toTitle)")
+            rankDeltaPill(title: "To", value: "LV \(change.toLevel)\n\(change.toTitle)")
         }
     }
 
