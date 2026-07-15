@@ -5,6 +5,12 @@ screenshot audit (25 screenshots in `Screenshots/`, cross-verified against sourc
 Written for an implementing agent with **no prior conversation context**. Read this
 whole file before touching code.
 
+> **STATUS**: Phase 1 (WS1–WS9) is ✅ COMPLETE — every workstream below carries its
+> commit hash. **Phase 2 (WS10–WS17), appended at the bottom of this file, is the
+> active work.** It comes from a fresh 2026-07-15 screenshot design review (15
+> screenshots in `Screenshots/`). Phase 1 sections remain as context and as the
+> source of the ground rules; do not redo them.
+
 ---
 
 ## 0. Project context & ground rules
@@ -653,3 +659,398 @@ ratio normalization as a separately specified and regression-tested domain chang
 - WS9 = report only, appended here.
 - One commit per workstream, tests green at every commit, this file updated with a
   ✅ + commit hash per workstream as you land them.
+
+---
+---
+
+# PHASE 2 — Design polish pass (2026-07-15 screenshot review)
+
+Source: 15 fresh screenshots in `Screenshots/` (taken 2026-07-15, post-WS1–WS9)
+reviewed with the user. This phase is **aesthetic/structural**, not defect-driven:
+the Phase 1 bugs are fixed; the app now *works* but reads as visually clogged.
+All Phase 1 ground rules apply unchanged (section 0 above): classic pbxproj (avoid
+new files), 96 tests must stay green (grep tests before changing user-facing
+strings), CloudKit constraints, seed via Settings → Debug Tools, one commit per
+workstream (`WS<N> (<short name>): <headline fix>`), update this file with ✅ +
+hash per workstream.
+
+## User's design verdict (verbatim intent — this is the brief)
+
+1. **"The traditional roman font is a bit too much on pages like the Review page,
+   but works nicely on the More page."** → The serif face is over-deployed. It
+   works at *display* scale (More page "Apprentice", skill detail "Novice") and
+   fails at *row/data* scale (Review skill rows, list items, data values).
+2. **"Make the information more attractive to view. It seems clogged on many
+   pages, and prevents it from being more easily read."** → The density problem
+   was diagnosed with the user as: (a) the same information rendered 2–3× per
+   screen, (b) every section wrapped in a bordered card with a letterspaced
+   uppercase header, (c) permanent inline explanatory prose, (d) status-pill
+   fatigue (every row alarmed → nothing stands out).
+
+These two decisions are **already made by the user** — do not re-litigate them,
+and do not "compromise" by half-keeping serif rows.
+
+## Phase 2 design rules (apply everywhere; each WS cites them)
+
+- **R1 — Serif is for identity, sans is for information.** The serif face may
+  appear on: page/hero titles (`V4SerifTitle`), rank titles ("Novice", "Steady
+  Trainee", "Apprentice"), weekly verdict titles ("At Risk", "Held Form"), and
+  onboarding display text. Everywhere else — list-row titles, card row labels,
+  data values, dates, button labels — use the sans system font (semibold for row
+  titles, `.monospacedDigit()` for numbers). `V4LevelBadge`'s small serif numeral
+  and `V4StatTile`'s serif value are **kept** (signature elements, and the user
+  approves the pages that lean on them — More, History overview, skill hero).
+- **R2 — Say it once.** A fact (skill X is at risk / needs N more / will unlock Y)
+  appears at most once per screen. Where two surfaces on one screen currently
+  repeat it, keep the more actionable surface and delete the other.
+- **R3 — Cards earn their border.** A bordered `V4Card` + uppercase header is for
+  the 1–3 primary blocks of a screen. Secondary content (lists, link rows,
+  captions) sits directly on the background or in a single flat group. Never nest
+  a bordered card inside a bordered card.
+- **R4 — Explanations are on-demand.** Persistent captions that explain mechanics
+  ("Strength is measured in sessions. Edit this if…", "Off by default. When
+  on…") move behind the existing `(?)`/help affordances or a `footer`-style
+  single line. First-run copy is fine; permanent copy is not.
+- **R5 — Alarm once, not per row.** When several rows share the same status, the
+  status is expressed by grouping (one header per status group), not by repeating
+  an identical pill on every row.
+
+## Key files for Phase 2 (line numbers verified 2026-07-15 — re-grep before editing)
+
+| Surface | File / anchor |
+|---|---|
+| Shared style kit | `MythosLog/Views/Components/V4Style.swift` (`V4SerifTitle` :199, `V4StatTile` :127, `V4Card` :151, `V4PageKicker` :19, `V4StatusPill` :95) |
+| Review tab | `MythosLog/Views/WeeklyReview/WeeklyReviewView.swift` (summary card :158, NEXT MOVES card :184, skill rows :256 — serif row title :276, urgency enum :635) |
+| Skill detail | `MythosLog/Views/Habits/SkillDetailView.swift` (hero :317, calibration :386 — caption :414, charge card :530 — serif value :552, next-rank card :566, goals empty state serif :508, log-action habit name serif :656) |
+| Dashboard game grid | `MythosLog/Views/Dashboard/DashboardView.swift` (`GameDashboardTile` :1386 — serif tile name :1436; honeycomb :861; RANK & CHARGE highlights card :582 — serif row name :672; This Week sheet `statsSheet` :237, `weeklyStatusCardBody` :481) |
+| History | `MythosLog/Views/History/HistoryView.swift` (double title :130–137, overall grid :197, serif strongest/neglected :245/:256, chart + resolved rows :360–410) |
+| Goals | `MythosLog/Views/Goals/GoalsView.swift` (serif empty body :158, serif goal row title :207) |
+| Manage Skills | `MythosLog/Views/Skills/ManageSkillsView.swift` (serif row :82) |
+| Weekly detail | `MythosLog/Views/WeeklyReview/WeeklyReviewDetailView.swift` (serif :323, :366, :451, :494) |
+| Habit detail | `MythosLog/Views/Habits/HabitDetailView.swift` (serif :97, :294, :339, :345) |
+| Rank ceremony | `MythosLog/Views/Dashboard/RankChangesReviewView.swift` (serif :70) |
+| Settings | `MythosLog/Views/Settings/SettingsView.swift` (Toggles :205–296) |
+
+---
+
+## WS10 — P0: Typography — demote the serif to display-only (rule R1)
+
+**What the user sees today**: serif skill names on every Review row, every RANK &
+CHARGE row, every dashboard tile, Manage Skills rows, goal cards, habit-log card
+titles, the "Charge +1" data readout, italic serif dates on History cards — the
+"wine list" effect.
+
+**Change** (mechanical; each bullet is a font-swap at the cited line, replacing
+`.font(.system(.headline/.subheadline/…, design: .serif)…)` with the sans
+equivalent — use `.font(.headline.weight(.semibold))` for row titles,
+`.font(.subheadline.weight(.semibold))` for sub-rows, keep existing colors):
+
+1. `WeeklyReviewView.swift:276` — Review skill-row name → sans semibold.
+2. `DashboardView.swift:672` — RANK & CHARGE highlight row name → sans semibold.
+3. `DashboardView.swift:1436` — `GameDashboardTile` name → `.subheadline` sans
+   semibold (size ≈15 already; keep `minimumScaleFactor`).
+4. `DashboardView.swift:425` and `:549` — grep these two serif uses (header-card
+   greeting / insight titles); if they are row/data scale per R1, convert; if they
+   are the screen's single hero, keep. Judge against R1, note the decision in the
+   commit message.
+5. `ManageSkillsView.swift:82` — skill row name → sans semibold.
+6. `GoalsView.swift:207` — goal row title → sans semibold; `GoalsView.swift:158`
+   — empty-state body copy → plain `.subheadline` sans (body copy was never a
+   title).
+7. `SkillDetailView.swift:508` — "No growth goal set…" body copy → sans
+   `.subheadline`; `:656` — habit/log-action card name → sans semibold; `:552` —
+   the "Charge +1" value → sans `.title3.weight(.semibold)` with
+   `.monospacedDigit()` (it is a data readout); `:1039` — grep context, same rule.
+8. `HistoryView.swift:245`, `:256` — STRONGEST / MOST NEGLECTED skill names →
+   sans semibold (keep tint); `:369`, `:406` — resolved-week card titles/dates →
+   sans semibold, drop any `.italic()`.
+9. `WeeklyReviewDetailView.swift:323`, `:366`, `:451`, `:494` — per-skill card
+   titles and narrative lines → sans (the verdict `V4SerifTitle` at :202 stays).
+10. `HabitDetailView.swift:97`, `:294`, `:339`, `:345` — row-scale serif → sans
+    (`V4SerifTitle` heroes at :43/:272 stay).
+11. `RankChangesReviewView.swift:70` — grep context; ceremony *rank titles* stay
+    serif, list-row text goes sans.
+12. `SkillDetailView.swift:451` (calibration number cells) — **keep serif**
+    (stat-tile parity with More, R1 carve-out). `V4LevelBadge`, `V4StatTile`,
+    all `V4SerifTitle` call sites, and `OnboardingFlowView` — **keep**.
+
+**Explicitly kept serif surfaces** (so the diff reviewer can check intent):
+skill detail rank title (:330) and next-rank title (:604), More page (all
+current uses — the user singled this page out as working), History `V4SerifTitle`
+empty state, Review last-week verdict (:437), weekly-detail verdict (:202),
+dashboard "No skills yet" / "Reorder Skills", onboarding.
+
+**Acceptance**:
+- `grep -rn "design: .serif" MythosLog/Views` returns ONLY: V4Style.swift
+  (components), the kept call sites listed above, and OnboardingFlowView.
+- Review page shows zero serif below the verdict title; dashboard tiles, Manage
+  Skills, Goals rows all sans.
+- No test asserts on fonts (they don't), but run the full suite anyway; build the
+  widget target (it may share components).
+
+---
+
+## WS11 — P0: Review page consolidation (rules R2, R3, R5)
+
+**What the user sees today** (top→bottom): kicker "WEEKLY DIAGNOSTIC" → second
+kicker "THIS WEEK · LIVE" → summary card (3 stat tiles + narrative sentence) →
+NEXT MOVES card (top-3 behind/at-risk skills with Update buttons) → full 7-row
+skill list (same skills again, same "needs N more" copy, a pill on every row) →
+LAST WEEK kicker → verdict card ("At Risk", "6 skills need recovery", narrative,
+4 recovery chips + "+2 more" — the same skills a third time — and a big CTA) →
+past-reviews link. The at-risk story is told **three times**.
+
+**Target structure** (one screen, ~half the vertical space):
+
+1. **One kicker**: keep `V4PageKicker(title: "Weekly Diagnostic")` (:79), delete
+   the second kicker "This Week · Live" (:131) — two eyebrows on one screen is
+   noise (R3).
+2. **Summary strip, not a card**: replace `thisWeekSummaryCard` (:158) with a
+   compact flat header: the `V4StatusPill` headline + the three counts rendered
+   inline in sans (e.g. "3 behind · 0 on pace · 4 at risk" with tinted numbers) +
+   the single `diagnosticSummaryText` sentence. No `V4Card` border, no
+   letterspaced "THIS WEEK" header. Counts stay derived from `reviewUrgency`
+   (WS4.3's disjoint-bucket fix — do not regress it; the three numbers must still
+   sum to the skill count).
+3. **Delete the NEXT MOVES card entirely** (`recoveryPlannerCard` :184 and
+   `recoveryTaskRow` :214). Its content is a strict subset of the skill list. Its
+   one unique feature — the direct log/Update action — **moves onto the list
+   rows** (next point). Remove `recoveryItems` (:122) if now unused.
+4. **One grouped skill list** replacing the flat 7-row card (:142–154), grouped
+   by urgency with flat group headers (R5): "AT RISK (n)", "BEHIND (n)",
+   "ON PACE (n)" (merge `.steady` + `.complete` into the last group; skip empty
+   groups). Within a group, rows keep icon + name (sans, per WS10) + the
+   `progressLine` metric, and **drop the per-row `V4StatusPill`** (:288) — the
+   group header now carries the status. Rows in the AT RISK and BEHIND groups
+   gain a trailing compact log button (reuse `logActionTitle(for:)` :359 and
+   `openSkill(_:openLogSheet: true)` :363 — the exact behavior the deleted NEXT
+   MOVES rows had, including their `accessibilityLabel`/`accessibilityHint`;
+   WS7's VoiceOver guarantees must survive the move). Tapping the row body still
+   opens the skill detail (openLogSheet: false).
+5. **Slim the Last Week card** (`resolvedSummaryCard` :412): keep verdict
+   `V4SerifTitle` + icon + the "n skills need recovery" line + the CTA button.
+   **Delete the recovery chip strip** (`recoveryChipStrip` :491,
+   `recoveryChip` :514, `recoveryMoreChip` :541) — third rendering of the same
+   skills (R2); the CTA already goes to the full breakdown. Also delete the
+   `verdict.description` sentence if the "n skills need recovery" line is present
+   (two summaries of one fact).
+6. Keep `pastReviewsLink`, the explainer sheet, and the empty states as-is.
+
+**Acceptance**:
+- Each skill name appears exactly **once** on the Review screen (excluding the
+  summary sentence's single named skill).
+- Zero `V4StatusPill` per-row instances in the skill list; group headers carry
+  status. At-risk/behind rows have a working, VoiceOver-labeled log action.
+- The three summary counts still sum to the active-skill count (Seed Stagnating:
+  7).
+- Grep the test suite for strings you delete (e.g. "still needed to protect") —
+  `taskText(for:)` remains used by `diagnosticSummaryText`; keep it.
+
+---
+
+## WS12 — P1: Skill detail de-duplication (rules R2, R3, R4)
+
+**What the user sees today**: hero (rank art + baseline/pace) → week strip →
+CALIBRATION card (permanent explainer sentence + 3 stat cells + status sentence)
+→ CHARGE card ("Charge +1" + meter + `nextRankStatusLabel`) → NEXT RANK card
+(crest + "LOCKED · LV 4" + title + **the same `nextRankStatusLabel` again**,
+:558 and :605) → GOALS → LOG ACTIONS → history. Five bordered cards, the unlock
+sentence twice, the baseline shortfall stated in both hero and calibration.
+
+**Changes**:
+
+1. **Merge CHARGE + NEXT RANK into one "PROGRESSION" card** (replaces
+   `chargeSection` :530 and `nextRankSection` :566): next-rank crest
+   (`RankArtworkView` .compact) on the left; on the right the charge value line
+   (sans, per WS10), the charge meter (`chargeDots`, unchanged — WS6 component),
+   and **one** `nextRankStatusLabel` line + "LOCKED · LV n — <nextTitle>" (the
+   `V4SerifTitle(nextTitle)` stays, R1). One card, one (?) button (keep both help
+   topics reachable: merge into a single help sheet or two stacked rows in it —
+   `presentedHelpTopic` supports `.charge`/`.nextRank`; simplest is one button
+   presenting `.nextRank` whose sheet also explains charge — check what
+   `HelpTopic` renders and pick the lighter diff).
+2. **Calibration slims down** (R4): delete the permanent explainer sentence
+   (:414 "…Edit this if you want to track minutes, pages, or another unit.") —
+   that guidance moves into the Recalibrate sheet itself (add it there as a
+   footer if not already present). Keep the 3 stat cells (serif kept per WS10.12).
+   **Delete the `calibrationStatusLabel` sentence** (:436, :460–477) — the same
+   fact ("Below baseline — complete N…") is already the hero's pace pill +
+   baseline fraction (R2). If product wants the actionable phrasing kept, put it
+   in ONE place: as the pace pill's subtitle in the hero, not in a second card.
+3. **Goals empty state** (:504–514): collapse to a single-line flat row ("No
+   growth goal yet — Add one to push past your baseline.") without a bordered
+   card (R3).
+4. **LOG ACTIONS caption** (:664 "Counts toward your weekly baseline (2/week).")
+   — keep (it earns its place, WS5.12 added it deliberately), but it appears per
+   habit card; if more than one habit is linked show it once under the section
+   header instead of inside every card.
+5. Re-check the sticky Log Session button clearance after the page shortens
+   (WS1's `.padding(.bottom, 36)` at :182 — unchanged, just verify).
+
+**Acceptance**: `nextRankStatusLabel` rendered exactly once; "Below baseline…"
+phrasing appears at most once on the screen; card count on Strength (Seed
+Stagnating) drops from 5 bordered cards to ≤3 above the history section; both
+help topics still reachable; 96 tests green (grep `InsightsTests`/copy tests for
+deleted strings first).
+
+---
+
+## WS13 — P1: Dashboard game-grid readability
+
+**What the user sees today**: two tiles have full illustrated characters
+(Creativity, Strength) while five have flat SF-symbol crests at a visibly
+different scale; the attention dot touches the first letter of the name
+("●Creativity"); each tile stacks name + ring + fraction + LV + an 8-socket
+meter — texture that can't be parsed at grid size.
+
+**Changes** (all in `DashboardView.swift` / `RankArtworkView.swift`):
+
+1. **Unify artwork treatment**: in `GameDashboardTile` (:1461,
+   `style: .dashboardBare`), render BOTH cases inside the same circular
+   container: character images get `.clipShape(Circle())` scaled to fill the ring
+   interior (same diameter as the crest circle), crests keep their current
+   look. No tile's art may overflow its ring (the Strength figure currently
+   pokes above it). Do this in `RankArtworkView`'s `.dashboardBare` branch so
+   compact grid inherits it.
+2. **Attention-dot spacing**: find the dot rendered beside the tile name (grep
+   `needsAttention` in `GameDashboardTile`/honeycomb) and give it 4–6pt spacing
+   from the text (it currently kisses the glyph).
+3. **Slim the tile metric stack**: keep name, ring, and the `fraction · LV n`
+   line (:1474–1490). For the `DirectionalChargeMeter` row (:1492): keep the
+   component (WS6 — do NOT fork the meter), but render it at 60% opacity when
+   `charge == 0` so neutral tiles recede and charged tiles stand out. Do not
+   remove it outright without user sign-off (it's the only at-a-glance charge
+   signal on the dashboard).
+4. **Label row balance**: tile names are top-aligned with a reserved 26pt badge
+   gutter (WS2) which makes short names look off-center. Center the name and
+   keep the badge overlay from colliding via the existing fixed gutter — verify
+   with "Creativity" + a pending-rank badge (Seed Stagnating shows 7 badges).
+
+**Acceptance**: all 7 tiles read as one family (same silhouette size, art clipped
+to ring); no art overflows; dot has visible spacing; zero-charge meters visibly
+quieter than charged ones; WS2's no-collision guarantees still hold at AX5 (spot
+check).
+
+---
+
+## WS14 — P1: "This Week" sheet de-duplication (rules R2, R5)
+
+`DashboardView.swift` `statsSheet` :237 / `weeklyStatusCardBody` :481 /
+`highlightsCard` :582.
+
+1. The RANK & CHARGE list renders "At risk — close to ranking down" as the
+   subtitle of every row (4× in the screenshots). Since WS4.6 the list derives
+   from one predicate, so the subtitle is constant per group — replace per-row
+   repeated subtitles with **one** line under the "RANK & CHARGE" header ("These
+   skills are close to ranking down.") and keep rows to icon + name + LV badge +
+   chevron (R5). If the highlight list can mix kinds (`rankedUp`, `nearRankUp`,
+   `losingMomentum` — see `DashboardHighlight.Kind`), group rows by kind with a
+   one-line subtitle per group instead.
+2. Keep the WEEKLY STANDING bar + ahead/on-pace/behind counts (unique content).
+3. GOALS strip stays (unique content), but verify its "1 At risk" tile agrees
+   with the Goals tab (same predicate — spot-check, WS4 territory).
+
+**Acceptance**: no sentence appears twice on the sheet; "+N more" truncation row
+(WS4.6) still present when >4 highlights.
+
+---
+
+## WS15 — P2: History page polish
+
+`HistoryView.swift`.
+
+1. **Kill the double title** (:121 `navigationTitle("History")` + :133 serif
+   38pt "History"): keep the serif hero, change the nav title to
+   `.navigationBarTitleDisplayMode(.inline)` with an **empty/blank principal**
+   while at top — simplest compliant fix: drop the serif hero block entirely and
+   let the nav title stand (R2). Pick ONE; do not show both. (Recommend dropping
+   the in-scroll hero — one line saved, matches Review/Goals which have no
+   in-scroll hero.) Keep the kicker if it survives visually.
+2. **Chart identity**: the trend line renders in flat dark ink on a bare grid.
+   Stroke it with the selected skill's accent
+   (`TrainingArcConfig.color(for: stat.colorToken)`), add a soft
+   accent-to-clear `LinearGradient` fill under the line (find the chart builder
+   `statChart(for:)` — grep; it's custom Path/Charts code around :300–360), and
+   keep gridlines as-is. Pure visual; no data change.
+3. Serif swaps at :245/:256/:369/:406 land in WS10 — nothing more here.
+4. The OVERALL 6-stat grid (:226–233) stays (user hasn't objected and it's
+   unique content).
+
+**Acceptance**: exactly one "History" title visible; chart line/fill uses the
+skill accent; switching skills in the picker re-tints the chart.
+
+---
+
+## WS16 — P2: Settings — knit into the app's visual language
+
+`SettingsView.swift`. The page is stock-iOS (green toggles) inside a parchment
+app. Minimal knit, not a redesign:
+
+1. Apply `.tint(TrainingArcConfig.color(for: "focus"))` (or the app's primary
+   accent — check what onboarding uses) to the settings `Form`/`List` root so
+   every Toggle renders in the app accent instead of system green (:205–296).
+2. Verify section header styling matches other pages' caption case; leave
+   structure, copy, and grouping alone (WS5.9/5.10 already fixed the copy).
+3. Explanatory footers under toggles are legitimate `Form` footers (R4-compliant
+   pattern on a settings screen) — keep them.
+
+**Acceptance**: no system-green toggle anywhere in Settings (screenshot check
+against `Screenshot …14.06.17.png`/`14.06.22.png`); everything else pixel-same.
+
+---
+
+## WS17 — P2: Goals page balance
+
+`GoalsView.swift`. The page is one card floating in a full screen of empty
+parchment (opposite problem from Review).
+
+1. Collapse the double header: `V4PageKicker("Targets & Pacing")` + "ACTIVE"
+   section label + a single card = three layers of chrome for one item. Keep the
+   kicker, drop the "ACTIVE" label when there's only one section rendered.
+2. Give the goal card a visible progress bar fill: the screenshot shows an empty
+   track with `0 / 50` below — at 0 progress render a 2–3pt accent "spark" at the
+   leading edge so the bar reads as "empty by data" rather than "unstyled" (grep
+   the goal row's ProgressView/track builder at :180–230).
+3. Add a lightweight footer link-row "How goals affect pacing →" opening the
+   existing goals explainer if one exists (grep `goalsAffectPacing` copy in
+   Settings for the explanation text; if no sheet exists, render the one-line
+   caption "Tracking only — doesn't affect charge or rank." exactly once — it's
+   already on the card (:158 area) — and skip the link). Do NOT build new
+   navigation for this (parity with WS8's restraint).
+4. Serif swaps (:158, :207) land in WS10.
+
+**Acceptance**: one header layer above the card; empty-progress state looks
+intentional; no new sheets unless one already existed.
+
+---
+
+## Phase 2 sequencing, QA & definition of done
+
+**Order**: WS10 → WS11 → WS12 → WS13 → WS14 → WS15 → WS16 → WS17. WS10 first —
+it touches the most files mechanically and every later WS builds on its fonts.
+WS11 and WS12 are the user-visible payoff; do not start WS13+ before they land.
+
+**QA script per workstream** (same harness as Phase 1):
+1. `xcodebuild -project MythosLog.xcodeproj -scheme MythosLog -destination
+   'platform=iOS Simulator,name=iPhone 17 Pro' test` — 96/96 green — then build
+   the widget target.
+2. Settings → Debug Tools → **Seed Stagnating**; walk the 15-screenshot route
+   (Dashboard game grid + layout menu, Strength detail full scroll, Review full
+   scroll, Goals, More, Settings both scrolls, History 3M both scrolls, Manage
+   Skills, This Week sheet) and compare against `Screenshots/` (2026-07-15 set)
+   for regressions.
+3. Dynamic Type XL spot-check on any screen whose layout you changed (WS11,
+   WS12, WS13 especially — WS2/WS7 set the bar: zero collisions at AX sizes).
+4. VoiceOver spot-check on Review after WS11 (log actions moved — labels/hints
+   must survive).
+
+**Definition of done (Phase 2)**:
+- WS10: serif appears only on the kept-list surfaces; Review page has no serif
+  below its verdict title.
+- WS11–WS12: no fact rendered twice on Review or Skill detail; Review's skill
+  names each appear once; per-row status pills replaced by group headers.
+- WS13–WS14: dashboard tiles read as one family; This Week sheet has no repeated
+  sentence.
+- WS15–WS17: single History title, accent-tinted chart, app-accent toggles,
+  balanced Goals page.
+- One commit per workstream, ✅ + hash recorded here, tests green throughout.
