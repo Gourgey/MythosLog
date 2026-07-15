@@ -13,7 +13,9 @@ enum TrainingTheme {
     static let shadowStrong = Color(red: 0.10, green: 0.13, blue: 0.15).opacity(0.18)
     static let textPrimary = Color(red: 0.10, green: 0.13, blue: 0.15)
     static let textSecondary = Color(red: 0.31, green: 0.37, blue: 0.39)
-    static let textMuted = Color(red: 0.46, green: 0.52, blue: 0.54)
+    // 5.45:1 on the standard card surface and 4.65:1 even on the darker
+    // tertiary background, keeping caption-sized muted text above WCAG AA.
+    static let textMuted = Color(red: 0.35, green: 0.41, blue: 0.43)
     static let positive = Color(red: 0.22, green: 0.70, blue: 0.45)
     static let positiveStrong = Color(red: 0.17, green: 0.78, blue: 0.42)
     static let warning = Color(red: 0.88, green: 0.58, blue: 0.16)

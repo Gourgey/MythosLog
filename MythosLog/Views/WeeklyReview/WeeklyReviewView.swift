@@ -191,6 +191,7 @@ struct WeeklyReviewView: View {
                     Image(systemName: recoveryItems.isEmpty ? "checkmark.circle.fill" : "arrow.triangle.turn.up.right.circle.fill")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(recoveryItems.isEmpty ? TrainingTheme.positiveStrong : TrainingTheme.warning)
+                        .accessibilityHidden(true)
                 }
 
                 if recoveryItems.isEmpty {
@@ -246,6 +247,8 @@ struct WeeklyReviewView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(logActionTitle(for: item.stat)) \(item.stat.name)")
+        .accessibilityHint("Opens the log sheet")
     }
 
     private func currentWeekRow(_ item: ReviewSkillItem) -> some View {

@@ -119,6 +119,8 @@ struct DirectionalChargeMeter: View {
 }
 
 struct StatCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let stat: StatDomain
     let snapshot: SkillProgressSnapshot
     let trend: Double
@@ -244,6 +246,9 @@ struct StatCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(detailedAccessibilityLabel)
+                .accessibilityHint("Opens skill detail")
 
                 footer
             }
@@ -270,6 +275,7 @@ struct StatCard: View {
             if indicatorActive, let direction = snapshot.pendingRankChange?.direction {
                 Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                     .font(.title2.weight(.black))
+                    .dynamicTypeSize(.large)
                     .foregroundStyle(.white)
                     .padding(6)
                     .background(
@@ -299,62 +305,80 @@ struct StatCard: View {
         .scaleEffect(showLogFeedback ? 1.015 : (isFocusTarget ? 1.005 : 1))
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: showLogFeedback)
         .animation(.easeInOut(duration: 0.22), value: isFocusTarget)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(detailedAccessibilityLabel)
     }
 
     private var detailedAccessibilityLabel: String {
         var base = "\(stat.name), \(snapshot.rank.title), level \(snapshot.rank.level) of \(snapshot.rank.maximumLevel), " +
             "\(snapshot.weeklyCounterLabel) \(snapshot.weeklyCounterValueLabel), " +
             "\(DashboardChargeDots.summaryLabel(for: snapshot.charge.current)), " +
-            "\(snapshot.nextActionLabel)"
+            "\(trendAccessibilityLabel), \(snapshot.nextActionLabel)"
         if hasUnmatchedImports { base += ", unmatched workouts to review" }
         else if needsAttention { base += ", needs attention this week" }
         return base
     }
 
+    private var trendAccessibilityLabel: String {
+        if trend > 0.15 { return "recent trend improving" }
+        if trend < -0.15 { return "recent trend declining" }
+        return "recent trend steady"
+    }
+
+    @ViewBuilder
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: stat.iconName)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(accent)
-                    .frame(width: 38, height: 38)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(accent.opacity(0.12))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(accent.opacity(0.16), lineWidth: 1)
-                    )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                statIdentity
+                statusIndicators
+            }
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                statIdentity
+                Spacer(minLength: 8)
+                statusIndicators
+            }
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(stat.name)
-                        .font(.system(.headline, design: .rounded).weight(.black))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                    Text("Level \(snapshot.rank.level) / \(snapshot.rank.maximumLevel)")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textMuted)
-                }
+    private var statIdentity: some View {
+        HStack(spacing: 10) {
+            Image(systemName: stat.iconName)
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(accent)
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(accent.opacity(0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(accent.opacity(0.16), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stat.name)
+                    .font(.system(.headline, design: .rounded).weight(.black))
+                    .foregroundStyle(TrainingTheme.textPrimary)
+                Text("Level \(snapshot.rank.level) / \(snapshot.rank.maximumLevel)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textMuted)
+            }
+        }
+    }
+
+    private var statusIndicators: some View {
+        HStack(spacing: 8) {
+            if let stateLabel {
+                badge(text: stateLabel, tint: stateAccent)
             }
 
-            Spacer(minLength: 8)
-
-            HStack(spacing: 8) {
-                if let stateLabel {
-                    badge(text: stateLabel, tint: stateAccent)
-                }
-
-                Image(systemName: trendIcon)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(trendTint)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        Circle()
-                            .fill(TrainingTheme.actionSurface)
-                    )
-            }
+            Image(systemName: trendIcon)
+                .font(.caption.weight(.black))
+                .foregroundStyle(trendTint)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(TrainingTheme.actionSurface)
+                )
         }
     }
 
@@ -378,9 +402,16 @@ struct StatCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     chargeMeter
 
-                    HStack(spacing: 8) {
-                        compactInfoPill(text: snapshot.pacingStatus.label, tint: footerTint)
-                        compactInfoPill(text: snapshot.bankCountdownLabel, tint: TrainingTheme.cold)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) {
+                            compactInfoPill(text: snapshot.pacingStatus.label, tint: footerTint)
+                            compactInfoPill(text: snapshot.bankCountdownLabel, tint: TrainingTheme.cold)
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            compactInfoPill(text: snapshot.pacingStatus.label, tint: footerTint)
+                            compactInfoPill(text: snapshot.bankCountdownLabel, tint: TrainingTheme.cold)
+                        }
                     }
                 }
             }
@@ -399,6 +430,7 @@ struct StatCard: View {
                 if isFocusTarget {
                     Text("NEXT WIN")
                         .font(.caption2.weight(.black))
+                        .dynamicTypeSize(.large)
                         .foregroundStyle(TrainingTheme.textPrimary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
@@ -543,6 +575,8 @@ struct DashboardGridTile: View {
                         .onEnded { _ in onQuickLog() }
                         .exclusively(before: TapGesture().onEnded { onOpenDetail() })
                 )
+                .accessibilityAction { onOpenDetail() }
+                .accessibilityAction(named: Text(quickLogTitle)) { onQuickLog() }
         }
     }
 
@@ -643,6 +677,7 @@ struct DashboardGridTile: View {
             if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
                 Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                     .font(.title3.weight(.black))
+                    .dynamicTypeSize(.large)
                     .foregroundStyle(.white)
                     .padding(5)
                     .background(

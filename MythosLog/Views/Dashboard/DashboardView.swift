@@ -32,6 +32,7 @@ private struct HoneycombRowMidYPreferenceKey: PreferenceKey {
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var router: AppRouter
     @Query private var stats: [StatDomain]
     @Query private var settingsRecords: [AppSettings]
@@ -187,7 +188,9 @@ struct DashboardView: View {
     }
 
     private var todayKicker: some View {
-        let formatted = Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        let formatted = dynamicTypeSize.isAccessibilitySize
+            ? Date.now.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            : Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
         return V4PageKicker(title: formatted)
     }
 
@@ -236,24 +239,31 @@ struct DashboardView: View {
 
     private var commandStrip: some View {
         VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                todayKicker
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 10) {
+                        todayKicker
+                        Spacer(minLength: 8)
+                        dashboardControlButtons
+                    }
 
-                if !activeStats.isEmpty {
-                    statsChip
+                    if !activeStats.isEmpty {
+                        statsChip
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    todayKicker
 
-                Spacer(minLength: 8)
+                    if !activeStats.isEmpty {
+                        statsChip
+                    }
 
-                commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
-                    toggleMenu(.layout)
-                }
-
-                commandButton(icon: "sparkles", isActive: topMenuState == .insights, accessibilityLabel: "Dashboard insights") {
-                    toggleMenu(.insights)
+                    Spacer(minLength: 8)
+                    dashboardControlButtons
                 }
             }
-            .frame(maxWidth: .infinity)
 
             HStack(alignment: .top, spacing: 12) {
                 if topMenuState == .layout {
@@ -351,6 +361,18 @@ struct DashboardView: View {
                 Text("Run through onboarding (or Reset Default Profile in Settings → Debug Tools) to set baselines for your core skills.")
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
+            }
+        }
+    }
+
+    private var dashboardControlButtons: some View {
+        HStack(spacing: 10) {
+            commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
+                toggleMenu(.layout)
+            }
+
+            commandButton(icon: "sparkles", isActive: topMenuState == .insights, accessibilityLabel: "Dashboard insights") {
+                toggleMenu(.insights)
             }
         }
     }
@@ -1380,6 +1402,8 @@ private struct GameDashboardTile: View {
                         .onEnded { _ in onQuickLog() }
                         .exclusively(before: TapGesture().onEnded { onOpenDetail() })
                 )
+                .accessibilityAction { onOpenDetail() }
+                .accessibilityAction(named: Text(quickLogTitle)) { onQuickLog() }
         }
     }
 
@@ -1452,6 +1476,7 @@ private struct GameDashboardTile: View {
             if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
                 Image(systemName: direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                     .font(.title3.weight(.black))
+                    .dynamicTypeSize(.large)
                     .foregroundStyle(.white)
                     .padding(5)
                     .background(
