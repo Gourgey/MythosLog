@@ -119,17 +119,30 @@ struct WeeklyReviewView: View {
         currentReviewItems.filter { $0.urgency == .steady || $0.urgency == .complete }.count
     }
 
-    private var recoveryItems: [ReviewSkillItem] {
-        currentReviewItems
-            .filter { $0.urgency == .regressionRisk || $0.urgency == .behindPace }
-            .prefix(3)
-            .map { $0 }
+    // Grouping replaces the old "summary card + NEXT MOVES card + flat list"
+    // trio (WS11): each skill's urgency-derived status used to be stated three
+    // times (a summary tile, a NEXT MOVES row, and a per-row status pill). One
+    // grouped list says it once via the group header; at-risk/behind rows keep
+    // a direct log action (the one unique thing NEXT MOVES offered).
+    private var groupedReviewItems: [ReviewUrgencyGroup: [ReviewSkillItem]] {
+        Dictionary(grouping: currentReviewItems) { item in
+            switch item.urgency {
+            case .regressionRisk: return .atRisk
+            case .behindPace: return .behind
+            case .steady, .complete: return .onPace
+            }
+        }
+    }
+
+    private var orderedReviewGroups: [(group: ReviewUrgencyGroup, items: [ReviewSkillItem])] {
+        ReviewUrgencyGroup.allCases.compactMap { group in
+            guard let items = groupedReviewItems[group], !items.isEmpty else { return nil }
+            return (group, items)
+        }
     }
 
     private var thisWeekSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            V4PageKicker(title: "This Week · Live", accent: TrainingTheme.textMuted)
-
             if activeStats.isEmpty {
                 V4Card {
                     Text("No active skills yet. Start onboarding to begin a week.")
@@ -137,16 +150,24 @@ struct WeeklyReviewView: View {
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
-                thisWeekSummaryCard
-                recoveryPlannerCard
+                thisWeekSummaryStrip
                 V4Card(padding: 4) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(currentReviewItems.enumerated()), id: \.element.id) { index, item in
-                            currentWeekRow(item)
-                            if index < currentReviewItems.count - 1 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(orderedReviewGroups.enumerated()), id: \.offset) { groupIndex, entry in
+                            if groupIndex > 0 {
                                 Divider()
-                                    .overlay(TrainingTheme.border.opacity(0.4))
+                                    .overlay(TrainingTheme.border.opacity(0.5))
                                     .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                            }
+                            reviewGroupHeader(entry.group, count: entry.items.count)
+                            ForEach(Array(entry.items.enumerated()), id: \.element.id) { index, item in
+                                currentWeekRow(item)
+                                if index < entry.items.count - 1 {
+                                    Divider()
+                                        .overlay(TrainingTheme.border.opacity(0.3))
+                                        .padding(.horizontal, 12)
+                                }
                             }
                         }
                     }
@@ -155,142 +176,106 @@ struct WeeklyReviewView: View {
         }
     }
 
-    private var thisWeekSummaryCard: some View {
-        V4Card(accent: summaryAccent) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("THIS WEEK")
-                        .font(.caption.weight(.heavy))
-                        .tracking(2.0)
-                        .foregroundStyle(TrainingTheme.textMuted)
-                    Spacer()
-                    V4StatusPill(text: diagnosticHeadline, tint: summaryAccent, systemImage: diagnosticIcon)
-                }
+    private func reviewGroupHeader(_ group: ReviewUrgencyGroup, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(group.title.uppercased())
+                .font(.caption.weight(.heavy))
+                .tracking(1.6)
+                .foregroundStyle(group.tint)
+            Text("(\(V4Style.displayNumber(count)))")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TrainingTheme.textMuted)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+    }
 
-                HStack(alignment: .top, spacing: 0) {
-                    V4StatTile(value: V4Style.displayNumber(skillsBehindCount), label: "behind", tint: skillsBehindCount > 0 ? TrainingTheme.warning : TrainingTheme.textPrimary)
-                    V4StatTile(value: V4Style.displayNumber(skillsOnPaceOrCompleteCount), label: "on pace", tint: TrainingTheme.textPrimary)
-                    V4StatTile(value: V4Style.displayNumber(skillsAtRegressionRiskCount), label: "at risk", tint: skillsAtRegressionRiskCount > 0 ? TrainingTheme.danger : TrainingTheme.textPrimary)
-                }
-
-                Text(diagnosticSummaryText)
-                    .font(.subheadline)
-                    .foregroundStyle(TrainingTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+    private var thisWeekSummaryStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                V4StatusPill(text: diagnosticHeadline, tint: summaryAccent, systemImage: diagnosticIcon)
+                Spacer()
+                summaryCountsLine
             }
+
+            Text(diagnosticSummaryText)
+                .font(.subheadline)
+                .foregroundStyle(TrainingTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var recoveryPlannerCard: some View {
-        V4Card(accent: recoveryItems.isEmpty ? TrainingTheme.cold : TrainingTheme.warning) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("NEXT MOVES")
-                        .font(.caption.weight(.heavy))
-                        .tracking(2.0)
-                        .foregroundStyle(TrainingTheme.textMuted)
-                    Spacer()
-                    Image(systemName: recoveryItems.isEmpty ? "checkmark.circle.fill" : "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(recoveryItems.isEmpty ? TrainingTheme.positiveStrong : TrainingTheme.warning)
-                        .accessibilityHidden(true)
-                }
-
-                if recoveryItems.isEmpty {
-                    Text("No recovery task is urgent. Keep logging normally to protect your current ranks.")
-                        .font(.subheadline)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(recoveryItems) { item in
-                            recoveryTaskRow(item)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func recoveryTaskRow(_ item: ReviewSkillItem) -> some View {
-        let accent = TrainingArcConfig.color(for: item.stat.colorToken)
-        return Button {
-            openSkill(item.stat, openLogSheet: true)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: item.urgency.icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(accent)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(accent.opacity(0.12)))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.stat.name)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                    Text(taskText(for: item))
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 8)
-
-                Text(logActionTitle(for: item.stat))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(accent.opacity(0.12)))
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.white.opacity(0.66))
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(logActionTitle(for: item.stat)) \(item.stat.name)")
-        .accessibilityHint("Opens the log sheet")
+    private var summaryCountsLine: some View {
+        (
+            Text(V4Style.displayNumber(skillsBehindCount)).fontWeight(.bold).monospacedDigit()
+                .foregroundColor(skillsBehindCount > 0 ? TrainingTheme.warning : TrainingTheme.textMuted)
+            + Text(" behind  ·  ").foregroundColor(TrainingTheme.textSecondary)
+            + Text(V4Style.displayNumber(skillsOnPaceOrCompleteCount)).fontWeight(.bold).monospacedDigit()
+                .foregroundColor(TrainingTheme.textPrimary)
+            + Text(" on pace  ·  ").foregroundColor(TrainingTheme.textSecondary)
+            + Text(V4Style.displayNumber(skillsAtRegressionRiskCount)).fontWeight(.bold).monospacedDigit()
+                .foregroundColor(skillsAtRegressionRiskCount > 0 ? TrainingTheme.danger : TrainingTheme.textMuted)
+            + Text(" at risk").foregroundColor(TrainingTheme.textSecondary)
+        )
+        .font(.caption)
     }
 
     private func currentWeekRow(_ item: ReviewSkillItem) -> some View {
         let stat = item.stat
-        let snapshot = item.snapshot
         let accent = TrainingArcConfig.color(for: stat.colorToken)
+        let showsLogAction = item.urgency == .regressionRisk || item.urgency == .behindPace
 
-        return Button {
-            openSkill(stat, openLogSheet: false)
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(accent.opacity(0.14))
-                        .frame(width: 38, height: 38)
-                    Image(systemName: stat.iconName)
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(accent)
+        return HStack(spacing: 10) {
+            Button {
+                openSkill(stat, openLogSheet: false)
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(accent.opacity(0.14))
+                            .frame(width: 38, height: 38)
+                        Image(systemName: stat.iconName)
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(stat.name)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                        Text(progressLine(for: item))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(stat.name)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                    Text(progressLine(for: item))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-
-                Spacer(minLength: 8)
-
-                V4StatusPill(text: item.urgency.label(for: snapshot.pacingStatus), tint: item.urgency.tint)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 8)
+
+            if showsLogAction {
+                Button {
+                    openSkill(stat, openLogSheet: true)
+                } label: {
+                    Text(logActionTitle(for: stat))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(accent.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(logActionTitle(for: stat)) \(stat.name)")
+                .accessibilityHint("Opens the log sheet")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private var summaryAccent: Color {
@@ -449,15 +434,17 @@ struct WeeklyReviewView: View {
                         Spacer()
                     }
 
-                    Text(verdict.description)
-                        .font(.subheadline)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Below-baseline weeks already state "N skills need
+                    // recovery" above (WS11) — showing the verdict sentence
+                    // too would say the same thing twice, so it's reserved
+                    // for weeks with nothing to recover.
+                    if belowBaseline == 0 {
+                        Text(verdict.description)
+                            .font(.subheadline)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    if belowBaseline > 0 {
-                        recoveryChipStrip(for: weekResolutions, verdict: verdict)
-                    } else {
                         HStack(alignment: .top, spacing: 0) {
                             V4StatTile(value: V4Style.displayNumber(weekResolutions.count), label: "Resolved", tint: TrainingTheme.textPrimary)
                             if levelUps > 0 {
@@ -486,79 +473,6 @@ struct WeeklyReviewView: View {
             }
         }
         .buttonStyle(.plain)
-    }
-
-    private func recoveryChipStrip(for resolutions: [WeeklyResolution], verdict: VerdictDescriptor) -> some View {
-        let allLostSkills = resolutions.filter { $0.weeklyDelta < 0 }
-        let visibleLostSkills = Array(allLostSkills.prefix(4))
-        let remainingCount = max(allLostSkills.count - visibleLostSkills.count, 0)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Recover these this week to rebuild charge before they rank down.")
-                .font(.caption)
-                .foregroundStyle(TrainingTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 8) {
-                ForEach(visibleLostSkills, id: \.id) { resolution in
-                    recoveryChip(resolution: resolution)
-                }
-                if remainingCount > 0 {
-                    recoveryMoreChip(count: remainingCount, tint: verdict.color)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private func recoveryChip(resolution: WeeklyResolution) -> some View {
-        let stat = activeStats.first(where: { $0.name == resolution.statName })
-        let accent: Color = stat.map { TrainingArcConfig.color(for: $0.colorToken) } ?? TrainingTheme.warning
-        let iconName: String = stat?.iconName ?? "circle"
-
-        return VStack(spacing: 6) {
-            Image(systemName: iconName)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(accent)
-            Text(resolution.statName)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(TrainingTheme.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(accent.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(accent.opacity(0.22), lineWidth: 0.8)
-        )
-    }
-
-    private func recoveryMoreChip(count: Int, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: "ellipsis")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(tint)
-            Text("+\(count) more")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(TrainingTheme.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(tint.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(tint.opacity(0.18), lineWidth: 0.8)
-        )
     }
 
     // MARK: - Past Reviews
@@ -646,31 +560,29 @@ private enum ReviewSkillUrgency: Equatable {
         case .complete: return 3
         }
     }
+}
+
+// WS11: the three-way status split shown on Review. Steady and complete share
+// a group — the page distinguishes "needs attention" from "on pace", not
+// every pacing nuance.
+private enum ReviewUrgencyGroup: CaseIterable, Hashable {
+    case atRisk
+    case behind
+    case onPace
+
+    var title: String {
+        switch self {
+        case .atRisk: return "At Risk"
+        case .behind: return "Behind"
+        case .onPace: return "On Pace"
+        }
+    }
 
     var tint: Color {
         switch self {
-        case .regressionRisk: return TrainingTheme.danger
-        case .behindPace: return TrainingTheme.warning
-        case .steady: return TrainingTheme.cold
-        case .complete: return TrainingTheme.positiveStrong
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .regressionRisk: return "exclamationmark.triangle.fill"
-        case .behindPace: return "clock.badge.exclamationmark"
-        case .steady: return "circle.dashed"
-        case .complete: return "checkmark.circle.fill"
-        }
-    }
-
-    func label(for pacing: SkillPacingStatus) -> String {
-        switch self {
-        case .regressionRisk: return "At risk"
-        case .behindPace: return "Behind"
-        case .steady: return pacing.label
-        case .complete: return "Complete"
+        case .atRisk: return TrainingTheme.danger
+        case .behind: return TrainingTheme.warning
+        case .onPace: return TrainingTheme.cold
         }
     }
 }
