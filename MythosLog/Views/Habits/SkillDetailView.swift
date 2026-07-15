@@ -167,13 +167,8 @@ struct SkillDetailView: View {
                 }
 
                 weeklyHistorySection(snapshot: snapshot, weekSnapshot: weekSnapshot, effectiveDay: effectiveDay, dayLogs: dayLogs)
-                calibrationSection(snapshot: snapshot)
-                chargeSection(snapshot: snapshot)
-
-                if let nextTitle = snapshot.rank.nextTitle, !snapshot.rank.isAtMaximumRank {
-                    nextRankSection(snapshot: snapshot, nextTitle: nextTitle)
-                }
-
+                calibrationSection()
+                progressionSection(snapshot: snapshot)
                 goalsSection
                 linkedHabitsSection
             }
@@ -383,7 +378,7 @@ struct SkillDetailView: View {
         logDraft = LogEntryDraft(habit: primaryHabit)
     }
 
-    private func calibrationSection(snapshot: SkillProgressSnapshot) -> some View {
+    private func calibrationSection() -> some View {
         V4Card(padding: 16, accent: TrainingTheme.textMuted) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -411,13 +406,7 @@ struct SkillDetailView: View {
                     .buttonStyle(.plain)
                 }
 
-                Text("\(stat.name) is measured in \(TrainingStore.weeklyUnitLabel(for: stat)). Edit this if you want to track minutes, pages, or another unit.")
-                    .font(.caption2)
-                    .foregroundStyle(TrainingTheme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Divider()
-                    .overlay(TrainingTheme.border.opacity(0.5))
+                Divider().overlay(TrainingTheme.border.opacity(0.5))
 
                 HStack(alignment: .top, spacing: 0) {
                     calibrationCell(title: "Baseline", value: "\(stat.currentBaseline)")
@@ -432,11 +421,6 @@ struct SkillDetailView: View {
                         calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
                     }
                 }
-
-                Text(calibrationStatusLabel(snapshot: snapshot))
-                    .font(.subheadline)
-                    .foregroundStyle(TrainingTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -455,25 +439,6 @@ struct SkillDetailView: View {
                 .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func calibrationStatusLabel(snapshot: SkillProgressSnapshot) -> String {
-        let actual = TrainingStore.currentWeekTotal(for: stat, settings: settings)
-        let baseline = Double(stat.currentBaseline)
-        let target = stat.targetValue.map(Double.init)
-        let unit = TrainingStore.weeklyUnitLabel(for: stat)
-
-        if let target {
-            if actual >= target { return "Goal target met this week. Strong work." }
-            if actual >= baseline { return "Maintained baseline. Goal still short by \(MetricFormatting.shortMetric(target - actual)) \(unit)." }
-            return "Below baseline - complete \(MetricFormatting.shortMetric(baseline - actual)) \(unit) this week to maintain Level \(snapshot.rank.level)."
-        }
-
-        if baseline > 0, actual >= baseline { return "Maintained baseline this week." }
-        if baseline > 0 {
-            return "Below baseline - complete \(MetricFormatting.shortMetric(baseline - actual)) \(unit) this week to maintain Level \(snapshot.rank.level)."
-        }
-        return "No baseline set yet."
     }
 
     private var goalsSection: some View {
@@ -502,16 +467,10 @@ struct SkillDetailView: View {
             }
 
             if skillGoals.isEmpty {
-                V4Card(accent: accent) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("No growth goal set. \(stat.name) is currently only tracking your weekly baseline.")
-                            .font(.subheadline)
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                        Text("Create a goal when you want to push beyond your current weekly normal.")
-                            .font(.caption)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                    }
-                }
+                Text("No growth goal yet — add one to push past your baseline.")
+                    .font(.subheadline)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 // One shared fetch of logs/stats for every goal row instead of
                 // each SkillGoalRow independently re-fetching the whole log
@@ -527,17 +486,23 @@ struct SkillDetailView: View {
         }
     }
 
-    private func chargeSection(snapshot: SkillProgressSnapshot) -> some View {
-        V4Card(accent: accent) {
+    // WS12: CHARGE and NEXT RANK used to be two cards that both ended in the
+    // same `nextRankStatusLabel` sentence ("3 more positive charge steps will
+    // unlock Steady Trainee.") — merged into one PROGRESSION card that states
+    // it once, with a single help button covering both halves.
+    private func progressionSection(snapshot: SkillProgressSnapshot) -> some View {
+        let nextTitle = snapshot.rank.isAtMaximumRank ? nil : snapshot.rank.nextTitle
+
+        return V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("CHARGE")
+                    Text("PROGRESSION")
                         .font(.caption.weight(.heavy))
                         .tracking(2.0)
                         .foregroundStyle(TrainingTheme.textMuted)
                     Spacer()
                     Button {
-                        presentedHelpTopic = .charge
+                        presentedHelpTopic = .progression
                     } label: {
                         Image(systemName: "questionmark.circle")
                             .font(.system(size: 13, weight: .semibold))
@@ -548,68 +513,40 @@ struct SkillDetailView: View {
 
                 Divider().overlay(TrainingTheme.border.opacity(0.5))
 
-                Text(snapshot.bankedChargeLabel)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(TrainingTheme.textPrimary)
-                    .monospacedDigit()
-
-                chargeDots(snapshot: snapshot)
-                    .frame(maxWidth: .infinity)
-
-                Text(snapshot.nextRankStatusLabel)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func nextRankSection(snapshot: SkillProgressSnapshot, nextTitle: String) -> some View {
-        V4Card(accent: accent) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("NEXT RANK")
-                        .font(.caption.weight(.heavy))
-                        .tracking(2.0)
-                        .foregroundStyle(TrainingTheme.textMuted)
-                    Spacer()
-                    Button {
-                        presentedHelpTopic = .nextRank
-                    } label: {
-                        Image(systemName: "questionmark.circle")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(TrainingTheme.textMuted)
+                HStack(alignment: .top, spacing: 14) {
+                    if let nextTitle {
+                        RankArtworkView(
+                            habitName: stat.name,
+                            level: snapshot.rank.level + 1,
+                            title: nextTitle,
+                            image: snapshot.nextRankImage,
+                            accent: accent,
+                            style: .compact
+                        )
                     }
-                    .buttonStyle(.plain)
-                }
 
-                Divider().overlay(TrainingTheme.border.opacity(0.5))
-
-                HStack(spacing: 14) {
-                    RankArtworkView(
-                        habitName: stat.name,
-                        level: snapshot.rank.level + 1,
-                        title: nextTitle,
-                        image: snapshot.nextRankImage,
-                        accent: accent,
-                        style: .compact
-                    )
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let nextTitle {
                             Text("LOCKED · LV \(V4Style.displayNumber(snapshot.rank.level + 1))")
                                 .font(.caption2.weight(.heavy))
                                 .tracking(1.4)
                                 .foregroundStyle(TrainingTheme.textMuted)
+                            V4SerifTitle(text: nextTitle, size: 22)
                         }
-                        V4SerifTitle(text: nextTitle, size: 24)
-                        Text(snapshot.nextRankStatusLabel)
-                            .font(.subheadline)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                            .lineLimit(3)
-                    }
 
-                    Spacer()
+                        Text(snapshot.bankedChargeLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textPrimary)
+                            .monospacedDigit()
+
+                        chargeDots(snapshot: snapshot)
+                            .frame(maxWidth: .infinity)
+
+                        Text(snapshot.nextRankStatusLabel)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(accent)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -646,6 +583,16 @@ struct SkillDetailView: View {
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
+                // With one habit the baseline caption sits under its own card
+                // (kept — a single fact in its usual place). With several,
+                // repeating the identical sentence on every card said the
+                // same thing N times, so it moves up here to be stated once.
+                if linkedHabits.count > 1 {
+                    Text("Each logs toward \(stat.name)'s weekly baseline (\(stat.currentBaseline)/week).")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                }
+
                 ForEach(linkedHabits) { habit in
                     let progressUnit = habit.measurementType == .booleanSession
                         ? (habit.targetPerPeriod == 1 ? "session" : "sessions")
@@ -662,10 +609,12 @@ struct SkillDetailView: View {
                                     .foregroundStyle(TrainingTheme.textSecondary)
                                     .multilineTextAlignment(.center)
                                     .monospacedDigit()
-                                Text("Counts toward your weekly baseline (\(stat.currentBaseline)/week).")
-                                    .font(.caption2)
-                                    .foregroundStyle(TrainingTheme.textMuted)
-                                    .multilineTextAlignment(.center)
+                                if linkedHabits.count == 1 {
+                                    Text("Counts toward your weekly baseline (\(stat.currentBaseline)/week).")
+                                        .font(.caption2)
+                                        .foregroundStyle(TrainingTheme.textMuted)
+                                        .multilineTextAlignment(.center)
+                                }
                             }
                             .frame(maxWidth: .infinity)
 
@@ -902,11 +851,13 @@ struct SkillDetailView: View {
 
     private func helpBody(for topic: SkillHelpTopic) -> String {
         switch topic {
-        case .charge:
+        case .progression:
             // Only evaluated when the help sheet is actually opened (a rare,
             // user-initiated event), so a fresh snapshot here is fine — no
-            // need to thread it through from `body`.
-            return TrainingStore.progressSnapshot(for: stat, settings: settings).chargeExplanation
+            // need to thread it through from `body`. Covers both halves of
+            // the merged PROGRESSION card (WS12) in one sheet.
+            let chargeExplanation = TrainingStore.progressSnapshot(for: stat, settings: settings).chargeExplanation
+            return "\(chargeExplanation)\n\n\(topic.body)"
         default:
             return topic.body
         }
@@ -965,8 +916,7 @@ private struct StickyLogButton: View {
 
 private enum SkillHelpTopic: String, Identifiable {
     case currentForm
-    case charge
-    case nextRank
+    case progression
     case thisWeek
 
     var id: String { rawValue }
@@ -975,10 +925,8 @@ private enum SkillHelpTopic: String, Identifiable {
         switch self {
         case .currentForm:
             return "Current Form"
-        case .charge:
-            return "Charge"
-        case .nextRank:
-            return "Next Rank"
+        case .progression:
+            return "Progression"
         case .thisWeek:
             return "This Week"
         }
@@ -988,9 +936,10 @@ private enum SkillHelpTopic: String, Identifiable {
         switch self {
         case .currentForm:
             return "Tap the character art to open the full roster and browse every form in this skill's progression."
-        case .charge:
-            return "Charge runs from -4 to +4. Use the help details here to see exactly how this skill's current rank converts strong or weak weeks into charge."
-        case .nextRank:
+        case .progression:
+            // Charge is snapshot-dependent (helpBody(for:) overrides this case
+            // with the live explanation); this static copy only covers the
+            // next-rank half and is never shown on its own.
             return "This preview shows the next form you are building toward. Locked forms stay ahead of you until you gain enough Charge."
         case .thisWeek:
             return "This section shows your current progression week. Tap any day tile to swap the lower log list to that day while today's border stays visible for orientation."
@@ -1793,7 +1742,7 @@ struct SkillCalibrationSheet: View {
                 } header: {
                     Text("Measurement Unit")
                 } footer: {
-                    Text("Changing the unit affects how new logs and quick-log buttons behave. Past logs keep their original units.")
+                    Text("\(stat.name) is currently measured in \(unitLabel). Changing the unit affects how new logs and quick-log buttons behave — past logs keep their original units.")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
