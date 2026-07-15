@@ -1,9 +1,6 @@
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
-#if canImport(UIKit)
-import UIKit
-#endif
 
 private enum DashboardTopMenuState {
     case none
@@ -20,13 +17,6 @@ private struct HoneycombWidthPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
-    }
-}
-
-private struct HoneycombRowMidYPreferenceKey: PreferenceKey {
-    static var defaultValue: [Int: CGFloat] = [:]
-    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
-        value.merge(nextValue()) { _, new in new }
     }
 }
 
@@ -50,14 +40,11 @@ struct DashboardView: View {
     @State private var showingRankReview = false
     @State private var showingStatsSheet = false
     @State private var honeycombAvailableWidth: CGFloat = 380
-    @State private var honeycombRowScales: [Int: CGFloat] = [:]
     private let compactGridColumnCount = 2
     private let compactGridSpacing: CGFloat = 16
     private let gameGridColumnCount = 3
     private let gameGridSpacing: CGFloat = 4
     private let gameGridRowSpacing: CGFloat = 12
-    private let gameGridFocusedScale: CGFloat = 1.0
-    private let gameGridRestingScale: CGFloat = 0.92
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -874,16 +861,13 @@ struct DashboardView: View {
     /// an inline `GeometryReader`; that estimate quietly fell short of the
     /// tile's real rendered height (worse at larger Dynamic Type sizes), so
     /// the next row started before the previous one's bottom content — its
-    /// charge meter — had fully cleared. Combined with the middle row's
-    /// higher `zIndex` (needed so it can draw above neighbors while at its
-    /// "focused" `scaleEffect`), that row visually painted over the row
-    /// above's charge dots. Reading the available width and each row's
-    /// scale-effect anchor via `.background` + preference keys instead of a
-    /// size-dictating `GeometryReader` lets the VStack/HStacks size
-    /// themselves naturally, so rows can never run short of the space their
-    /// own content needs — at any Dynamic Type size — and the zIndex hack is
-    /// no longer needed (the focused scale only ever shrinks toward 1.0, it
-    /// never enlarges past a tile's natural bounds).
+    /// charge meter — had fully cleared. Reading the available width via
+    /// `.background` + a preference key instead of a size-dictating
+    /// `GeometryReader` lets the VStack/HStacks size themselves naturally, so
+    /// rows can never run short of the space their own content needs — at any
+    /// Dynamic Type size. All three rows render at the same scale — no
+    /// scroll-driven zoom on the middle row (removed per user request; it
+    /// read as an unwanted "magnify" effect rather than a focus cue).
     private func honeycombGameGridDashboard(attention: Set<String>, unmatched: Set<String>) -> some View {
         let tileWidth = honeycombTileWidth(for: honeycombAvailableWidth)
         let rows = honeycombRows
@@ -901,16 +885,6 @@ struct DashboardView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .scaleEffect(honeycombRowScales[rowIndex] ?? gameGridFocusedScale)
-                .animation(.easeOut(duration: 0.18), value: honeycombRowScales[rowIndex])
-                .background(
-                    GeometryReader { rowProxy in
-                        Color.clear.preference(
-                            key: HoneycombRowMidYPreferenceKey.self,
-                            value: [rowIndex: rowProxy.frame(in: .global).midY]
-                        )
-                    }
-                )
             }
         }
         .background(
@@ -920,11 +894,6 @@ struct DashboardView: View {
         )
         .onPreferenceChange(HoneycombWidthPreferenceKey.self) { newWidth in
             if newWidth > 0 { honeycombAvailableWidth = newWidth }
-        }
-        .onPreferenceChange(HoneycombRowMidYPreferenceKey.self) { midYs in
-            for (index, midY) in midYs {
-                honeycombRowScales[index] = dashboardRowScale(for: midY)
-            }
         }
         .padding(.top, 2)
     }
@@ -940,17 +909,6 @@ struct DashboardView: View {
     private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
         let rawWidth = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
         return min(max(rawWidth, 96), 124)
-    }
-
-    private func dashboardRowScale(for midY: CGFloat) -> CGFloat {
-        #if canImport(UIKit)
-        let focusY = UIScreen.main.bounds.height * 0.48
-        #else
-        let focusY: CGFloat = 390
-        #endif
-        let distance = min(abs(midY - focusY), 260)
-        let normalizedDistance = distance / 260
-        return gameGridFocusedScale - ((gameGridFocusedScale - gameGridRestingScale) * normalizedDistance)
     }
 
     private func gameDashboardTile(for stat: StatDomain, needsAttention: Bool, hasUnmatchedImports: Bool) -> some View {
