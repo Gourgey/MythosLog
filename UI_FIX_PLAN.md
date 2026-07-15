@@ -1165,3 +1165,31 @@ WS11 and WS12 are the user-visible payoff; do not start WS13+ before they land.
 - WS15–WS17: single History title, accent-tinted chart, app-accent toggles,
   balanced Goals page.
 - One commit per workstream, ✅ + hash recorded here, tests green throughout.
+
+### Phase 2 QA — actually performed vs. deferred (2026-07-15)
+
+Be precise about what was and wasn't verified, since items 2–4 above weren't
+fully executed:
+
+- **Done for every workstream**: full `xcodebuild … test` (96/96 green) and
+  `xcodebuild … build` (app + widget target) after each commit, plus a final
+  consolidated test+build run after WS17. Every font/line-number claim in each
+  workstream's write-up was re-grepped against the live file before editing,
+  not assumed from the original audit.
+- **NOT done — no live simulator walkthrough.** `request_access` for
+  Simulator was declined, so items 2–4 (Seed Stagnating screenshot comparison,
+  Dynamic Type XL spot-check, VoiceOver spot-check on the moved Review log
+  actions) were **not performed**. This is a real gap: WS11's regrouped list,
+  WS12's merged card, and WS13's ring-clipped artwork are exactly the kind of
+  layout changes that compile clean but can still look wrong or collide at
+  runtime — compiling and unit-testing them is necessary but not sufficient
+  evidence they render correctly. Treat Phase 2 as **implemented and
+  regression-tested at the unit level, not yet visually verified** — run the
+  QA script's steps 2–4 (or grant simulator access to a future pass) before
+  treating the redesign as done.
+- Two untracked stray files predating this work were left untouched (out of
+  scope, not created this session): `MythosLog/Views/Habits/SkillDetailView
+  2.swift` and `MythosLog/Views/WeeklyReview/WeeklyReviewView 2.swift` — stale
+  duplicate snapshots (confirmed via diff) from before the Phase 2 edits, not
+  referenced by `project.pbxproj`. Worth deleting in a future pass once
+  confirmed unneeded.
