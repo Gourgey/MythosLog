@@ -16,6 +16,20 @@ private struct IdentifiableStat: Identifiable {
     var id: UUID { stat.id }
 }
 
+private struct HoneycombWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct HoneycombRowMidYPreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGFloat] = [:]
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var router: AppRouter
@@ -34,6 +48,8 @@ struct DashboardView: View {
     @State private var unmatchedStat: IdentifiableStat?
     @State private var showingRankReview = false
     @State private var showingStatsSheet = false
+    @State private var honeycombAvailableWidth: CGFloat = 380
+    @State private var honeycombRowScales: [Int: CGFloat] = [:]
     private let compactGridColumnCount = 2
     private let compactGridSpacing: CGFloat = 16
     private let gameGridColumnCount = 3
@@ -778,37 +794,64 @@ struct DashboardView: View {
         }
     }
 
+    /// Rows are sized by their own intrinsic content (name + ring + fraction
+    /// row + charge meter), never by a guessed fixed height. The previous
+    /// version forced each row into a hardcoded `tileWidth + 72` box read by
+    /// an inline `GeometryReader`; that estimate quietly fell short of the
+    /// tile's real rendered height (worse at larger Dynamic Type sizes), so
+    /// the next row started before the previous one's bottom content — its
+    /// charge meter — had fully cleared. Combined with the middle row's
+    /// higher `zIndex` (needed so it can draw above neighbors while at its
+    /// "focused" `scaleEffect`), that row visually painted over the row
+    /// above's charge dots. Reading the available width and each row's
+    /// scale-effect anchor via `.background` + preference keys instead of a
+    /// size-dictating `GeometryReader` lets the VStack/HStacks size
+    /// themselves naturally, so rows can never run short of the space their
+    /// own content needs — at any Dynamic Type size — and the zIndex hack is
+    /// no longer needed (the focused scale only ever shrinks toward 1.0, it
+    /// never enlarges past a tile's natural bounds).
     private func honeycombGameGridDashboard(attention: Set<String>, unmatched: Set<String>) -> some View {
-        GeometryReader { proxy in
-            let tileWidth = honeycombTileWidth(for: proxy.size.width)
-            let rowHeight = honeycombRowHeight(for: tileWidth)
-            let rowSpacing = gameGridRowSpacing
-            let rows = honeycombRows
+        let tileWidth = honeycombTileWidth(for: honeycombAvailableWidth)
+        let rows = honeycombRows
 
-            VStack(spacing: rowSpacing) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, rowStats in
-                    GeometryReader { rowProxy in
-                        HStack(spacing: gameGridSpacing) {
-                            ForEach(rowStats) { stat in
-                                gameDashboardTile(
-                                    for: stat,
-                                    needsAttention: attention.contains(stat.key),
-                                    hasUnmatchedImports: unmatched.contains(stat.key)
-                                )
-                                .frame(width: tileWidth)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .scaleEffect(dashboardRowScale(for: rowProxy.frame(in: .global).midY))
-                        .animation(.easeOut(duration: 0.18), value: dashboardRowScale(for: rowProxy.frame(in: .global).midY))
+        return VStack(spacing: gameGridRowSpacing) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, rowStats in
+                HStack(spacing: gameGridSpacing) {
+                    ForEach(rowStats) { stat in
+                        gameDashboardTile(
+                            for: stat,
+                            needsAttention: attention.contains(stat.key),
+                            hasUnmatchedImports: unmatched.contains(stat.key)
+                        )
+                        .frame(width: tileWidth)
                     }
-                    .frame(height: rowHeight)
-                    .zIndex(rowIndex == 1 ? 1 : 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .scaleEffect(honeycombRowScales[rowIndex] ?? gameGridFocusedScale)
+                .animation(.easeOut(duration: 0.18), value: honeycombRowScales[rowIndex])
+                .background(
+                    GeometryReader { rowProxy in
+                        Color.clear.preference(
+                            key: HoneycombRowMidYPreferenceKey.self,
+                            value: [rowIndex: rowProxy.frame(in: .global).midY]
+                        )
+                    }
+                )
             }
-            .frame(width: proxy.size.width, alignment: .top)
         }
-        .frame(height: honeycombGridHeight)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: HoneycombWidthPreferenceKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(HoneycombWidthPreferenceKey.self) { newWidth in
+            if newWidth > 0 { honeycombAvailableWidth = newWidth }
+        }
+        .onPreferenceChange(HoneycombRowMidYPreferenceKey.self) { midYs in
+            for (index, midY) in midYs {
+                honeycombRowScales[index] = dashboardRowScale(for: midY)
+            }
+        }
         .padding(.top, 2)
     }
 
@@ -820,18 +863,9 @@ struct DashboardView: View {
         ]
     }
 
-    private var honeycombGridHeight: CGFloat {
-        let estimatedTileWidth: CGFloat = 124
-        return honeycombRowHeight(for: estimatedTileWidth) * 3 + gameGridRowSpacing * 2
-    }
-
     private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
         let rawWidth = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
         return min(max(rawWidth, 96), 124)
-    }
-
-    private func honeycombRowHeight(for tileWidth: CGFloat) -> CGFloat {
-        tileWidth + 72
     }
 
     private func dashboardRowScale(for midY: CGFloat) -> CGFloat {
@@ -1345,6 +1379,13 @@ private struct GameDashboardTile: View {
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
+                    // Reserves a fixed gutter for the rank-change badge
+                    // (anchored top-trailing on the tile below) so it never
+                    // overlaps the last letters of a wide name like
+                    // "Creativity" or "Intellect" — reserved unconditionally
+                    // rather than only when a badge is present, so the label
+                    // doesn't shift when one appears or clears.
+                    .padding(.trailing, 26)
                     .frame(maxWidth: .infinity)
 
                 ZStack {
