@@ -393,6 +393,10 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color(red: 0.985, green: 0.975, blue: 0.955).ignoresSafeArea())
+        // WS16: Toggle/Picker controls default to the system's stock green,
+        // independent of the rest of the app's parchment styling — the same
+        // generic (non-skill-specific) accent onboarding already uses.
+        .tint(TrainingArcConfig.color(for: "focus"))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(TrainingTheme.background, for: .navigationBar)
