@@ -20,7 +20,7 @@ struct MoreView: View {
         activeStats.reduce(0) { $0 + max($1.chargeValue, 0) }
     }
 
-    private var resolvedThisWeekCount: Int {
+    private var resolvedLastWeekCount: Int {
         let weekStartsOnMonday = settingsRecords.first?.weekStartsOnMonday ?? true
         let lastCompletedWeek = WeekMath.lastCompletedWeek(before: .now, weekStartsOnMonday: weekStartsOnMonday)
         return resolutions.filter { $0.weekStartDate == lastCompletedWeek.start }.count
@@ -155,7 +155,7 @@ struct MoreView: View {
 
                 HStack(alignment: .top, spacing: 0) {
                     V4StatTile(value: V4Style.displayNumber(totalCharge), label: "Charge")
-                    V4StatTile(value: V4Style.displayNumber(resolvedThisWeekCount), label: "This week")
+                    V4StatTile(value: V4Style.displayNumber(resolvedLastWeekCount), label: "Last week")
                     V4StatTile(value: V4Style.displayNumber(atBaselineCount), label: "At baseline")
                 }
             }

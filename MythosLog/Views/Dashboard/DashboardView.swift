@@ -574,6 +574,17 @@ struct DashboardView: View {
                                 .overlay(TrainingTheme.border.opacity(0.3))
                         }
                     }
+
+                    // Never truncate silently — a card that reads "4 skills
+                    // losing momentum" when 3 more are also affected reads
+                    // as complete when it isn't.
+                    if highlights.count > 4 {
+                        Text("+\(highlights.count - 4) more")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 2)
+                    }
                 }
             }
         }

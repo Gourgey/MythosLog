@@ -194,8 +194,10 @@ struct HistoryView: View {
 
     private var overallSummary: some View {
         let totalLogs = logsInRange.count
-        let weeks = resolutionsInRange
-        let weekCount = weeks.count
+        // `resolutionsInRange` is one row per skill per week (7 skills x N
+        // weeks), so counting rows overcounts "Weeks" by roughly the active
+        // skill count. Count distinct week-start dates instead.
+        let weekCount = Set(resolutionsInRange.map(\.weekStartDate)).count
         let counts = skillTrendCounts(from: skillRangeSummaries)
         let improved = counts.improved
         let stagnating = counts.stagnating

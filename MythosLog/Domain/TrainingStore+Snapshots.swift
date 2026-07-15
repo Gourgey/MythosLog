@@ -158,7 +158,7 @@ extension TrainingStore {
         case .minutes:
             return "minutes"
         case .count:
-            return "counts"
+            return "times"
         case .customNumber:
             return "points"
         case .none:

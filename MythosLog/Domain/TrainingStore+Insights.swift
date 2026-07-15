@@ -137,7 +137,16 @@ extension TrainingStore {
                         text: "One strong week from ranking up"
                     )
                 )
-            } else if charge <= -2 {
+            } else if stat.pendingRankChange?.direction == .down ||
+                (charge <= -2 && stat.rankLevel > TrainingArcConfig.minimumRankLevel) {
+                // Matches WeeklyReviewView's `reviewUrgency` regression-risk
+                // predicate exactly. A pending rank-down already resolves
+                // charge back to 0 as part of creating the resolution —
+                // before the ceremony is even viewed — so checking `charge
+                // <= -2` alone (the old condition) let a skill drop out of
+                // this list the moment it dropped rank, while Review (which
+                // checks the pending change directly) kept showing it as
+                // "Risk" until the user opened and dismissed the ceremony.
                 highlights.append(
                     DashboardHighlight(
                         id: "momentum-\(statKey.rawValue)",
@@ -513,7 +522,8 @@ extension TrainingStore {
             .prefix(3)
             .map { item in
                 let deltaLabel = item.delta >= 0 ? "+\(MetricFormatting.shortMetric(item.delta))" : MetricFormatting.shortMetric(item.delta)
-                return "\(item.stat.name): \(deltaLabel) compared with the previous month."
+                let unit = weeklyUnitLabel(for: item.stat)
+                return "\(item.stat.name): \(deltaLabel) \(unit) compared with the previous month."
             }
 
         if rankUps.isEmpty == false {
@@ -524,9 +534,14 @@ extension TrainingStore {
             bullets = ["Log a few clean weeks to give the monthly analysis more signal."]
         }
 
-        let summary = rankUps.isEmpty
-            ? "No monthly rank-up spikes were recorded, so the strongest signal comes from raw activity deltas."
-            : "\(rankUps.count) weekly rank-up checks converted into level gains this month."
+        let summary: String
+        if rankUps.isEmpty {
+            summary = "No monthly rank-up spikes were recorded, so the strongest signal comes from raw activity deltas."
+        } else if rankUps.count == 1 {
+            summary = "1 weekly rank-up check converted into a level gain this month."
+        } else {
+            summary = "\(rankUps.count) weekly rank-up checks converted into level gains this month."
+        }
 
         return MonthlyImprovementAnalysis(
             headline: headline,

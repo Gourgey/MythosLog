@@ -95,16 +95,26 @@ struct WeeklyReviewView: View {
             }
     }
 
+    // These three previously mixed two independent axes: `skillsBehindCount`
+    // was pacing-based (this week's progress-to-target) while
+    // `skillsAtRegressionRiskCount` was charge-based (accumulated across
+    // weeks) — a skill on pace *this* week can still carry enough negative
+    // charge from past weeks to be a regression risk, so the two aren't
+    // nested and the three tiles didn't sum to the total skill count.
+    // `reviewUrgency` already assigns each item to exactly one bucket
+    // (regressionRisk checked first, then behindPace, then steady/complete)
+    // — deriving all three counts from that single classification instead
+    // makes them genuinely disjoint and guarantees they sum to the total.
+    private var skillsAtRegressionRiskCount: Int {
+        currentReviewItems.filter { $0.urgency == .regressionRisk }.count
+    }
+
     private var skillsBehindCount: Int {
-        currentReviewItems.filter { $0.snapshot.pacingStatus == .behind }.count
+        currentReviewItems.filter { $0.urgency == .behindPace }.count
     }
 
     private var skillsOnPaceOrCompleteCount: Int {
-        currentReviewItems.count - skillsBehindCount
-    }
-
-    private var skillsAtRegressionRiskCount: Int {
-        currentReviewItems.filter { $0.urgency == .regressionRisk }.count
+        currentReviewItems.filter { $0.urgency == .steady || $0.urgency == .complete }.count
     }
 
     private var recoveryItems: [ReviewSkillItem] {
