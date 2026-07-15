@@ -1442,8 +1442,8 @@ private struct GameDashboardTile: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 15, spacing: 7)
-                    .frame(height: 16)
+                DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 9, spacing: 3)
+                    .frame(height: 12)
                     .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, minHeight: 182, alignment: .top)

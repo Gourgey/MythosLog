@@ -52,7 +52,7 @@ struct SignedChargeMeter: View {
                 chargeSocket(
                     filled: negativeDots > (DashboardChargeDots.slotsPerSide - index - 1),
                     pendingFraction: 0,
-                    tint: TrainingTheme.warning
+                    tint: TrainingTheme.danger
                 )
             }
 
@@ -109,45 +109,12 @@ struct DirectionalChargeMeter: View {
     var socketSize: CGFloat = 10
     var spacing: CGFloat = 5
 
-    private var clampedCharge: Int {
-        DashboardChargeDots.clampedCharge(charge)
-    }
-
-    private var filledSlots: Int {
-        abs(clampedCharge)
-    }
-
-    private var tint: Color {
-        clampedCharge < 0 ? TrainingTheme.danger : TrainingTheme.positiveStrong
-    }
-
     var body: some View {
-        HStack(spacing: spacing) {
-            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
-                chargeSocket(filled: isFilled(index))
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(DashboardChargeDots.summaryLabel(for: charge))
-    }
-
-    private func isFilled(_ index: Int) -> Bool {
-        if clampedCharge < 0 {
-            return index >= DashboardChargeDots.slotsPerSide - filledSlots
-        }
-
-        return index < filledSlots
-    }
-
-    private func chargeSocket(filled: Bool) -> some View {
-        Circle()
-            .fill(filled ? tint : TrainingTheme.socketInner.opacity(0.58))
-            .overlay(
-                Circle()
-                    .stroke(filled ? tint.opacity(0.45) : TrainingTheme.socketOuter.opacity(0.20), lineWidth: 0.8)
-            )
-            .shadow(color: filled ? tint.opacity(0.22) : .clear, radius: 3, x: 0, y: 0)
-            .frame(width: socketSize, height: socketSize)
+        SignedChargeMeter(
+            charge: charge,
+            socketSize: socketSize,
+            spacing: spacing
+        )
     }
 }
 
