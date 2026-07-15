@@ -737,10 +737,10 @@ struct SkillDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(selectedDayLogTitle(for: effectiveDay))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-
+                    // The selected day tile above already identifies which
+                    // day this list shows (highlighted + its own date/weekday
+                    // labels) — a repeated "Wednesday Logs · 15 Jul" header
+                    // here said the same thing again.
                     if dayLogs.isEmpty {
                         Text("No logs on this day.")
                             .font(.subheadline)
@@ -768,12 +768,6 @@ struct SkillDetailView: View {
 
     private func chargeDots(snapshot: SkillProgressSnapshot) -> some View {
         SignedChargeMeter(charge: snapshot.charge.current, pendingProgress: snapshot.weeklyTargetProgress, socketSize: 14, spacing: 7)
-    }
-
-    private func selectedDayLogTitle(for day: Date) -> String {
-        let weekday = day.formatted(.dateTime.weekday(.wide))
-        let date = day.formatted(.dateTime.month(.abbreviated).day())
-        return "\(weekday) Logs · \(date)"
     }
 
     private func heroMetric(title: String, value: String, tint: Color) -> some View {
@@ -1037,20 +1031,28 @@ private struct SkillLogEntryRow: View {
                     .foregroundStyle(TrainingTheme.textSecondary)
             }
 
-            Text(entry.valueLabel)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(accent)
+            // A Health-imported entry's value, session type, and
+            // auto-generated "Imported from Apple Health…" note are exactly
+            // what HealthAttributionView's chips restate below (duration,
+            // mapped skill name, source) — showing both said the same thing
+            // twice. Manual entries have no attribution card, so their value/
+            // type/note are the only place that information appears and stay.
+            if entry.healthAttribution == nil {
+                Text(entry.valueLabel)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(accent)
 
-            if let sessionType = entry.sessionType {
-                Text(sessionType)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(TrainingTheme.textSecondary)
-            }
+                if let sessionType = entry.sessionType {
+                    Text(sessionType)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
 
-            if !entry.note.isEmpty {
-                Text(entry.note)
-                    .font(.caption)
-                    .foregroundStyle(TrainingTheme.textSecondary)
+                if !entry.note.isEmpty {
+                    Text(entry.note)
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
             }
 
             if let attribution = entry.healthAttribution {
