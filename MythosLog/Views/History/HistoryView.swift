@@ -127,12 +127,13 @@ struct HistoryView: View {
         }
     }
 
+    // WS15: the nav bar already titles this screen "History" — the in-scroll
+    // serif repeat said the same word twice in the first two lines. Review
+    // and Goals both rely on the kicker alone with no in-scroll hero; this
+    // now matches that pattern.
     private var historyPageHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             V4PageKicker(title: "Long-Term Trends")
-            Text("History")
-                .font(.system(size: 38, weight: .regular, design: .serif))
-                .foregroundStyle(TrainingTheme.textPrimary)
         }
     }
 
@@ -277,21 +278,31 @@ struct HistoryView: View {
         .pickerStyle(.menu)
     }
 
+    // WS15: the actual-value bars already carry the skill's accent via
+    // `.gradient` below, but a week with zero logged activity draws a
+    // zero-height bar — invisible — leaving only the neutral baseline
+    // reference line on screen, which is what read as "flat dark ink on a
+    // bare grid". Rather than tint the baseline line itself (it's
+    // deliberately neutral so it reads as a reference, not another data
+    // series, against the accent-colored actual bars), a soft accent wash
+    // behind the whole plot keeps the skill's identity present even when
+    // that week's bar has nothing to show.
     private func statChart(for stat: StatDomain) -> some View {
+        let accent = TrainingArcConfig.color(for: stat.colorToken)
         let chartData = (stat.weeklyResolutions ?? [])
             .filter { rangeInterval.contains($0.weekStartDate) }
             .sorted { $0.weekStartDate < $1.weekStartDate }
 
-        return V4Card(accent: TrainingArcConfig.color(for: stat.colorToken)) {
+        return V4Card(accent: accent) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: stat.iconName)
                         .font(.caption.weight(.heavy))
-                        .foregroundStyle(TrainingArcConfig.color(for: stat.colorToken))
+                        .foregroundStyle(accent)
                     Text(stat.name.uppercased())
                         .font(.caption.weight(.heavy))
                         .tracking(2.0)
-                        .foregroundStyle(TrainingArcConfig.color(for: stat.colorToken))
+                        .foregroundStyle(accent)
                 }
 
                 if chartData.isEmpty {
@@ -307,7 +318,7 @@ struct HistoryView: View {
                                 x: .value("Week", week.weekStartDate, unit: .weekOfYear),
                                 y: .value("Actual", week.actualCompletedValue)
                             )
-                            .foregroundStyle(TrainingArcConfig.color(for: stat.colorToken).gradient)
+                            .foregroundStyle(accent.gradient)
                         }
 
                         ForEach(chartData) { week in
@@ -341,6 +352,15 @@ struct HistoryView: View {
                         }
                     }
                     .frame(height: 220)
+                    .chartPlotStyle { plotContent in
+                        plotContent.background(
+                            LinearGradient(
+                                colors: [accent.opacity(0.10), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    }
                 }
             }
         }
