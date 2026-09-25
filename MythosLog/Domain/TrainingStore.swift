@@ -73,6 +73,59 @@ enum TrainingStore {
 
     static let sharedModelContainer = makeModelContainer()
 
+    #if DEBUG
+    /// Pushes every record type and field in `schema` to the CloudKit
+    /// Development environment, ready for "Deploy Schema Changes" in the
+    /// CloudKit Console. CloudKit only creates a field when a record carrying
+    /// a value for it syncs, so optional fields can otherwise be missing from
+    /// the deployed schema. Run once on a signed-in device with the
+    /// `-InitializeCloudKitSchema` launch argument. Uses a throwaway store, so
+    /// no user data is touched.
+    static func initializeCloudKitSchema() {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CloudKitSchemaInit-\(UUID().uuidString).sqlite")
+        let description = NSPersistentStoreDescription(url: storeURL)
+        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+            containerIdentifier: AppIdentity.iCloudContainerIdentifier
+        )
+        description.shouldAddStoreAsynchronously = false
+
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: [
+            StatDomain.self,
+            Habit.self,
+            HabitLog.self,
+            WeeklyResolution.self,
+            AppSettings.self,
+            HealthImportedWorkout.self,
+            Goal.self
+        ]) else {
+            syncLogger.error("CloudKit schema init: could not build a managed object model")
+            return
+        }
+
+        let container = NSPersistentCloudKitContainer(name: AppIdentity.internalProjectName, managedObjectModel: model)
+        container.persistentStoreDescriptions = [description]
+        var loadError: Error?
+        container.loadPersistentStores { _, error in loadError = error }
+        if let loadError {
+            syncLogger.error("CloudKit schema init: store failed to load: \(String(describing: loadError), privacy: .public)")
+            return
+        }
+
+        do {
+            try container.initializeCloudKitSchema()
+            syncLogger.info("CloudKit schema init: Development schema is up to date. Deploy it to Production in the CloudKit Console.")
+        } catch {
+            syncLogger.error("CloudKit schema init failed: \(String(describing: error), privacy: .public)")
+        }
+
+        if let store = container.persistentStoreCoordinator.persistentStores.first {
+            try? container.persistentStoreCoordinator.remove(store)
+        }
+        try? FileManager.default.removeItem(at: storeURL)
+    }
+    #endif
+
     static func makeModelContainer(inMemory: Bool = false) -> ModelContainer {
         let fileManager = FileManager.default
         let canUseAppGroup = !inMemory && fileManager.containerURL(

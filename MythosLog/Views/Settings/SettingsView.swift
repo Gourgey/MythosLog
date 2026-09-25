@@ -440,6 +440,23 @@ struct SettingsView: View {
                     categoryHeader(.data)
                 }
 
+                // Always expanded: App Review expects the privacy policy to be
+                // easy to find inside the app, not tucked behind a disclosure.
+                Section {
+                    Link(destination: AppIdentity.privacyPolicyURL) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                    Link(destination: AppIdentity.websiteURL) {
+                        Label("Mythos Log Website", systemImage: "safari")
+                    }
+                } header: {
+                    Text("About")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                        .textCase(nil)
+                        .padding(.vertical, 8)
+                }
+
                 #if DEBUG
                 Section {
                     if isExpanded(.debugTools) {

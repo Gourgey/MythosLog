@@ -9,4 +9,6 @@ enum AppIdentity {
     nonisolated static let widgetSnapshotDefaultsKey = "mythoslog.widget.snapshot"
     nonisolated static let pendingDestinationKey = "training.arc.pending.destination"
     nonisolated static let healthWorkoutAnchorKey = "training.arc.health.anchor"
+    nonisolated static let websiteURL = URL(string: "https://curateddesign.studio/apps/mythos-log/")!
+    nonisolated static let privacyPolicyURL = URL(string: "https://curateddesign.studio/apps/mythos-log/privacy/")!
 }

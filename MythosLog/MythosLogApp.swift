@@ -113,6 +113,9 @@ struct MythosLogApp: App {
 
     #if DEBUG
     init() {
+        if ProcessInfo.processInfo.arguments.contains("-InitializeCloudKitSchema") {
+            TrainingStore.initializeCloudKitSchema()
+        }
         if ProcessInfo.processInfo.arguments.contains("-SeedScreenshotData") {
             try? TrainingStore.seedScreenshotData(context: TrainingStore.sharedModelContainer.mainContext)
         }
