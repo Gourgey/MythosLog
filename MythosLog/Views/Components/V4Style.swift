@@ -208,3 +208,17 @@ struct V4SerifTitle: View {
             .minimumScaleFactor(0.7)
     }
 }
+
+/// Restrained surface used by the review, goals and history screens.
+struct QuietCard<Content: View>: View {
+    var padding: CGFloat = 18
+    var accent: Color = TrainingTheme.border
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) { content }
+            .padding(padding)
+            .background(TrainingTheme.card, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(TrainingTheme.border, lineWidth: 0.5))
+    }
+}

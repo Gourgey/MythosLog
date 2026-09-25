@@ -32,6 +32,32 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
 }
 
+/// The two ways the all-skills chart can read a range. `levels` is the default:
+/// one line per skill showing rank level week by week. `baselineShare` answers
+/// the other question — how much did I actually log against what that skill
+/// asked of me — on a shared 0-100%+ scale, so skills measured in minutes and
+/// skills measured in pages are directly comparable.
+enum HistoryChartMode: String, CaseIterable, Identifiable {
+    case levels
+    case baselineShare
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .levels: "Levels"
+        case .baselineShare: "% of Baseline"
+        }
+    }
+
+    var caption: String {
+        switch self {
+        case .levels: "Rank level for every skill, week by week."
+        case .baselineShare: "What you logged each week as a share of that skill's baseline."
+        }
+    }
+}
+
 struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \StatDomain.name) private var stats: [StatDomain]
@@ -39,6 +65,8 @@ struct HistoryView: View {
     @Query(sort: \HabitLog.date, order: .reverse) private var allLogs: [HabitLog]
     @State private var selectedStatKey: String?
     @State private var range: HistoryRange = .month3
+    @State private var showsSkillDetail = false
+    @State private var chartMode: HistoryChartMode = .levels
 
     private var activeStats: [StatDomain] {
         stats.filter { $0.isActive }.sorted { $0.sortOrder < $1.sortOrder }
@@ -81,13 +109,13 @@ struct HistoryView: View {
                     historyPageHeader
 
                     if activeStats.isEmpty {
-                        V4Card {
+                        QuietCard {
                             Text("History appears after you resolve your first week.")
                                 .foregroundStyle(TrainingTheme.textSecondary)
                                 .font(.subheadline)
                         }
                     } else if allResolutions.isEmpty {
-                        V4Card {
+                        QuietCard {
                             VStack(alignment: .leading, spacing: 8) {
                                 V4SerifTitle(text: "No resolved weeks yet", size: 24)
                                 Text("Once you resolve your first weekly review, History will fill with charts, trends, and per-skill summaries.")
@@ -98,18 +126,31 @@ struct HistoryView: View {
                     } else {
                         rangePicker
                         if resolutionsInRange.isEmpty {
-                            V4Card {
+                            QuietCard {
                                 Text("No resolved weeks in this range. Try widening the range or resolve another week.")
                                     .font(.subheadline)
                                     .foregroundStyle(TrainingTheme.textSecondary)
                             }
                         }
-                        overallSummary
-                        statPicker
-                        if let stat = selectedStat {
-                            statChart(for: stat)
-                            statSummary(for: stat)
-                            recentResolutions(for: stat)
+                        Picker("History view", selection: $showsSkillDetail) {
+                            Text("Overview").tag(false)
+                            Text("By Skill").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if showsSkillDetail {
+                            statPicker
+                            if let stat = selectedStat {
+                                statChart(for: stat)
+                                statSummary(for: stat)
+                                DisclosureGroup("Resolved weeks") {
+                                    recentResolutions(for: stat)
+                                }
+                                .id(stat.id)
+                            }
+                        } else {
+                            allSkillsSection
+                            overallSummary
                         }
                     }
                 }
@@ -159,17 +200,306 @@ struct HistoryView: View {
         }
     }
 
+    // MARK: - All skills
+
+    private struct SkillSeriesPoint: Identifiable {
+        let id: String
+        let weekStart: Date
+        let level: Double
+        let baselinePercent: Double
+
+        func value(for mode: HistoryChartMode) -> Double {
+            switch mode {
+            case .levels: level
+            case .baselineShare: baselinePercent
+            }
+        }
+    }
+
+    private struct SkillSeries: Identifiable {
+        let statKey: String
+        let name: String
+        let color: Color
+        let points: [SkillSeriesPoint]
+        /// Everything logged in this range over everything the range asked for.
+        /// This is the "attention" measure: it's baseline-relative, so a skill
+        /// with a small baseline can still top the list by consistently
+        /// clearing it.
+        let effortRatio: Double
+        var isFocus: Bool
+
+        var id: String { statKey }
+    }
+
+    /// Series for every active skill, with the highest-effort ones flagged so
+    /// the chart can foreground them and grey the rest back.
+    private var skillSeries: [SkillSeries] {
+        let built: [SkillSeries] = skillRangeSummaries.map { stat, resolutions in
+            let points = resolutions.map { resolution in
+                SkillSeriesPoint(
+                    id: "\(stat.key)-\(resolution.weekStartDate.timeIntervalSince1970)",
+                    weekStart: resolution.weekStartDate,
+                    level: Double(resolution.levelAfter),
+                    baselinePercent: baselinePercent(for: resolution)
+                )
+            }
+            let expected = resolutions.map(\.expectedTotal).reduce(0, +)
+            let actual = resolutions.map(\.actualCompletedValue).reduce(0, +)
+            return SkillSeries(
+                statKey: stat.key,
+                name: stat.name,
+                color: TrainingArcConfig.color(for: stat.colorToken),
+                points: points,
+                effortRatio: expected > 0 ? actual / expected : 0,
+                isFocus: false
+            )
+        }
+
+        // Roughly the top third, so the highlight stays meaningful whether the
+        // user tracks three skills or nine.
+        let ranked = built.sorted { $0.effortRatio > $1.effortRatio }
+        let focusCount = max(1, min(3, (ranked.count + 2) / 3))
+        var focusKeys = Set(ranked.prefix(focusCount).filter { $0.effortRatio > 0 }.map(\.statKey))
+        // Nothing logged anywhere in the range — no skill got "more" attention,
+        // so don't grey every line back for no reason.
+        if focusKeys.isEmpty { focusKeys = Set(built.map(\.statKey)) }
+
+        return built.map { series in
+            var copy = series
+            copy.isFocus = focusKeys.contains(series.statKey)
+            return copy
+        }
+    }
+
+    private func baselinePercent(for resolution: WeeklyResolution) -> Double {
+        let baseline = resolution.expectedTotal > 0 ? resolution.expectedTotal : Double(resolution.baselineAtStart)
+        guard baseline > 0 else { return resolution.actualCompletedValue > 0 ? 100 : 0 }
+        return resolution.actualCompletedValue / baseline * 100
+    }
+
+    private var allSkillsSection: some View {
+        let series = skillSeries
+        let plotted = series.filter { !$0.points.isEmpty }
+
+        return QuietCard(accent: TrainingArcConfig.color(for: "focus")) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("ALL SKILLS")
+                        .font(.caption.weight(.heavy))
+                        .tracking(2.0)
+                        .foregroundStyle(TrainingTheme.textMuted)
+                    Spacer()
+                    Text(range.label)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
+
+                Picker("Chart", selection: $chartMode) {
+                    ForEach(HistoryChartMode.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                Text(chartMode.caption)
+                    .font(.caption)
+                    .foregroundStyle(TrainingTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if plotted.isEmpty {
+                    Text("No resolved weeks in this range yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .frame(height: 120, alignment: .center)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    combinedChart(plotted)
+                    Divider().overlay(TrainingTheme.border.opacity(0.5))
+                    DisclosureGroup("Effort by skill") {
+                        attentionRanking(plotted)
+                    }
+                }
+            }
+        }
+    }
+
+    /// One drawn point, with its styling already resolved. Flattening the
+    /// series into this before the `Chart` builder keeps every mark expression
+    /// small — the nested ForEach with inline ternaries per mark was more than
+    /// the type checker would take.
+    private struct PlotPoint: Identifiable {
+        let id: String
+        let seriesName: String
+        let date: Date
+        let value: Double
+        let color: Color
+        let lineWidth: Double
+        let symbolSize: Double
+    }
+
+    private func plotPoints(_ series: [SkillSeries]) -> [PlotPoint] {
+        series.flatMap { skill -> [PlotPoint] in
+            let color = skill.color.opacity(skill.isFocus ? 1 : 0.22)
+            let lineWidth: Double = skill.isFocus ? 2.4 : 1
+            // A one-week range draws no line at all, so single-point series get
+            // a dot even when they aren't highlighted.
+            let symbolSize: Double = skill.isFocus ? 26 : (skill.points.count == 1 ? 18 : 0)
+            let mode = chartMode
+            return skill.points.map { point in
+                PlotPoint(
+                    id: point.id,
+                    seriesName: skill.name,
+                    date: point.weekStart,
+                    value: point.value(for: mode),
+                    color: color,
+                    lineWidth: lineWidth,
+                    symbolSize: symbolSize
+                )
+            }
+        }
+    }
+
+    private func yDomain(_ series: [SkillSeries]) -> ClosedRange<Double> {
+        switch chartMode {
+        case .levels:
+            return 1...Double(TrainingArcConfig.maximumRankLevel)
+        case .baselineShare:
+            let peak = series.flatMap(\.points).map(\.baselinePercent).max() ?? 100
+            return 0...max(peak * 1.1, 120)
+        }
+    }
+
+    private func yAxisLabel(_ raw: Double?) -> String {
+        guard let raw else { return "" }
+        return chartMode == .levels ? "LV \(Int(raw))" : "\(Int(raw))%"
+    }
+
+    private func combinedChart(_ series: [SkillSeries]) -> some View {
+        let marks = plotPoints(series)
+        let symbols = marks.filter { $0.symbolSize > 0 }
+        // Levels hold flat and then jump on resolution night — interpolating
+        // them would draw a rise that never happened. Percentages join straight
+        // for the same reason: a curve through weekly totals invents peaks
+        // between the weeks it's drawn from.
+        let interpolation: InterpolationMethod = chartMode == .levels ? .stepEnd : .linear
+
+        return Chart {
+            ForEach(marks) { mark in
+                LineMark(
+                    x: .value("Week", mark.date, unit: .weekOfYear),
+                    y: .value("Value", mark.value),
+                    series: .value("Skill", mark.seriesName)
+                )
+                .foregroundStyle(mark.color)
+                .lineStyle(StrokeStyle(lineWidth: mark.lineWidth, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(interpolation)
+            }
+
+            ForEach(symbols) { mark in
+                PointMark(
+                    x: .value("Week", mark.date, unit: .weekOfYear),
+                    y: .value("Value", mark.value)
+                )
+                .foregroundStyle(mark.color)
+                .symbolSize(mark.symbolSize)
+            }
+
+            if chartMode == .baselineShare {
+                RuleMark(y: .value("Baseline", 100))
+                    .foregroundStyle(TrainingTheme.textSecondary.opacity(0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    // Trailing put the label half outside the plot and it
+                    // clipped to "Basel…" — leading keeps it inside.
+                    .annotation(position: .top, alignment: .leading) {
+                        Text("Baseline")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                    }
+            }
+        }
+        .frame(height: 230)
+        .chartYScale(domain: yDomain(series))
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine().foregroundStyle(TrainingTheme.border.opacity(0.5))
+                AxisValueLabel {
+                    Text(yAxisLabel(value.as(Double.self)))
+                        .font(.caption2)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine().foregroundStyle(TrainingTheme.border.opacity(0.35))
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+            }
+        }
+        .chartLegend(.hidden)
+    }
+
+    /// Doubles as the chart's legend and as the answer to "which skills did I
+    /// actually give effort to?" — same colors, same highlight, ordered by
+    /// effort. Tapping a row drives the per-skill section below.
+    private func attentionRanking(_ series: [SkillSeries]) -> some View {
+        let ranked = series.sorted { $0.effortRatio > $1.effortRatio }
+        let peak = max(ranked.first?.effortRatio ?? 0, 0.01)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("MOST EFFORT THIS RANGE")
+                .font(.caption2.weight(.heavy))
+                .tracking(1.6)
+                .foregroundStyle(TrainingTheme.textMuted)
+
+            ForEach(ranked) { skill in
+                Button {
+                    selectedStatKey = skill.statKey
+                    showsSkillDetail = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(skill.color.opacity(skill.isFocus ? 1 : 0.3))
+                            .frame(width: 8, height: 8)
+                        Text(skill.name)
+                            .font(.subheadline.weight(skill.isFocus ? .semibold : .regular))
+                            .foregroundStyle(skill.isFocus ? TrainingTheme.textPrimary : TrainingTheme.textSecondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(TrainingTheme.border.opacity(0.35))
+                                .frame(height: 5)
+                            Capsule()
+                                .fill(skill.color.opacity(skill.isFocus ? 1 : 0.3))
+                                .frame(width: 74 * min(skill.effortRatio / peak, 1), height: 5)
+                        }
+                        .frame(width: 74)
+                        Text("\(Int((skill.effortRatio * 100).rounded()))%")
+                            .font(.caption.weight(.bold))
+                            .monospacedDigit()
+                            .foregroundStyle(skill.isFocus ? TrainingTheme.textPrimary : TrainingTheme.textMuted)
+                            .frame(width: 46, alignment: .trailing)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(skill.name), \(Int((skill.effortRatio * 100).rounded()))% of baseline this range")
+            }
+
+            Text("Percent of each skill's own baseline logged across this range — highlighted skills got the most effort.")
+                .font(.caption2)
+                .foregroundStyle(TrainingTheme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private struct SkillTrendCounts {
         var improved = 0
         var stagnating = 0
         var regressing = 0
-        var best: (name: String, ratio: Double)?
-        var worst: (name: String, ratio: Double)?
     }
 
     private func skillTrendCounts(from summaries: [(stat: StatDomain, resolutions: [WeeklyResolution])]) -> SkillTrendCounts {
         var counts = SkillTrendCounts()
-        for (stat, resolutions) in summaries {
+        for (_, resolutions) in summaries {
             if resolutions.count >= 2 {
                 let firstHalf = resolutions.prefix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
                 let secondHalf = resolutions.suffix(resolutions.count / 2).map(\.actualCompletedValue).reduce(0, +)
@@ -181,15 +511,6 @@ struct HistoryView: View {
             }
             if !resolutions.isEmpty, resolutions.allSatisfy({ $0.didStagnate || abs($0.weeklyDelta) < 0.001 }) {
                 counts.stagnating += 1
-            }
-
-            let total = resolutions.map(\.actualCompletedValue).reduce(0, +)
-            let ratio = total / max(Double(stat.currentBaseline), 1)
-            if counts.best == nil || ratio > counts.best!.ratio {
-                counts.best = (stat.name, ratio)
-            }
-            if counts.worst == nil || ratio < counts.worst!.ratio {
-                counts.worst = (stat.name, ratio)
             }
         }
         return counts
@@ -206,10 +527,7 @@ struct HistoryView: View {
         let stagnating = counts.stagnating
         let regressing = counts.regressing
 
-        let best = counts.best?.name
-        let worst = counts.worst?.name
-
-        return V4Card(accent: TrainingArcConfig.color(for: "focus")) {
+        return QuietCard(accent: TrainingArcConfig.color(for: "focus")) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("OVERALL")
@@ -233,31 +551,10 @@ struct HistoryView: View {
                     summaryStat(title: "Skills", value: activeStats.count)
                 }
 
-                if best != nil || worst != nil {
-                    Divider().overlay(TrainingTheme.border.opacity(0.4))
-                }
-                if let best {
-                    HStack(spacing: 8) {
-                        Text("STRONGEST")
-                            .font(.caption2.weight(.heavy))
-                            .tracking(1.6)
-                            .foregroundStyle(TrainingTheme.textMuted)
-                        Text(best)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(TrainingTheme.positiveStrong)
-                    }
-                }
-                if let worst {
-                    HStack(spacing: 8) {
-                        Text("MOST NEGLECTED")
-                            .font(.caption2.weight(.heavy))
-                            .tracking(1.6)
-                            .foregroundStyle(TrainingTheme.textMuted)
-                        Text(worst)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(TrainingTheme.warning)
-                    }
-                }
+                // STRONGEST / MOST NEGLECTED used to live here as two names.
+                // The all-skills card above now ranks every skill by the same
+                // baseline-relative measure, with numbers and the matching
+                // chart colors — the two-name version said strictly less.
             }
         }
     }
@@ -293,7 +590,7 @@ struct HistoryView: View {
             .filter { rangeInterval.contains($0.weekStartDate) }
             .sorted { $0.weekStartDate < $1.weekStartDate }
 
-        return V4Card(accent: accent) {
+        return QuietCard(accent: accent) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: stat.iconName)
@@ -369,7 +666,7 @@ struct HistoryView: View {
     private func statSummary(for stat: StatDomain) -> some View {
         let trend = trendInsight(for: stat)
         let accent = TrainingArcConfig.color(for: stat.colorToken)
-        return V4Card {
+        return QuietCard {
             VStack(alignment: .leading, spacing: 10) {
                 Text("TREND")
                     .font(.caption.weight(.heavy))
@@ -412,14 +709,14 @@ struct HistoryView: View {
                 .tracking(2.0)
                 .foregroundStyle(TrainingTheme.textMuted)
             if recent.isEmpty {
-                V4Card {
+                QuietCard {
                     Text("No resolved weeks in this range yet.")
                         .font(.subheadline)
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
                 ForEach(recent) { resolution in
-                    V4Card {
+                    QuietCard {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(WeekRange(start: resolution.weekStartDate, end: resolution.weekEndDate).displayTitle)

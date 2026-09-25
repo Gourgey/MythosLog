@@ -168,7 +168,7 @@ struct UnmatchedWorkoutSheet: View {
         try? modelContext.save()
 
         if loggedAny, let stat = habit.statDomain {
-            try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .logMutation)
+            _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .logMutation)
         }
         try? TrainingStore.refreshWidgetSnapshot(context: modelContext)
     }

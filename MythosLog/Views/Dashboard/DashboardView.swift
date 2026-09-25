@@ -13,10 +13,30 @@ private struct IdentifiableStat: Identifiable {
     var id: UUID { stat.id }
 }
 
-private struct HoneycombWidthPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+/// Reports a view's laid-out size without dictating it.
+///
+/// Deliberately not a `PreferenceKey`: a preference published from inside a
+/// `.background`/`.overlay` branch never reaches the host view's preference
+/// stream, so the matching `onPreferenceChange` silently never fires and the
+/// reader is left holding its default forever. Writing the measurement to
+/// state directly from the probe is the form that actually delivers.
+private struct SizeReaderModifier: ViewModifier {
+    let onSizeChange: (CGSize) -> Void
+
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { onSizeChange(proxy.size) }
+                    .onChange(of: proxy.size) { _, newSize in onSizeChange(newSize) }
+            }
+        )
+    }
+}
+
+private extension View {
+    func measuringSize(_ onSizeChange: @escaping (CGSize) -> Void) -> some View {
+        modifier(SizeReaderModifier(onSizeChange: onSizeChange))
     }
 }
 
@@ -40,11 +60,29 @@ struct DashboardView: View {
     @State private var showingRankReview = false
     @State private var showingStatsSheet = false
     @State private var honeycombAvailableWidth: CGFloat = 380
-    private let compactGridColumnCount = 2
-    private let compactGridSpacing: CGFloat = 16
+    @State private var dashboardViewportHeight: CGFloat = 0
+    @State private var commandStripHeight: CGFloat = 0
+    /// Height a honeycomb tile spends on everything that is not the ring: the
+    /// name above it, the fraction/level row and charge meter below it, plus
+    /// the `VStack` spacing between them. Measured at 65–66pt at the default
+    /// text size; carried a point over so the estimate errs toward a slightly
+    /// larger bottom gap rather than a row that runs into the tab bar. Scaled
+    /// so it tracks Dynamic Type, where the labels are what actually grow.
+    @ScaledMetric(relativeTo: .body) private var honeycombTileChromeHeight: CGFloat = 67
+    private let twoColumnColumns = 2
+    private let twoColumnSpacing: CGFloat = 16
     private let gameGridColumnCount = 3
-    private let gameGridSpacing: CGFloat = 4
-    private let gameGridRowSpacing: CGFloat = 12
+    private let gameGridSpacing: CGFloat = 6
+    private let gameGridRowSpacing: CGFloat = 24
+    private let dashboardContentSpacing: CGFloat = 18
+    private let dashboardContentTopPadding: CGFloat = 4
+    private let honeycombTopPadding: CGFloat = 2
+    /// Breathing room kept between the last thing in the scroll view — the
+    /// bottom honeycomb row's charge meter, usually — and the floating tab
+    /// bar. It only needs to be a gap: the tab bar is installed as a bottom
+    /// `safeAreaInset` by the shell, so the scroll view is already short of
+    /// it and this does not have to clear the bar's own height.
+    private let dashboardBottomGap: CGFloat = 20
 
     private var settings: AppSettings? {
         settingsRecords.first
@@ -137,63 +175,75 @@ struct DashboardView: View {
         ZStack {
             dashboardBackdrop
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    commandStrip
-
-                    if isReordering {
-                        reorderBanner
+            // The honeycomb sizes itself against the space this scroll view
+            // actually gets, so read that height rather than assuming a device.
+            GeometryReader { proxy in
+                dashboardScrollContent
+                    .onAppear { dashboardViewportHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, newHeight in
+                        dashboardViewportHeight = newHeight
                     }
-
-                    if activeStats.isEmpty {
-                        dashboardEmptyState
-                    } else {
-                        // Skills-only first view — the circles are the priority.
-                        // Standings, rank & charge, and goals live in the "This
-                        // week" sheet opened from the header chip.
-                        switch displayedLayoutMode {
-                        case .detailedCards:
-                            detailedDashboard
-                        case .compactGrid:
-                            compactGridDashboard
-                        case .gameGrid:
-                            gameGridDashboard
-                        }
-
-                        if !pendingRankChanges.isEmpty {
-                            rankReviewBanner
-                                .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
-                        }
-                    }
-                }
-                .padding(.horizontal, displayedLayoutMode == .gameGrid ? 2 : 16)
-                .padding(.top, 4)
-                .padding(.bottom, 118)
             }
-            .coordinateSpace(name: "dashboardScroll")
-        }
-        .overlay(alignment: .top) {
-            LinearGradient(
-                colors: [
-                    TrainingTheme.background.opacity(0.98),
-                    TrainingTheme.background.opacity(0.82),
-                    TrainingTheme.background.opacity(0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 28)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
     }
 
+    private var dashboardScrollContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: dashboardContentSpacing) {
+                commandStrip
+                    .measuringSize { size in
+                        // Only the collapsed strip is a stable reference.
+                        // An open layout/insights menu grows it, and
+                        // letting that through would shrink every ring for
+                        // as long as the menu is up.
+                        if size.height > 0, topMenuState == .none {
+                            commandStripHeight = size.height
+                        }
+                    }
+
+                if isReordering {
+                    reorderBanner
+                }
+
+                if activeStats.isEmpty {
+                    dashboardEmptyState
+                } else {
+                    // Skills-only first view — the circles are the priority.
+                    // Standings, rank & charge, and goals live in the "This
+                    // week" sheet opened from the header chip.
+                    switch displayedLayoutMode {
+                    case .detailedCards:
+                        detailedDashboard
+                            .environment(\.isDashboardArtwork, true)
+                    case .twoColumn:
+                        twoColumnDashboard
+                            .environment(\.isDashboardArtwork, true)
+                    case .gameGrid:
+                        gameGridDashboard
+                            .environment(\.isDashboardArtwork, true)
+                    }
+
+                    if !pendingRankChanges.isEmpty {
+                        rankReviewBanner
+                            .padding(.horizontal, displayedLayoutMode == .gameGrid ? 14 : 0)
+                    }
+                }
+            }
+            .padding(.horizontal, displayedLayoutMode == .gameGrid ? 12 : 16)
+            .padding(.top, dashboardContentTopPadding)
+            .padding(.bottom, dashboardBottomGap)
+        }
+        .coordinateSpace(name: "dashboardScroll")
+    }
+
     private var todayKicker: some View {
-        let formatted = dynamicTypeSize.isAccessibilitySize
-            ? Date.now.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-            : Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
-        return V4PageKicker(title: formatted)
+        let weekday = Date.now.formatted(.dateTime.weekday(.abbreviated))
+        let date = Date.now.formatted(.dateTime.day().month(.abbreviated))
+        return Text("\(weekday) · \(date)".uppercased())
+            .font(.caption.weight(.semibold))
+            .tracking(1)
+            .foregroundStyle(TrainingTheme.textPrimary)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var statsChip: some View {
@@ -203,19 +253,14 @@ struct DashboardView: View {
             }
             showingStatsSheet = true
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.caption2.weight(.bold))
-                Text("This week")
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(TrainingTheme.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(TrainingTheme.actionSurface))
-            .overlay(
-                Capsule().strokeBorder(TrainingTheme.borderStrong.opacity(0.14), lineWidth: 1)
-            )
+            Text("This week")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(TrainingTheme.actionSurface))
+                .frame(minHeight: 44)
+
         }
         .buttonStyle(.plain)
         .accessibilityLabel("This week's standing, rank, and goals")
@@ -257,6 +302,7 @@ struct DashboardView: View {
             } else {
                 HStack(alignment: .center, spacing: 10) {
                     todayKicker
+                    Spacer(minLength: 4)
 
                     if !activeStats.isEmpty {
                         statsChip
@@ -270,7 +316,7 @@ struct DashboardView: View {
             HStack(alignment: .top, spacing: 12) {
                 if topMenuState == .layout {
                     commandMenu {
-                        ForEach([DashboardLayoutMode.gameGrid, .compactGrid, .detailedCards]) { mode in
+                        ForEach([DashboardLayoutMode.gameGrid, .twoColumn, .detailedCards]) { mode in
                             menuButton(
                                 title: mode.displayName,
                                 icon: layoutMenuIcon(for: mode),
@@ -323,37 +369,8 @@ struct DashboardView: View {
             .transition(.move(edge: .top).combined(with: .opacity))
             .animation(.spring(response: 0.32, dampingFraction: 0.84), value: topMenuState)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            TrainingTheme.card.opacity(0.98),
-                            .white.opacity(0.86),
-                            TrainingTheme.elevatedCard.opacity(0.94)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            dashboardChromeAccent.opacity(0.28),
-                            .white.opacity(0.70),
-                            TrainingTheme.borderStrong.opacity(0.18)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 0.9
-                )
-        )
-        .shadow(color: dashboardChromeAccent.opacity(0.10), radius: 10, x: 0, y: 5)
+        .padding(.horizontal, 2)
+        .padding(.vertical, 8)
     }
 
     private var dashboardEmptyState: some View {
@@ -368,8 +385,8 @@ struct DashboardView: View {
     }
 
     private var dashboardControlButtons: some View {
-        HStack(spacing: 10) {
-            commandButton(icon: "line.3.horizontal", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
+        HStack(spacing: 0) {
+            commandButton(icon: "square.grid.2x2", isActive: topMenuState == .layout, accessibilityLabel: "Dashboard layout") {
                 toggleMenu(.layout)
             }
 
@@ -377,13 +394,6 @@ struct DashboardView: View {
                 toggleMenu(.insights)
             }
         }
-    }
-
-    private var needsAttentionStatKeys: Set<String> {
-        let recs = (try? TrainingStore.trainTodayRecommendations(context: modelContext, settings: settings)) ?? []
-        return Set(recs.compactMap { rec in
-            rec.reason == .reviewReady ? nil : rec.statKeyRaw
-        })
     }
 
     private var awaitingAttributionStatKeys: Set<String> {
@@ -768,7 +778,6 @@ struct DashboardView: View {
     }
 
     private var detailedDashboard: some View {
-        let attention = needsAttentionStatKeys
         let unmatched = awaitingAttributionStatKeys
         // Evaluate once per render, not once per tile (see focusTargetID).
         let focusID = focusTargetID
@@ -791,7 +800,6 @@ struct DashboardView: View {
                         habits: habits,
                         isFocusTarget: stat.id == focusID,
                         showLogFeedback: flashedStatID == stat.id,
-                        needsAttention: attention.contains(stat.key),
                         hasUnmatchedImports: unmatched.contains(stat.key),
                         onOpenDetail: {
                             openDetail(for: stat)
@@ -818,15 +826,13 @@ struct DashboardView: View {
         }
     }
 
-    private var compactGridDashboard: some View {
-        let attention = needsAttentionStatKeys
+    private var twoColumnDashboard: some View {
         let unmatched = awaitingAttributionStatKeys
         return VStack(alignment: .leading, spacing: 0) {
-            CenteredDashboardGridLayout(columns: compactGridColumnCount, spacing: compactGridSpacing) {
+            CenteredDashboardGridLayout(columns: twoColumnColumns, spacing: twoColumnSpacing) {
                 ForEach(activeStats) { stat in
-                    compactGridTile(
+                    twoColumnTile(
                         for: stat,
-                        needsAttention: attention.contains(stat.key),
                         hasUnmatchedImports: unmatched.contains(stat.key)
                     )
                 }
@@ -836,17 +842,15 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var gameGridDashboard: some View {
-        let attention = needsAttentionStatKeys
         let unmatched = awaitingAttributionStatKeys
 
         if activeStats.count == 7 {
-            honeycombGameGridDashboard(attention: attention, unmatched: unmatched)
+            honeycombGameGridDashboard(unmatched: unmatched)
         } else {
             CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
                 ForEach(activeStats) { stat in
                     gameDashboardTile(
                         for: stat,
-                        needsAttention: attention.contains(stat.key),
                         hasUnmatchedImports: unmatched.contains(stat.key)
                     )
                 }
@@ -861,14 +865,15 @@ struct DashboardView: View {
     /// an inline `GeometryReader`; that estimate quietly fell short of the
     /// tile's real rendered height (worse at larger Dynamic Type sizes), so
     /// the next row started before the previous one's bottom content — its
-    /// charge meter — had fully cleared. Reading the available width via
-    /// `.background` + a preference key instead of a size-dictating
-    /// `GeometryReader` lets the VStack/HStacks size themselves naturally, so
-    /// rows can never run short of the space their own content needs — at any
-    /// Dynamic Type size. All three rows render at the same scale — no
+    /// charge meter — had fully cleared. Measuring the available width with a
+    /// passive probe instead of a size-dictating `GeometryReader` lets the
+    /// VStack/HStacks size themselves naturally, so rows can never run short
+    /// of the space their own content needs — at any Dynamic Type size. Only
+    /// the ring *width* is ever computed; every height stays intrinsic.
+    /// All three rows render at the same scale — no
     /// scroll-driven zoom on the middle row (removed per user request; it
     /// read as an unwanted "magnify" effect rather than a focus cue).
-    private func honeycombGameGridDashboard(attention: Set<String>, unmatched: Set<String>) -> some View {
+    private func honeycombGameGridDashboard(unmatched: Set<String>) -> some View {
         let tileWidth = honeycombTileWidth(for: honeycombAvailableWidth)
         let rows = honeycombRows
 
@@ -878,7 +883,6 @@ struct DashboardView: View {
                     ForEach(rowStats) { stat in
                         gameDashboardTile(
                             for: stat,
-                            needsAttention: attention.contains(stat.key),
                             hasUnmatchedImports: unmatched.contains(stat.key)
                         )
                         .frame(width: tileWidth)
@@ -887,15 +891,10 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: HoneycombWidthPreferenceKey.self, value: proxy.size.width)
-            }
-        )
-        .onPreferenceChange(HoneycombWidthPreferenceKey.self) { newWidth in
-            if newWidth > 0 { honeycombAvailableWidth = newWidth }
+        .measuringSize { size in
+            if size.width > 0 { honeycombAvailableWidth = size.width }
         }
-        .padding(.top, 2)
+        .padding(.top, honeycombTopPadding)
     }
 
     private var honeycombRows: [[StatDomain]] {
@@ -906,16 +905,51 @@ struct DashboardView: View {
         ]
     }
 
-    private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
-        let rawWidth = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
-        return min(max(rawWidth, 96), 124)
+    /// Vertical space the honeycomb may fill: the scroll viewport (already
+    /// short of the floating tab bar, which the shell installs as a bottom
+    /// `safeAreaInset`) minus the command strip above it, the stack spacing on
+    /// either side of it, and the gap we want left under the final row.
+    /// Zero until both measurements land, which the caller treats as "not
+    /// known yet" and falls back to width-only sizing for one layout pass.
+    private var honeycombHeightBudget: CGFloat {
+        guard dashboardViewportHeight > 0, commandStripHeight > 0 else { return 0 }
+        return dashboardViewportHeight
+            - dashboardContentTopPadding
+            - commandStripHeight
+            - dashboardContentSpacing
+            - honeycombTopPadding
+            - dashboardBottomGap
     }
 
-    private func gameDashboardTile(for stat: StatDomain, needsAttention: Bool, hasUnmatchedImports: Bool) -> some View {
+    /// Tiles grow to whichever the screen allows less of: the width three of
+    /// them plus their gutters can share, or the width whose resulting square
+    /// ring still lets all three rows finish above the tab bar. Sizing against
+    /// both — rather than the old flat 124pt ceiling, which left a tall dead
+    /// strip on big phones and overshot small ones — is what makes the bottom
+    /// row land the same distance above the bar on every device.
+    private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
+        let widthCap = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
+
+        let budget = honeycombHeightBudget
+        guard budget > 0 else { return clampedHoneycombTileWidth(widthCap) }
+
+        let rowCount = CGFloat(max(honeycombRows.count, 1))
+        let heightPerRow = (budget - (rowCount - 1) * gameGridRowSpacing) / rowCount
+        // A row is as tall as its ring plus the labels stacked around it, so
+        // the ring may be as wide as the row's share of the budget less that.
+        let heightCap = heightPerRow - honeycombTileChromeHeight
+
+        return clampedHoneycombTileWidth(min(widthCap, heightCap))
+    }
+
+    private func clampedHoneycombTileWidth(_ width: CGFloat) -> CGFloat {
+        min(max(width, 96), 160)
+    }
+
+    private func gameDashboardTile(for stat: StatDomain, hasUnmatchedImports: Bool) -> some View {
         GameDashboardTile(
             stat: stat,
             snapshot: snapshot(for: stat),
-            needsAttention: needsAttention,
             hasUnmatchedImports: hasUnmatchedImports,
             isReordering: isReordering,
             onOpenDetail: {
@@ -979,30 +1013,10 @@ struct DashboardView: View {
     private func commandButton(icon: String, isActive: Bool, accessibilityLabel: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(isActive ? Color.white : TrainingTheme.textSecondary)
-                .frame(width: 46, height: 46)
-                .background(
-                    Circle()
-                        .fill(
-                            isActive
-                            ? LinearGradient(
-                                colors: [dashboardChromeAccent, dashboardChromeAccent.opacity(0.72)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            : LinearGradient(
-                                colors: [TrainingTheme.card, TrainingTheme.elevatedCard],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .overlay(
-                    Circle()
-                        .strokeBorder((isActive ? Color.white : TrainingTheme.borderStrong).opacity(isActive ? 0.28 : 0.18), lineWidth: 1.1)
-                )
-                .shadow(color: (isActive ? dashboardChromeAccent : Color.black).opacity(isActive ? 0.28 : 0.06), radius: isActive ? 14 : 6, x: 0, y: 6)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(TrainingTheme.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(isActive ? TrainingTheme.actionSurface : Color.clear))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel ?? icon)
@@ -1013,21 +1027,8 @@ struct DashboardView: View {
             content()
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [TrainingTheme.card, TrainingTheme.elevatedCard.opacity(0.96)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(dashboardChromeAccent.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: TrainingTheme.shadowStrong.opacity(0.8), radius: 14, x: 0, y: 8)
+        .background(TrainingTheme.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(TrainingTheme.border, lineWidth: 0.5))
     }
 
     private func menuButton(title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -1059,8 +1060,8 @@ struct DashboardView: View {
 
     private func layoutMenuIcon(for mode: DashboardLayoutMode) -> String {
         switch mode {
-        case .compactGrid:
-            return "square.grid.3x3.fill"
+        case .twoColumn:
+            return "square.grid.2x2.fill"
         case .detailedCards:
             return "rectangle.portrait.on.rectangle.portrait"
         case .gameGrid:
@@ -1144,7 +1145,7 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
-    private func compactGridTile(for stat: StatDomain, needsAttention: Bool, hasUnmatchedImports: Bool) -> some View {
+    private func twoColumnTile(for stat: StatDomain, hasUnmatchedImports: Bool) -> some View {
         let primaryHabit = TrainingStore.primaryHabit(for: stat)
         let quickLogTitle = primaryHabit?.measurementType == .booleanSession ? "Log Session" : "Log Progress"
         let tile = DashboardGridTile(
@@ -1153,7 +1154,6 @@ struct DashboardView: View {
             preview: TrainingStore.dashboardCardPreview(for: stat, settings: settings),
             quickLogTitle: quickLogTitle,
             isReordering: isReordering,
-            needsAttention: needsAttention,
             hasUnmatchedImports: hasUnmatchedImports,
             onOpenDetail: {
                 openDetail(for: stat)
@@ -1251,49 +1251,9 @@ struct DashboardView: View {
     }
 
     private var dashboardBackdrop: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.95, green: 0.97, blue: 0.96),
-                    Color(red: 0.86, green: 0.91, blue: 0.89),
-                    Color(red: 0.90, green: 0.92, blue: 0.96)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            RadialGradient(
-                colors: [TrainingArcConfig.color(for: "focus").opacity(0.28), .clear],
-                center: .topLeading,
-                startRadius: 20,
-                endRadius: 300
-            )
-            .offset(x: -80, y: -120)
-
-            RadialGradient(
-                colors: [TrainingArcConfig.color(for: "creativity").opacity(0.24), .clear],
-                center: .topTrailing,
-                startRadius: 30,
-                endRadius: 280
-            )
-            .offset(x: 90, y: -30)
-
-            RadialGradient(
-                colors: [TrainingTheme.positiveStrong.opacity(0.12), .clear],
-                center: .bottomLeading,
-                startRadius: 60,
-                endRadius: 240
-            )
-            .offset(x: -80, y: 180)
-
-            LinearGradient(
-                colors: [.white.opacity(0.28), .clear, .white.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .ignoresSafeArea()
+        TrainingTheme.background.ignoresSafeArea()
     }
+
 }
 
 private struct DashboardPresentationModifier: ViewModifier {
@@ -1370,7 +1330,6 @@ private struct DashboardPresentationModifier: ViewModifier {
 private struct GameDashboardTile: View {
     let stat: StatDomain
     let snapshot: SkillProgressSnapshot
-    let needsAttention: Bool
     let hasUnmatchedImports: Bool
     let isReordering: Bool
     let onOpenDetail: () -> Void
@@ -1417,23 +1376,16 @@ private struct GameDashboardTile: View {
     private var tileContent: some View {
             VStack(spacing: 7) {
                 Text(stat.name)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-                    // Reserves a symmetric gutter on both sides for the
-                    // rank-change badge and attention dot (each anchored to a
-                    // top corner of the tile below) so neither ever overlaps
-                    // the name — reserved unconditionally rather than only
-                    // when a badge/dot is present, so the label doesn't shift
-                    // when one appears or clears, and stays visually centered
-                    // (WS13) instead of drifting toward the unreserved side.
-                    .padding(.horizontal, 26)
+                    .padding(.horizontal, 2)
                     .frame(maxWidth: .infinity)
 
                 ZStack {
                     Circle()
-                        .stroke(TrainingTheme.borderStrong.opacity(0.16), lineWidth: 3)
+                        .stroke(TrainingTheme.backgroundTertiary, lineWidth: 3)
                         .padding(2)
 
                     Circle()
@@ -1451,7 +1403,6 @@ private struct GameDashboardTile: View {
                         accent: accent,
                         style: .dashboardBare
                     )
-                    .padding(8)
                 }
                 .aspectRatio(1, contentMode: .fit)
                 .frame(maxWidth: .infinity)
@@ -1467,23 +1418,24 @@ private struct GameDashboardTile: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(TrainingTheme.textMuted)
                     Text("LV \(V4Style.displayNumber(snapshot.rank.level))")
-                        .font(.caption.weight(.heavy))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
                 .frame(maxWidth: .infinity)
 
-                DirectionalChargeMeter(charge: snapshot.charge.current, socketSize: 9, spacing: 3)
+                DashboardChargeTrack(charge: snapshot.charge.current)
                     .frame(height: 12)
                     .frame(maxWidth: .infinity)
-                    // Charged tiles should stand out against neutral ones —
-                    // at charge 0 every tile carried the same visual weight,
-                    // so the grid couldn't be scanned for what needs
-                    // attention at a glance.
-                    .opacity(snapshot.charge.current == 0 ? 0.6 : 1)
+
             }
-            .frame(maxWidth: .infinity, minHeight: 182, alignment: .top)
+            // No minimum height: the tile is exactly as tall as its ring plus
+            // its labels. A floor here used to hold rows open past what their
+            // content needed, which the honeycomb's height budget then had to
+            // spend anyway — squeezing the rings to pay for empty space.
+            // Tiles in a row share a width, so they stay the same height.
+            .frame(maxWidth: .infinity, alignment: .top)
             .contentShape(Rectangle())
             .overlay(alignment: .topTrailing) {
             if snapshot.rankChangeIndicatorVisible, let direction = snapshot.pendingRankChange?.direction {
@@ -1503,6 +1455,7 @@ private struct GameDashboardTile: View {
                     .shadow(color: rankIndicatorTint.opacity(0.55), radius: indicatorPulse ? 10 : 4, x: 0, y: 0)
                     .scaleEffect(indicatorPulse ? 1.06 : 0.96)
                     .padding(6)
+                    .offset(y: 28)
                     .accessibilityLabel(direction == .up ? "Rank up available" : "Rank drop pending")
                     .onAppear { indicatorPulse = true }
                     .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: indicatorPulse)
@@ -1512,10 +1465,7 @@ private struct GameDashboardTile: View {
             if hasUnmatchedImports {
                 UnmatchedBadge(accent: accent, action: onShowUnmatched)
                     .padding(6)
-            } else if needsAttention {
-                AttentionDot(accent: accent)
-                    .padding(6)
-                    .allowsHitTesting(false)
+                    .offset(y: 28)
             }
         }
         .accessibilityElement(children: .combine)
@@ -1526,21 +1476,7 @@ private struct GameDashboardTile: View {
     private var accessibilityLabel: String {
         var parts = ["\(stat.name)", "level \(snapshot.rank.level)", DashboardChargeDots.summaryLabel(for: snapshot.charge.current)]
         if hasUnmatchedImports { parts.append("unmatched workouts to review") }
-        else if needsAttention { parts.append("needs attention this week") }
         return parts.joined(separator: ", ")
-    }
-}
-
-struct AttentionDot: View {
-    let accent: Color
-
-    var body: some View {
-        Circle()
-            .fill(accent)
-            .frame(width: 10, height: 10)
-            .overlay(Circle().stroke(.white, lineWidth: 1.4))
-            .shadow(color: accent.opacity(0.45), radius: 4, x: 0, y: 1)
-            .accessibilityHidden(true)
     }
 }
 

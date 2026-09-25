@@ -313,6 +313,17 @@ struct OnboardingFlowView: View {
                 stat.targetValue = clamped.target
                 stat.personalMaxValue = clamped.max
                 stat.maintenanceFloor = clamped.maintenance
+                let reassessedLevel = TrainingArcConfig.rankLevel(
+                    for: key,
+                    weeklyValue: Double(stat.currentBaseline),
+                    personalMax: clamped.max
+                )
+                stat.rankLevel = reassessedLevel
+                stat.acknowledgedRankLevel = reassessedLevel
+                stat.progressionAnchorDate = .now
+                stat.progressionAnchorLevel = reassessedLevel
+                stat.progressionAnchorBaseline = stat.currentBaseline
+                TrainingStore.updateDerivedFields(for: stat)
             }
             try? modelContext.save()
         }
@@ -343,10 +354,21 @@ struct OnboardingFlowView: View {
     private func baselineCard(for template: StatTemplate) -> some View {
         let onboarding = TrainingArcConfig.onboardingConfiguration(for: template.key)
         let baseline = baselines[template.key] ?? template.defaultBaseline
-        let currentLevel = TrainingArcConfig.rankLevel(for: template.key, weeklyValue: Double(baseline))
+        let draftedMax = Int(maxDrafts[template.key] ?? "")
+        let clampedMax = TrainingArcConfig.clampCalibration(
+            baseline: baseline,
+            target: Int(targetDrafts[template.key] ?? ""),
+            personalMax: draftedMax,
+            maintenance: nil
+        ).max
+        let currentLevel = TrainingArcConfig.rankLevel(
+            for: template.key,
+            weeklyValue: Double(baseline),
+            personalMax: clampedMax
+        )
         let currentTitle = TrainingArcConfig.rankTitle(for: template.key, level: currentLevel)
-        let lowerThreshold = TrainingArcConfig.lowerRankThreshold(for: template.key, level: currentLevel)
-        let nextThreshold = TrainingArcConfig.nextRankThreshold(for: template.key, level: currentLevel)
+        let lowerThreshold = TrainingArcConfig.lowerRankThreshold(for: template.key, level: currentLevel, personalMax: clampedMax)
+        let nextThreshold = TrainingArcConfig.nextRankThreshold(for: template.key, level: currentLevel, personalMax: clampedMax)
 
         return SurfaceCard(accent: TrainingArcConfig.color(for: template.colorToken)) {
             VStack(alignment: .leading, spacing: 16) {

@@ -127,7 +127,6 @@ struct StatCard: View {
     let habits: [Habit]
     let isFocusTarget: Bool
     let showLogFeedback: Bool
-    let needsAttention: Bool
     let hasUnmatchedImports: Bool
     let onOpenDetail: () -> Void
     let onQuickLogTap: (Habit, Double) -> Void
@@ -296,10 +295,6 @@ struct StatCard: View {
             if hasUnmatchedImports {
                 UnmatchedBadge(accent: accent, action: onShowUnmatched)
                     .padding(12)
-            } else if needsAttention {
-                AttentionDot(accent: accent)
-                    .padding(12)
-                    .allowsHitTesting(false)
             }
         }
         .scaleEffect(showLogFeedback ? 1.015 : (isFocusTarget ? 1.005 : 1))
@@ -313,7 +308,6 @@ struct StatCard: View {
             "\(DashboardChargeDots.summaryLabel(for: snapshot.charge.current)), " +
             "\(trendAccessibilityLabel), \(snapshot.nextActionLabel)"
         if hasUnmatchedImports { base += ", unmatched workouts to review" }
-        else if needsAttention { base += ", needs attention this week" }
         return base
     }
 
@@ -547,7 +541,6 @@ struct DashboardGridTile: View {
     let preview: DashboardCardPreview
     let quickLogTitle: String
     let isReordering: Bool
-    let needsAttention: Bool
     let hasUnmatchedImports: Bool
     let onOpenDetail: () -> Void
     let onQuickLog: () -> Void
@@ -697,10 +690,6 @@ struct DashboardGridTile: View {
             if hasUnmatchedImports {
                 UnmatchedBadge(accent: accent, action: onShowUnmatched)
                     .padding(10)
-            } else if needsAttention {
-                AttentionDot(accent: accent)
-                    .padding(10)
-                    .allowsHitTesting(false)
             }
         }
         .shadow(color: snapshot.rankChangeIndicatorVisible ? stateAccent.opacity(0.28) : accent.opacity(0.08), radius: snapshot.rankChangeIndicatorVisible ? 14 : 10, x: 0, y: 5)
@@ -712,7 +701,6 @@ struct DashboardGridTile: View {
     private var accessibilityLabel: String {
         var parts = ["\(stat.name)", "level \(snapshot.rank.level)", DashboardChargeDots.summaryLabel(for: snapshot.charge.current)]
         if hasUnmatchedImports { parts.append("unmatched workouts to review") }
-        else if needsAttention { parts.append("needs attention this week") }
         return parts.joined(separator: ", ")
     }
 
@@ -730,5 +718,37 @@ struct DashboardGridTile: View {
                 Capsule()
                     .strokeBorder(accent.opacity(0.18), lineWidth: 0.9)
             )
+    }
+}
+
+/// Fine, flat charge dots for the artwork dashboard. Both signed sides remain
+/// visible; negative charges fill from the divider toward the left.
+struct DashboardChargeTrack: View {
+    let charge: Int
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
+                dot(filled: DashboardChargeDots.negativeDots(from: charge) > DashboardChargeDots.slotsPerSide - index - 1,
+                    tint: TrainingTheme.danger)
+            }
+            Rectangle()
+                .fill(TrainingTheme.textSecondary.opacity(0.5))
+                .frame(width: 1, height: 9)
+                .padding(.horizontal, 2)
+            ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
+                dot(filled: DashboardChargeDots.positiveDots(from: charge) > index,
+                    tint: TrainingTheme.positive)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(DashboardChargeDots.summaryLabel(for: charge))
+    }
+
+    private func dot(filled: Bool, tint: Color) -> some View {
+        Circle()
+            .fill(filled ? tint : Color.clear)
+            .overlay(Circle().strokeBorder(filled ? tint : TrainingTheme.textSecondary.opacity(0.65), lineWidth: 0.9))
+            .frame(width: 7, height: 7)
     }
 }

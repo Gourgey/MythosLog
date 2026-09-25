@@ -210,11 +210,11 @@ extension TrainingStore {
         }
 
         let currentLevel = stat.rankLevel
-        let currentTarget = TrainingArcConfig.effectiveWeeklyTarget(for: statKey, level: currentLevel)
-        let nextTarget = TrainingArcConfig.nextRankChargeRequirement(for: statKey, level: currentLevel)
-        let lowerTarget = TrainingArcConfig.previousRankChargeRequirement(for: statKey, level: currentLevel)
-        let positiveStep = TrainingArcConfig.positiveChargeStep(for: statKey, level: currentLevel)
-        let negativeStep = TrainingArcConfig.negativeChargeStep(for: statKey, level: currentLevel)
+        let currentTarget = TrainingArcConfig.effectiveWeeklyTarget(for: statKey, level: currentLevel, personalMax: stat.personalMaxValue)
+        let nextTarget = TrainingArcConfig.nextRankChargeRequirement(for: statKey, level: currentLevel, personalMax: stat.personalMaxValue)
+        let lowerTarget = TrainingArcConfig.previousRankChargeRequirement(for: statKey, level: currentLevel, personalMax: stat.personalMaxValue)
+        let positiveStep = TrainingArcConfig.positiveChargeStep(for: statKey, level: currentLevel, personalMax: stat.personalMaxValue)
+        let negativeStep = TrainingArcConfig.negativeChargeStep(for: statKey, level: currentLevel, personalMax: stat.personalMaxValue)
         let unitSingular = singularWeeklyUnitLabel(for: stat)
 
         if let nextTarget, let lowerTarget, let positiveStep, let negativeStep {
@@ -494,8 +494,8 @@ extension TrainingStore {
     static func dashboardCardPreview(for stat: StatDomain, settings: AppSettings?, now: Date = .now) -> DashboardCardPreview {
         let snapshot = progressSnapshot(for: stat, settings: settings, now: now)
         let definition = stat.statKey.map { TrainingArcConfig.definition(for: $0) } ?? TrainingArcConfig.habitDefinitions[0]
-        let weeklyTarget = TrainingArcConfig.effectiveWeeklyTarget(for: definition.key, level: stat.rankLevel)
-        let nextRequirement = TrainingArcConfig.nextRankChargeRequirement(for: definition.key, level: stat.rankLevel)
+        let weeklyTarget = TrainingArcConfig.effectiveWeeklyTarget(for: definition.key, level: stat.rankLevel, personalMax: stat.personalMaxValue)
+        let nextRequirement = TrainingArcConfig.nextRankChargeRequirement(for: definition.key, level: stat.rankLevel, personalMax: stat.personalMaxValue)
         let currentWeekValue = currentWeekTotal(for: stat, settings: settings, now: now)
         let remainingToTarget = max(Double(stat.currentBaseline) - currentWeekValue, 0)
         let unitLabel = weeklyUnitLabel(for: stat)
@@ -571,7 +571,8 @@ extension TrainingStore {
                 storedCharges: stat.chargeValue,
                 weekActual: total(for: stat, in: interval),
                 progressToNextLevel: progress,
-                colorToken: stat.colorToken
+                colorToken: stat.colorToken,
+                iconName: stat.iconName
             )
         }
 

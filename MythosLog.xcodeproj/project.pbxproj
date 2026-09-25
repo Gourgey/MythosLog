@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3D4E5F6071829304A5C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829304A5B /* PrivacyInfo.xcprivacy */; };
+		A1B2C3D4E5F6071829304A5E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829304A5D /* PrivacyInfo.xcprivacy */; };
 		001EEF1DA3B9EE6D49E95F03 /* SurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB148AB1376A0D15F15F4A44 /* SurfaceCard.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		02D71550162A5DF74747F077 /* ManageSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F68BC43AEA3A5AF7A500F7 /* ManageSkillsView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		04B0B8C5339EFC86BE455EE0 /* RankArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549E045B5ABF1518B27118F0 /* RankArtworkView.swift */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
@@ -106,6 +108,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F6071829304A5B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = MythosLog/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829304A5D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = MythosLogWidgets/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		095CA864B310FECAF52C1896 /* WeeklyReviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeeklyReviewView.swift; path = MythosLog/Views/WeeklyReview/WeeklyReviewView.swift; sourceTree = "<group>"; };
 		0A4F6FBD69F334171568AB69 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = MythosLog/Views/Settings/SettingsView.swift; sourceTree = "<group>"; };
 		0B3E749B226B28FFD6C254EF /* SkillDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SkillDetailView.swift; path = MythosLog/Views/Habits/SkillDetailView.swift; sourceTree = "<group>"; };
@@ -264,6 +268,7 @@
 			isa = PBXGroup;
 			children = (
 				4863915BDC033A7754990A65 /* MythosLogWidgets.swift */,
+				A1B2C3D4E5F6071829304A5D /* PrivacyInfo.xcprivacy */,
 				8F7170E3A54CFA45D8A8C87B /* MythosLogWidgetsBundle.swift */,
 				ADE3290E74F8AFC71CD3A370 /* QuickLogIntent.swift */,
 			);
@@ -367,6 +372,7 @@
 				BD4C22256CEAA96DBF324521 /* Theme */,
 				63836A795F07CE72FB5D5423 /* Views */,
 				6BD43C2C892D162116C715EC /* Assets.xcassets */,
+				A1B2C3D4E5F6071829304A5B /* PrivacyInfo.xcprivacy */,
 			);
 			name = MythosLog;
 			sourceTree = "<group>";
@@ -557,6 +563,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3A701C87CACA2BEE076E2332 /* Assets.xcassets in Resources */,
+				A1B2C3D4E5F6071829304A5C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -571,6 +578,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F6071829304A5E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

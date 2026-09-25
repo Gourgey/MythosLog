@@ -142,9 +142,61 @@ private struct SyncDiagnosticsSnapshot: Equatable {
 }
 #endif
 
+/// Settings categories. Every section starts collapsed so the page opens as a
+/// short, scannable list of topics instead of one long wall of controls.
+private enum SettingsCategory: String, CaseIterable, Identifiable {
+    case progression
+    case calibration
+    case notifications
+    case experience
+    case appleHealth
+    case workoutTypes
+    case connectApps
+    case data
+    case debugTools
+    case syncDiagnostics
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .progression: "Progression"
+        case .calibration: "Calibration & Goals"
+        case .notifications: "Notifications"
+        case .experience: "Experience"
+        case .appleHealth: "Apple Health"
+        case .workoutTypes: "Workout Types"
+        case .connectApps: "Connect Apps"
+        case .data: "Data"
+        case .debugTools: "Debug Tools"
+        case .syncDiagnostics: "Sync Diagnostics"
+        }
+    }
+
+    /// One-line preview shown under the collapsed title so a category is
+    /// identifiable without opening it.
+    var summary: String {
+        switch self {
+        case .progression: "Strictness, regression, decay, week start"
+        case .calibration: "Personal max visibility and how goals count"
+        case .notifications: "Daily, evening, weekly, and at-risk reminders"
+        case .experience: "Artwork, icons, haptics"
+        case .appleHealth: "Authorization, auto-import, manual sync"
+        case .workoutTypes: "Which Apple Health workouts get imported"
+        case .connectApps: "Shortcuts and deep links from other apps"
+        case .data: "iCloud status, export, import"
+        case .debugTools: "Sample data and destructive resets"
+        case .syncDiagnostics: "Store, account, and model counts"
+        }
+    }
+}
+
 struct SettingsView: View {
+    @AppStorage(ArtworkPreferences.dashboardIconsKey) private var dashboardIcons = false
+    @AppStorage(ArtworkPreferences.appIconsKey) private var appIcons = false
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsRecords: [AppSettings]
+    @State private var expandedCategories: Set<SettingsCategory> = []
     @State private var isExporting = false
     @State private var isImporting = false
     @State private var exportDocument = TrainingExportDocument(bundle: .empty)
@@ -181,212 +233,258 @@ struct SettingsView: View {
     var body: some View {
         List {
             if let settings {
-                Section("Progression") {
-                    Picker("Strictness", selection: strictnessBinding) {
-                        ForEach(ProgressionStrictness.allCases) { strictness in
-                            Text(strictness.displayName).tag(strictness)
+                Section {
+                    if isExpanded(.progression) {
+                        Picker("Strictness", selection: strictnessBinding) {
+                            ForEach(ProgressionStrictness.allCases) { strictness in
+                                Text(strictness.displayName).tag(strictness)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    Text(settings.progressionStrictness.detail)
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .pickerStyle(.segmented)
+                        Text(settings.progressionStrictness.detail)
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
 
-                    Picker("Regression", selection: regressionBinding) {
-                        ForEach(RegressionBehavior.allCases) { behavior in
-                            Text(behavior.displayName).tag(behavior)
+                        Picker("Regression", selection: regressionBinding) {
+                            ForEach(RegressionBehavior.allCases) { behavior in
+                                Text(behavior.displayName).tag(behavior)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    Text(settings.regressionBehavior.detail)
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .pickerStyle(.segmented)
+                        Text(settings.regressionBehavior.detail)
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
 
-                    Toggle("Enable decay", isOn: binding(\.enableDecay))
-                    Toggle("Week starts on Monday", isOn: binding(\.weekStartsOnMonday))
+                        Toggle("Enable decay", isOn: binding(\.enableDecay))
+                        Toggle("Week starts on Monday", isOn: binding(\.weekStartsOnMonday))
+                    }
+                } header: {
+                    categoryHeader(.progression)
                 }
 
                 Section {
-                    Toggle("Show personal max in UI", isOn: binding(\.showPersonalMaxInUI))
-                    Toggle("Goals affect pacing", isOn: binding(\.goalsAffectPacing))
-                    Text("When on, at-risk goals surface in Train Today and reminders. Turn off to keep goals purely for tracking.")
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                    Toggle("Goals affect charge", isOn: binding(\.goalsCanAffectProgression))
-                    Text("Off by default. When on, goals marked ‘affects progression’ can add Charge — they never subtract it.")
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                } header: {
-                    Text("Calibration & Goals")
-                }
-
-                Section("Notifications") {
-                    Toggle("Daily reminder", isOn: binding(\.dailyReminderEnabled))
-                    Toggle("Evening unfinished reminder", isOn: binding(\.eveningReminderEnabled))
-                    Toggle("Weekly review reminder", isOn: binding(\.weeklyReviewReminderEnabled))
-                    Toggle("Goal at risk reminder", isOn: binding(\.goalAtRiskReminderEnabled))
-                    Text("Notifies you mid-week if any active goal is at risk of being missed.")
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                    Toggle("Skill behind reminder", isOn: binding(\.skillBehindPaceReminderEnabled))
-                    Text("Notifies you mid-week if any skill is tracking below its weekly baseline.")
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                    Button("Request notification access") {
-                        Task { await NotificationService.requestAuthorization() }
+                    if isExpanded(.calibration) {
+                        Toggle("Show personal max in UI", isOn: binding(\.showPersonalMaxInUI))
+                        Toggle("Goals affect pacing", isOn: binding(\.goalsAffectPacing))
+                        Text("When on, at-risk goals surface in Train Today and reminders. Turn off to keep goals purely for tracking.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Toggle("Goals affect charge", isOn: binding(\.goalsCanAffectProgression))
+                        Text("Off by default. When on, goals marked ‘affects progression’ can add Charge — they never subtract it.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
                     }
+                } header: {
+                    categoryHeader(.calibration)
                 }
 
-                Section("Experience") {
-                    Toggle("Haptics", isOn: binding(\.hapticsEnabled))
+                Section {
+                    if isExpanded(.notifications) {
+                        Toggle("Daily reminder", isOn: binding(\.dailyReminderEnabled))
+                        Toggle("Evening unfinished reminder", isOn: binding(\.eveningReminderEnabled))
+                        Toggle("Weekly review reminder", isOn: binding(\.weeklyReviewReminderEnabled))
+                        Toggle("Goal at risk reminder", isOn: binding(\.goalAtRiskReminderEnabled))
+                        Text("Notifies you mid-week if any active goal is at risk of being missed.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Toggle("Skill behind reminder", isOn: binding(\.skillBehindPaceReminderEnabled))
+                        Text("Notifies you mid-week if any skill is tracking below its weekly baseline.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Button("Request notification access") {
+                            Task { await NotificationService.requestAuthorization() }
+                        }
+                    }
+                } header: {
+                    categoryHeader(.notifications)
+                }
+
+                Section {
+                    if isExpanded(.experience) {
+                        Toggle("Icons on dashboard", isOn: $dashboardIcons)
+                            .disabled(appIcons)
+                        Toggle("Icons throughout app", isOn: $appIcons)
+                        Text(appIcons
+                             ? "Skill icons replace character artwork throughout the app, including the dashboard, roster and rank reveals."
+                             : "Choose icons for the dashboard only, or keep character artwork everywhere. These display preferences apply to this device.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                        Toggle("Haptics", isOn: binding(\.hapticsEnabled))
+                    }
+                } header: {
+                    categoryHeader(.experience)
                 }
 
                 #if canImport(HealthKit)
-                Section("Apple Health") {
-                    LabeledContent("Status", value: HealthImportService.authorizationState().title)
-                    Toggle("Auto-import workouts", isOn: binding(\.healthAutoImportEnabled))
+                Section {
+                    if isExpanded(.appleHealth) {
+                        LabeledContent("Status", value: HealthImportService.authorizationState().title)
+                        Toggle("Auto-import workouts", isOn: binding(\.healthAutoImportEnabled))
 
-                    if let lastSync = settings.lastHealthSyncAt {
-                        LabeledContent("Last sync") {
-                            Text(lastSync.formatted(date: .abbreviated, time: .shortened))
-                        }
-                    }
-
-                    Button("Connect Apple Health") {
-                        isSyncingHealth = true
-                        Task {
-                            let message = await HealthImportService.requestAuthorizationAndSync()
-                            await MainActor.run {
-                                healthStatusMessage = message
-                                isSyncingHealth = false
-                                onSettingsMutated()
+                        if let lastSync = settings.lastHealthSyncAt {
+                            LabeledContent("Last sync") {
+                                Text(lastSync.formatted(date: .abbreviated, time: .shortened))
                             }
                         }
-                    }
 
-                    Button(isSyncingHealth ? "Syncing…" : "Sync Now") {
-                        guard !isSyncingHealth else { return }
-                        isSyncingHealth = true
-                        Task {
-                            let message = (try? await HealthImportService.syncNow()) ?? "Apple Health sync could not complete."
-                            await MainActor.run {
-                                healthStatusMessage = message
-                                isSyncingHealth = false
-                                onSettingsMutated()
+                        Button("Connect Apple Health") {
+                            isSyncingHealth = true
+                            Task {
+                                let message = await HealthImportService.requestAuthorizationAndSync()
+                                await MainActor.run {
+                                    healthStatusMessage = message
+                                    isSyncingHealth = false
+                                    onSettingsMutated()
+                                }
                             }
                         }
-                    }
-                    .disabled(isSyncingHealth)
 
-                    if let healthStatusMessage {
-                        Text(healthStatusMessage)
-                            .font(.caption)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                    }
-                }
-
-                Section("Workout Types") {
-                    Text("Choose which Apple Health workouts Mythos Log imports. Disable a type to skip future workouts of that kind.")
-                        .font(.caption)
-                        .foregroundStyle(TrainingTheme.textSecondary)
-
-                    ForEach(SupportedWorkoutType.Category.allCases, id: \.self) { category in
-                        DisclosureGroup(category.title) {
-                            ForEach(SupportedWorkoutType.all.filter { $0.category == category }) { type in
-                                Toggle(type.displayName, isOn: workoutTypeBinding(for: type.key))
+                        Button(isSyncingHealth ? "Syncing…" : "Sync Now") {
+                            guard !isSyncingHealth else { return }
+                            isSyncingHealth = true
+                            Task {
+                                let message = (try? await HealthImportService.syncNow()) ?? "Apple Health sync could not complete."
+                                await MainActor.run {
+                                    healthStatusMessage = message
+                                    isSyncingHealth = false
+                                    onSettingsMutated()
+                                }
                             }
                         }
-                    }
-                }
-                #endif
+                        .disabled(isSyncingHealth)
 
-                Section("Connect Apps") {
-                    DisclosureGroup("Reading via iOS Shortcut") {
-                        Text("Mythos Log cannot read directly from Kindle. After a reading session, run an iOS Shortcut that opens the URL below to log against your Reading skill.")
-                            .font(.caption)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                        Text("mythoslog://log?stat=reading&value=30&note=Kindle")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                            .textSelection(.enabled)
-                    }
-
-                    DisclosureGroup("Curiosity Tracker") {
-                        Text("Your Curiosity Tracker app can mirror each research log into Mythos Log using the deep-link below.")
-                            .font(.caption)
-                            .foregroundStyle(TrainingTheme.textSecondary)
-                        Text("mythoslog://log?stat=curiosity&value=1&note=Topic")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                            .textSelection(.enabled)
-                    }
-                }
-
-                Section("Data") {
-                    LabeledContent("iCloud Sync") {
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(cloudSyncState.title)
-                            Text(cloudSyncState.detail)
+                        if let healthStatusMessage {
+                            Text(healthStatusMessage)
                                 .font(.caption)
                                 .foregroundStyle(TrainingTheme.textSecondary)
-                                .multilineTextAlignment(.trailing)
                         }
                     }
+                } header: {
+                    categoryHeader(.appleHealth)
+                }
 
-                    Button("Refresh iCloud Status") {
-                        Task { await refreshCloudSyncStatus() }
-                    }
+                Section {
+                    if isExpanded(.workoutTypes) {
+                        Text("Choose which Apple Health workouts Mythos Log imports. Disable a type to skip future workouts of that kind.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
 
-                    Button("Export JSON") {
-                        do {
-                            exportDocument = TrainingExportDocument(bundle: try TrainingStore.exportBundle(context: modelContext))
-                            isExporting = true
-                        } catch {
-                            dataAlertMessage = "Export failed: \(error.localizedDescription)"
+                        ForEach(SupportedWorkoutType.Category.allCases, id: \.self) { category in
+                            DisclosureGroup(category.title) {
+                                ForEach(SupportedWorkoutType.all.filter { $0.category == category }) { type in
+                                    Toggle(type.displayName, isOn: workoutTypeBinding(for: type.key))
+                                }
+                            }
                         }
                     }
-                    Button("Import JSON") {
-                        isImporting = true
+                } header: {
+                    categoryHeader(.workoutTypes)
+                }
+                #endif
+
+                Section {
+                    if isExpanded(.connectApps) {
+                        DisclosureGroup("Reading via iOS Shortcut") {
+                            Text("Mythos Log cannot read directly from Kindle. After a reading session, run an iOS Shortcut that opens the URL below to log against your Reading skill.")
+                                .font(.caption)
+                                .foregroundStyle(TrainingTheme.textSecondary)
+                            Text("mythoslog://log?stat=reading&value=30&note=Kindle")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(TrainingTheme.textPrimary)
+                                .textSelection(.enabled)
+                        }
+
+                        DisclosureGroup("Curiosity Tracker") {
+                            Text("Your Curiosity Tracker app can mirror each research log into Mythos Log using the deep-link below.")
+                                .font(.caption)
+                                .foregroundStyle(TrainingTheme.textSecondary)
+                            Text("mythoslog://log?stat=curiosity&value=1&note=Topic")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(TrainingTheme.textPrimary)
+                                .textSelection(.enabled)
+                        }
                     }
+                } header: {
+                    categoryHeader(.connectApps)
+                }
+
+                Section {
+                    if isExpanded(.data) {
+                        LabeledContent("iCloud Sync") {
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(cloudSyncState.title)
+                                Text(cloudSyncState.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(TrainingTheme.textSecondary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+
+                        Button("Refresh iCloud Status") {
+                            Task { await refreshCloudSyncStatus() }
+                        }
+
+                        Button("Export JSON") {
+                            do {
+                                exportDocument = TrainingExportDocument(bundle: try TrainingStore.exportBundle(context: modelContext))
+                                isExporting = true
+                            } catch {
+                                dataAlertMessage = "Export failed: \(error.localizedDescription)"
+                            }
+                        }
+                        Button("Import JSON") {
+                            isImporting = true
+                        }
+                    }
+                } header: {
+                    categoryHeader(.data)
                 }
 
                 #if DEBUG
-                Section("Debug Tools") {
-                    ForEach(SampleProfile.allCases) { profile in
-                        Button("Seed \(profile.displayName)") {
-                            try? TrainingStore.seedSampleData(context: modelContext, profile: profile)
+                Section {
+                    if isExpanded(.debugTools) {
+                        ForEach(SampleProfile.allCases) { profile in
+                            Button("Seed \(profile.displayName)") {
+                                try? TrainingStore.seedSampleData(context: modelContext, profile: profile)
+                                onSettingsMutated()
+                            }
+                        }
+                        Button("Seed Sample Goals") {
+                            try? TrainingStore.seedSampleGoals(context: modelContext)
                             onSettingsMutated()
                         }
+                        Button("Clear All Data", role: .destructive) {
+                            pendingDestructiveAction = .clearAll
+                        }
+                        Button("Reset Default Profile") {
+                            pendingDestructiveAction = .resetDefaultProfile
+                        }
                     }
-                    Button("Seed Sample Goals") {
-                        try? TrainingStore.seedSampleGoals(context: modelContext)
-                        onSettingsMutated()
-                    }
-                    Button("Clear All Data", role: .destructive) {
-                        pendingDestructiveAction = .clearAll
-                    }
-                    Button("Reset Default Profile") {
-                        pendingDestructiveAction = .resetDefaultProfile
-                    }
+                } header: {
+                    categoryHeader(.debugTools)
                 }
                 #endif
 
                 #if DEBUG
-                Section("Sync Diagnostics") {
-                    LabeledContent("Store URL", value: syncDiagnostics.storeURL)
-                    LabeledContent("iCloud Token", value: syncDiagnostics.iCloudSignedInState)
-                    LabeledContent("CloudKit Account", value: syncDiagnostics.cloudKitAccountStatus)
-                    LabeledContent("Container", value: syncDiagnostics.containerIdentifier)
-                    LabeledContent("Last Local Write", value: syncDiagnostics.lastLocalWrite)
-                    LabeledContent("Last Import/Export", value: syncDiagnostics.lastCloudKitEvent)
-                    LabeledContent("Counts") {
-                        Text("Stats \(syncDiagnostics.modelCounts.stats), habits \(syncDiagnostics.modelCounts.habits), logs \(syncDiagnostics.modelCounts.logs), settings \(syncDiagnostics.modelCounts.settings), resolutions \(syncDiagnostics.modelCounts.weeklyResolutions), health \(syncDiagnostics.modelCounts.healthImports)")
-                            .multilineTextAlignment(.trailing)
-                    }
+                Section {
+                    if isExpanded(.syncDiagnostics) {
+                        LabeledContent("Store URL", value: syncDiagnostics.storeURL)
+                        LabeledContent("iCloud Token", value: syncDiagnostics.iCloudSignedInState)
+                        LabeledContent("CloudKit Account", value: syncDiagnostics.cloudKitAccountStatus)
+                        LabeledContent("Container", value: syncDiagnostics.containerIdentifier)
+                        LabeledContent("Last Local Write", value: syncDiagnostics.lastLocalWrite)
+                        LabeledContent("Last Import/Export", value: syncDiagnostics.lastCloudKitEvent)
+                        LabeledContent("Counts") {
+                            Text("Stats \(syncDiagnostics.modelCounts.stats), habits \(syncDiagnostics.modelCounts.habits), logs \(syncDiagnostics.modelCounts.logs), settings \(syncDiagnostics.modelCounts.settings), resolutions \(syncDiagnostics.modelCounts.weeklyResolutions), health \(syncDiagnostics.modelCounts.healthImports)")
+                                .multilineTextAlignment(.trailing)
+                        }
 
-                    Button("Refresh Sync Diagnostics") {
-                        Task { await refreshSyncDiagnostics() }
+                        Button("Refresh Sync Diagnostics") {
+                            Task { await refreshSyncDiagnostics() }
+                        }
                     }
+                } header: {
+                    categoryHeader(.syncDiagnostics)
                 }
                 #endif
             }
@@ -446,6 +544,54 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         }
         #endif
+    }
+
+    // MARK: - Collapsible categories
+
+    private func isExpanded(_ category: SettingsCategory) -> Bool {
+        expandedCategories.contains(category)
+    }
+
+    /// Tappable section header. `textCase(nil)` keeps the title in sentence
+    /// case — grouped-list headers otherwise uppercase their text, which reads
+    /// like a label rather than a control.
+    private func categoryHeader(_ category: SettingsCategory) -> some View {
+        let expanded = isExpanded(category)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if expanded {
+                    expandedCategories.remove(category)
+                } else {
+                    expandedCategories.insert(category)
+                }
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textPrimary)
+                    if !expanded {
+                        Text(category.summary)
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textMuted)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .textCase(nil)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(category.title)
+        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(expanded ? "Double tap to collapse" : "Double tap to expand")
     }
 
     private func importBundle(from url: URL) {

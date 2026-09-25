@@ -210,6 +210,7 @@ struct MoreView: View {
 }
 
 struct SkillCharacterRosterView: View {
+    @AppStorage(ArtworkPreferences.appIconsKey) private var appIcons = false
     @Environment(\.modelContext) private var modelContext
     @Query private var allStats: [StatDomain]
 
@@ -222,7 +223,7 @@ struct SkillCharacterRosterView: View {
         self.stat = stat
         _activeStatID = State(initialValue: stat.id)
         _focusedLevel = State(initialValue: stat.rankLevel)
-        _entries = State(initialValue: TrainingArcConfig.characterRosterEntries(for: stat.statKey ?? .strength, currentLevel: stat.rankLevel))
+        _entries = State(initialValue: TrainingArcConfig.characterRosterEntries(for: stat.rankKey ?? .strength, currentLevel: stat.rankLevel))
     }
 
     private var activeStats: [StatDomain] {
@@ -239,7 +240,7 @@ struct SkillCharacterRosterView: View {
     }
 
     private var statKey: StatKey {
-        activeStat.statKey ?? .strength
+        activeStat.rankKey ?? .strength
     }
 
     private var accent: Color {
@@ -256,6 +257,22 @@ struct SkillCharacterRosterView: View {
 
     private var unlockedCount: Int {
         entries.filter { !$0.isLocked }.count
+    }
+
+    private var weeklyUnit: String {
+        TrainingStore.weeklyUnitLabel(for: activeStat)
+    }
+
+    private func rankBaseline(for level: Int) -> Int {
+        TrainingArcConfig.requiredWeeklyValue(
+            for: statKey,
+            level: level,
+            personalMax: activeStat.personalMaxValue
+        )
+    }
+
+    private func rankBaselineLabel(for level: Int) -> String {
+        "Baseline: \(rankBaseline(for: level)) \(weeklyUnit) per week"
     }
 
     var body: some View {
@@ -362,6 +379,7 @@ struct SkillCharacterRosterView: View {
             CharacterRosterCarousel(
                 entries: entries,
                 activeStatName: activeStat.name,
+                baselineLabel: rankBaselineLabel,
                 focusedLevel: $focusedLevel,
                 currentLevel: currentLevel,
                 accent: accent
@@ -450,6 +468,16 @@ struct SkillCharacterRosterView: View {
                     .font(.system(.title3, design: .serif).weight(.regular))
                     .foregroundStyle(entry.isLocked ? TrainingTheme.textSecondary : TrainingTheme.textPrimary)
                     .lineLimit(2)
+                Text(rankBaselineLabel(for: entry.level))
+                    .font(.caption.weight(isActualCurrent ? .bold : .medium))
+                    .foregroundStyle(isActualCurrent ? accent : TrainingTheme.textSecondary)
+                    .monospacedDigit()
+                if isActualCurrent, activeStat.currentBaseline != rankBaseline(for: entry.level) {
+                    Text("Your current baseline: \(activeStat.currentBaseline) \(weeklyUnit) per week")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .monospacedDigit()
+                }
             }
 
             Spacer()
@@ -488,11 +516,19 @@ struct SkillCharacterRosterView: View {
 
     @ViewBuilder
     private func rosterThumbnail(for reference: RankImageReference) -> some View {
-        switch reference {
-        case .asset(let name):
-            Image(name)
+        if appIcons {
+            Image(systemName: activeStat.iconName)
                 .resizable()
-                .scaledToFill()
+                .scaledToFit()
+                .padding(12)
+                .foregroundStyle(accent)
+        } else {
+            switch reference {
+            case .asset(let name):
+                Image(name)
+                    .resizable()
+                    .scaledToFill()
+            }
         }
     }
 }
@@ -500,6 +536,7 @@ struct SkillCharacterRosterView: View {
 private struct CharacterRosterCarousel: View {
     let entries: [CharacterRosterEntry]
     let activeStatName: String
+    let baselineLabel: (Int) -> String
     @Binding var focusedLevel: Int
     let currentLevel: Int
     let accent: Color
@@ -519,7 +556,7 @@ private struct CharacterRosterCarousel: View {
             }
             .scrollTargetLayout()
         }
-        .frame(height: 326)
+        .frame(height: 346)
         .contentMargins(.horizontal, 54, for: .scrollContent)
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: focusedLevelBinding)
@@ -576,9 +613,14 @@ private struct CharacterRosterCarousel: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+
+            Text(baselineLabel(entry.level))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(entry.level == currentLevel ? accent : TrainingTheme.textSecondary)
+                .monospacedDigit()
         }
         .padding(14)
-        .frame(width: 224, height: 310)
+        .frame(width: 224, height: 330)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(
@@ -599,7 +641,7 @@ private struct CharacterRosterCarousel: View {
         )
         .shadow(color: accent.opacity(isCurrent ? 0.18 : 0.08), radius: isCurrent ? 14 : 8, x: 0, y: 6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Level \(entry.level), \(entry.title), \(statusText(for: entry))")
+        .accessibilityLabel("Level \(entry.level), \(entry.title), \(baselineLabel(entry.level)), \(statusText(for: entry))")
     }
 
     private func statusText(for entry: CharacterRosterEntry) -> String {

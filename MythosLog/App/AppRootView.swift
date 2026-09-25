@@ -72,17 +72,23 @@ struct AppRootView: View {
     @StateObject private var router = AppRouter()
     @State private var settings: AppSettings?
     @State private var showOnboarding = false
-    @State private var goalsAtRiskCount = 0
+    @State private var unviewedGoalAttentionCount = 0
 
-    /// Recomputes the Goals-tab badge. This walks every active goal's pace
-    /// through the store, so it must run on explicit change signals — never
-    /// from a computed property in `body`, which would re-run the whole walk on
-    /// every render (tab switches, router changes, animations included).
-    private func refreshGoalsAtRiskCount() {
-        goalsAtRiskCount = allGoals.reduce(into: 0) { count, goal in
-            guard goal.status == .active else { return }
-            let snapshot = TrainingStore.goalProgress(for: goal, context: modelContext)
-            if snapshot.paceStatus == .atRisk || snapshot.paceStatus == .behind {
+    /// Counts only new attention items. Once the user checks an item as viewed,
+    /// its badge disappears for the rest of the week even while the goal card
+    /// continues to show its honest pace state.
+    private func refreshGoalAttentionCount() {
+        let inputs = TrainingStore.goalProgressInputs(context: modelContext)
+        let now = Date.now
+        let weekStartsOnMonday = settings?.weekStartsOnMonday ?? true
+        unviewedGoalAttentionCount = allGoals.reduce(into: 0) { count, goal in
+            let snapshot = TrainingStore.goalProgress(for: goal, inputs: inputs, now: now)
+            if TrainingStore.goalHasUnviewedAttention(
+                goal,
+                progress: snapshot,
+                now: now,
+                weekStartsOnMonday: weekStartsOnMonday
+            ) {
                 count += 1
             }
         }
@@ -104,14 +110,17 @@ struct AppRootView: View {
             TrainingStore.refreshAppState()
             reloadSettings()
             consumeHomeScreenQuickActionIfNeeded()
-            refreshGoalsAtRiskCount()
+            refreshGoalAttentionCount()
             consumePendingDestinationIfNeeded()
         }
         .onChange(of: settingsRecords.map { "\($0.id)|\($0.hasCompletedOnboarding)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
             reloadSettings()
         }
-        .onChange(of: allGoals.map { "\($0.id)|\($0.statusRaw)|\($0.targetValue)|\($0.updatedAt.timeIntervalSinceReferenceDate)" }) { _, _ in
-            refreshGoalsAtRiskCount()
+        .onChange(of: allGoals.map { "\($0.id)|\($0.statusRaw)|\($0.targetValue)|\($0.updatedAt.timeIntervalSinceReferenceDate)|\($0.attentionViewedAt?.timeIntervalSinceReferenceDate ?? 0)" }) { _, _ in
+            refreshGoalAttentionCount()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TrainingStore.didRecordLocalWriteNotification)) { _ in
+            refreshGoalAttentionCount()
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             consumePendingDestinationIfNeeded()
@@ -132,7 +141,7 @@ struct AppRootView: View {
             case .externalLog(let event):
                 try? ExternalEventService.ingest(event, context: modelContext)
                 try? TrainingStore.refreshAllProgress(context: modelContext, reason: .logMutation)
-                refreshGoalsAtRiskCount()
+                refreshGoalAttentionCount()
             case .skillDetail(let statKey, let openLog):
                 router.open(
                     PendingAppDestination(
@@ -151,6 +160,7 @@ struct AppRootView: View {
         let storedSettings = try? TrainingStore.fetchExistingSettings(context: modelContext)
         settings = storedSettings
         showOnboarding = !(storedSettings?.hasCompletedOnboarding ?? false)
+        refreshGoalAttentionCount()
 
         consumePendingDestinationIfNeeded()
     }
@@ -229,7 +239,7 @@ struct AppRootView: View {
     private var rootTabBar: some View {
         CompactRootTabBar(
             selection: router.selectedRoute,
-            goalsBadgeCount: goalsAtRiskCount
+            goalsBadgeCount: unviewedGoalAttentionCount
         ) { route in
             router.open(route)
         }
@@ -242,10 +252,13 @@ private struct CompactRootTabBar: View {
     let onSelect: (TrainingRoute) -> Void
 
     private let items: [CompactRootTabItem] = [
-        CompactRootTabItem(route: .dashboard, title: "Dashboard", systemImage: "rectangle.grid.2x2.fill"),
-        CompactRootTabItem(route: .weeklyReview, title: "Review", systemImage: "calendar.badge.clock"),
+        // Deliberately not another grid glyph — "More" already owns
+        // `square.grid.2x2.fill`, and the two read as the same icon at tab-bar
+        // size. The rings echo the dashboard's own skill circles.
+        CompactRootTabItem(route: .dashboard, title: "Dashboard", systemImage: "smallcircle.filled.circle"),
+        CompactRootTabItem(route: .weeklyReview, title: "Review", systemImage: "calendar"),
         CompactRootTabItem(route: .goals, title: "Goals", systemImage: "target"),
-        CompactRootTabItem(route: .more, title: "More", systemImage: "square.grid.2x2.fill")
+        CompactRootTabItem(route: .more, title: "More", systemImage: "square.grid.2x2")
     ]
 
     var body: some View {
@@ -258,7 +271,7 @@ private struct CompactRootTabBar: View {
                 } label: {
                     tabItem(item)
                 }
-                .buttonStyle(LiquidTabButtonStyle(isSelected: selection == item.route))
+                .buttonStyle(.plain)
                 .accessibilityLabel(item.title)
                 .accessibilityAddTraits(selection == item.route ? .isSelected : [])
             }
@@ -267,28 +280,9 @@ private struct CompactRootTabBar: View {
         .frame(height: 64)
         .background(
             Capsule()
-                .fill(.white.opacity(0.30))
-                .background(.ultraThinMaterial, in: Capsule())
+                .fill(TrainingTheme.backgroundSecondary)
         )
-        .overlay(
-            Capsule()
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.95), .white.opacity(0.36), TrainingTheme.borderStrong.opacity(0.18)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(.white.opacity(0.28), lineWidth: 4)
-                .blur(radius: 7)
-                .padding(2)
-        )
-        .shadow(color: TrainingTheme.shadowStrong.opacity(0.34), radius: 24, x: 0, y: 14)
-        .shadow(color: .white.opacity(0.75), radius: 8, x: 0, y: -2)
+        .overlay(Capsule().strokeBorder(TrainingTheme.border, lineWidth: 0.5))
         .padding(.horizontal, 18)
         .padding(.top, 6)
         .padding(.bottom, 6)
@@ -297,17 +291,17 @@ private struct CompactRootTabBar: View {
 
     private func tabItem(_ item: CompactRootTabItem) -> some View {
         let isSelected = selection == item.route
-        let tint = isSelected ? Color.accentColor : TrainingTheme.textSecondary
+        let tint = TrainingTheme.textPrimary
 
         return ZStack(alignment: .topTrailing) {
             VStack(spacing: 3) {
                 Image(systemName: item.systemImage)
-                    .font(.system(size: 19, weight: isSelected ? .bold : .semibold))
+                    .font(.system(size: 18, weight: .regular))
                     .symbolRenderingMode(.monochrome)
                     .frame(height: 22)
 
                 Text(item.title)
-                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                    .font(.caption2.weight(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
@@ -315,17 +309,7 @@ private struct CompactRootTabBar: View {
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.white.opacity(0.54) : Color.clear)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(isSelected ? .white.opacity(0.86) : .clear, lineWidth: 0.8)
-            )
-            .shadow(
-                color: isSelected ? Color.accentColor.opacity(0.14) : .clear,
-                radius: 8,
-                x: 0,
-                y: 4
+                    .fill(isSelected ? Color.white : Color.clear)
             )
 
             if item.route == .goals, goalsBadgeCount > 0 {

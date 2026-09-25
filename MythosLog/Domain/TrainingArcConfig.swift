@@ -600,12 +600,30 @@ enum TrainingArcConfig {
         progressionConfiguration(for: statKey).rollingWindowWeeks
     }
 
-    static func rankThresholds(for statKey: StatKey) -> [Int] {
-        progressionConfiguration(for: statKey).levelThresholds
+    static func rankThresholds(for statKey: StatKey, personalMax: Int? = nil) -> [Int] {
+        let canonical = progressionConfiguration(for: statKey).levelThresholds
+        guard
+            let personalMax,
+            personalMax > 0,
+            let canonicalMaximum = canonical.last,
+            canonicalMaximum > 0
+        else {
+            return canonical
+        }
+
+        // Keep the skill-specific curve (Cardio has wider gaps at the upper
+        // ranks, for example) while making Level 10 equal the user's own
+        // believable ceiling. Ceil prevents positive thresholds collapsing to
+        // zero for skills with a very small personal max.
+        return canonical.map { threshold in
+            guard threshold > 0 else { return 0 }
+            let scaled = Double(threshold) / Double(canonicalMaximum) * Double(personalMax)
+            return min(max(Int(ceil(scaled)), 1), personalMax)
+        }
     }
 
-    static func requiredWeeklyValue(for statKey: StatKey, level: Int) -> Int {
-        let thresholds = rankThresholds(for: statKey)
+    static func requiredWeeklyValue(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int {
+        let thresholds = rankThresholds(for: statKey, personalMax: personalMax)
         let clampedLevel = clampedRankLevel(level)
         let index = min(max(clampedLevel - 1, 0), thresholds.count - 1)
         return thresholds[index]
@@ -690,20 +708,20 @@ enum TrainingArcConfig {
         return "\(unlockedName)_Locked"
     }
 
-    static func lowerRankThreshold(for statKey: StatKey, level: Int) -> Int? {
+    static func lowerRankThreshold(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
         guard clampedLevel > minimumRankLevel else { return nil }
-        return requiredWeeklyValue(for: statKey, level: clampedLevel - 1)
+        return requiredWeeklyValue(for: statKey, level: clampedLevel - 1, personalMax: personalMax)
     }
 
-    static func nextRankThreshold(for statKey: StatKey, level: Int) -> Int? {
+    static func nextRankThreshold(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
         guard clampedLevel < maximumRankLevel else { return nil }
-        return requiredWeeklyValue(for: statKey, level: clampedLevel + 1)
+        return requiredWeeklyValue(for: statKey, level: clampedLevel + 1, personalMax: personalMax)
     }
 
-    static func rankLevel(for statKey: StatKey, weeklyValue: Double) -> Int {
-        let thresholds = rankThresholds(for: statKey)
+    static func rankLevel(for statKey: StatKey, weeklyValue: Double, personalMax: Int? = nil) -> Int {
+        let thresholds = rankThresholds(for: statKey, personalMax: personalMax)
         let flooredValue = Int(max(0, weeklyValue).rounded(.down))
 
         for (index, threshold) in thresholds.enumerated().reversed() where flooredValue >= threshold {
@@ -752,33 +770,33 @@ enum TrainingArcConfig {
         return "\(value) \(label)"
     }
 
-    static func effectiveWeeklyTarget(for statKey: StatKey, level: Int) -> Int {
-        max(requiredWeeklyValue(for: statKey, level: level), 1)
+    static func effectiveWeeklyTarget(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int {
+        max(requiredWeeklyValue(for: statKey, level: level, personalMax: personalMax), 1)
     }
 
-    static func nextRankChargeRequirement(for statKey: StatKey, level: Int) -> Int? {
+    static func nextRankChargeRequirement(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
         guard clampedLevel < maximumRankLevel else { return nil }
-        return effectiveWeeklyTarget(for: statKey, level: clampedLevel + 1)
+        return effectiveWeeklyTarget(for: statKey, level: clampedLevel + 1, personalMax: personalMax)
     }
 
-    static func previousRankChargeRequirement(for statKey: StatKey, level: Int) -> Int? {
+    static func previousRankChargeRequirement(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
         guard clampedLevel > minimumRankLevel else { return nil }
-        return effectiveWeeklyTarget(for: statKey, level: clampedLevel - 1)
+        return effectiveWeeklyTarget(for: statKey, level: clampedLevel - 1, personalMax: personalMax)
     }
 
-    static func positiveChargeStep(for statKey: StatKey, level: Int) -> Int? {
+    static func positiveChargeStep(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
-        guard let nextTarget = nextRankChargeRequirement(for: statKey, level: clampedLevel) else { return nil }
-        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel)
+        guard let nextTarget = nextRankChargeRequirement(for: statKey, level: clampedLevel, personalMax: personalMax) else { return nil }
+        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel, personalMax: personalMax)
         return max(nextTarget - currentTarget, 1)
     }
 
-    static func negativeChargeStep(for statKey: StatKey, level: Int) -> Int? {
+    static func negativeChargeStep(for statKey: StatKey, level: Int, personalMax: Int? = nil) -> Int? {
         let clampedLevel = clampedRankLevel(level)
-        guard let lowerTarget = previousRankChargeRequirement(for: statKey, level: clampedLevel) else { return nil }
-        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel)
+        guard let lowerTarget = previousRankChargeRequirement(for: statKey, level: clampedLevel, personalMax: personalMax) else { return nil }
+        let currentTarget = effectiveWeeklyTarget(for: statKey, level: clampedLevel, personalMax: personalMax)
         return max(currentTarget - lowerTarget, 1)
     }
 

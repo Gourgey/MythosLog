@@ -22,6 +22,7 @@ struct SkillDetailView: View {
     @State private var showingGoalEditorForNew = false
     @State private var editingGoal: Goal?
     @State private var showingHabitEditorForNew = false
+    @State private var showingHabitManagement = false
     @State private var editingHabit: Habit?
     @State private var showingUnmatched = false
     @State private var scrollOffset: CGFloat = 0
@@ -170,7 +171,6 @@ struct SkillDetailView: View {
                 calibrationSection()
                 progressionSection(snapshot: snapshot)
                 goalsSection
-                linkedHabitsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -188,10 +188,10 @@ struct SkillDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let primaryHabit {
                 StickyLogButton(
-                    title: primaryHabit.measurementType == .booleanSession ? "Log Session" : "Log Progress",
+                    title: stickyLogTitle(for: primaryHabit, day: effectiveDay),
                     accent: accent
                 ) {
-                    logDraft = LogEntryDraft(habit: primaryHabit)
+                    logDraft = LogEntryDraft(habit: primaryHabit, date: logDate(for: effectiveDay))
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -200,7 +200,20 @@ struct SkillDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showingHabitManagement) {
+            ScrollView {
+                linkedHabitsSection.padding(16)
+            }
+            .background(TrainingTheme.background)
+            .navigationTitle("Manage Habits")
+            .navigationBarTitleDisplayMode(.inline)
+        }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Manage Habits", systemImage: "slider.horizontal.3") {
+                    showingHabitManagement = true
+                }
+            }
             ToolbarItem(placement: .principal) {
                 Text(stat.name)
                     .font(.headline.weight(.semibold))
@@ -370,6 +383,33 @@ struct SkillDetailView: View {
             V4StatusPill(text: status.label, tint: tint)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// The sticky Log button follows the week calendar above it: selecting an
+    /// earlier day and tapping Log pre-fills the sheet with that day rather
+    /// than today. Today keeps the live timestamp; past days inherit the
+    /// current time-of-day so backfilled entries don't all stack at midnight
+    /// (and can't tip into the previous day under a rounding boundary).
+    private func logDate(for day: Date) -> Date {
+        let calendar = TrainingStore.progressionCalendar()
+        let now = Date.now
+        guard !calendar.isDate(day, inSameDayAs: now) else { return now }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
+        return calendar.date(
+            bySettingHour: time.hour ?? 12,
+            minute: time.minute ?? 0,
+            second: time.second ?? 0,
+            of: day
+        ) ?? day
+    }
+
+    /// Names the day the button will log to whenever that isn't today, so the
+    /// backfill is visible before the sheet opens rather than only in its
+    /// WHEN row.
+    private func stickyLogTitle(for habit: Habit, day: Date) -> String {
+        let base = habit.measurementType == .booleanSession ? "Log Session" : "Log Progress"
+        guard !TrainingStore.progressionCalendar().isDate(day, inSameDayAs: .now) else { return base }
+        return "\(base) · \(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))"
     }
 
     private func openInitialLogSheetIfNeeded() {
@@ -555,7 +595,7 @@ struct SkillDetailView: View {
     private var linkedHabitsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("LOG ACTIONS")
+                Text("HABITS")
                     .font(.caption.weight(.heavy))
                     .tracking(2.0)
                     .foregroundStyle(TrainingTheme.textMuted)
@@ -618,9 +658,6 @@ struct SkillDetailView: View {
                             }
                             .frame(maxWidth: .infinity)
 
-                            HabitQuickActionButtons(habit: habit, accent: accent) { value in
-                                logDraft = LogEntryDraft(habit: habit, value: value)
-                            }
                         }
                     }
                     .overlay(alignment: .topTrailing) {
@@ -1680,6 +1717,7 @@ struct SkillCalibrationSheet: View {
     let stat: StatDomain
 
     @State private var baselineText: String
+    @State private var baselineWasEdited = false
     @State private var targetText: String
     @State private var maxText: String
     @State private var maintenanceText: String
@@ -1751,7 +1789,7 @@ struct SkillCalibrationSheet: View {
             }
 
             Section {
-                calibrationField(title: "Baseline", text: $baselineText, hint: "What you honestly do in a normal week.")
+                calibrationField(title: "Baseline", text: baselineBinding, hint: "What you honestly do in a normal week.")
             } header: {
                 Text("Baseline (required)")
             }
@@ -1769,9 +1807,9 @@ struct SkillCalibrationSheet: View {
 
             Section {
                 Button {
-                    let suggestedTarget = TrainingArcConfig.suggestedTargetValue(for: statKey, baseline: parsedBaseline)
+                    let suggestedTarget = TrainingArcConfig.suggestedTargetValue(for: statKey, baseline: baselineForSave)
                     targetText = "\(suggestedTarget)"
-                    let suggestedMax = TrainingArcConfig.suggestedPersonalMaxValue(for: statKey, baseline: parsedBaseline, target: suggestedTarget)
+                    let suggestedMax = TrainingArcConfig.suggestedPersonalMaxValue(for: statKey, baseline: baselineForSave, target: suggestedTarget)
                     maxText = "\(suggestedMax)"
                 } label: {
                     Label("Suggest values for me", systemImage: "wand.and.stars")
@@ -1811,8 +1849,24 @@ struct SkillCalibrationSheet: View {
         Int(baselineText) ?? stat.currentBaseline
     }
 
+    private var baselineBinding: Binding<String> {
+        Binding(
+            get: { baselineText },
+            set: { newValue in
+                baselineText = newValue
+                baselineWasEdited = true
+            }
+        )
+    }
+
+    private var baselineForSave: Int {
+        baselineWasEdited ? max(0, parsedBaseline) : stat.currentBaseline
+    }
+
     private func save() {
-        let baseline = max(0, parsedBaseline)
+        // Personal-max, target, maintenance, or unit-only edits must not write
+        // an old/default baseline value back over the live skill calibration.
+        let baseline = baselineForSave
         let target = Int(targetText)
         let personalMax = Int(maxText)
         let maintenance = Int(maintenanceText)
@@ -1825,9 +1879,7 @@ struct SkillCalibrationSheet: View {
 
         stat.currentBaseline = baseline
         stat.targetValue = clamped.target
-        stat.personalMaxValue = clamped.max
         stat.maintenanceFloor = clamped.maintenance
-        stat.updatedAt = .now
 
         if let primary = TrainingStore.primaryHabit(for: stat),
            primary.measurementType != primaryMeasurementType {
@@ -1835,8 +1887,11 @@ struct SkillCalibrationSheet: View {
             primary.updatedAt = .now
         }
 
-        try? modelContext.save()
-        _ = try? TrainingStore.refreshProgress(for: stat, context: modelContext, reason: .appRefresh)
+        try? TrainingStore.reassessPersonalMax(
+            for: stat,
+            personalMax: clamped.max,
+            context: modelContext
+        )
         dismiss()
     }
 }

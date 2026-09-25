@@ -241,7 +241,11 @@ enum RegressionBehavior: String, Codable, CaseIterable, Identifiable, Sendable {
 
 enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case detailedCards
-    case compactGrid
+    // Renamed from "Compact Grid" to "Two Column"; the raw value stays
+    // `compactGrid` because it is persisted in `AppSettings` and in exported
+    // transfer bundles, so changing it would silently reset existing users
+    // (and older backups) to the default layout.
+    case twoColumn = "compactGrid"
     case gameGrid
 
     var id: String { rawValue }
@@ -250,8 +254,8 @@ enum DashboardLayoutMode: String, Codable, CaseIterable, Identifiable, Sendable 
         switch self {
         case .detailedCards:
             return "Detailed Cards"
-        case .compactGrid:
-            return "Compact Grid"
+        case .twoColumn:
+            return "Two Column"
         case .gameGrid:
             return "Game Grid"
         }
@@ -298,6 +302,7 @@ enum RankChangeReason: String, Codable, Sendable {
     case deleteMutation
     case appRefresh
     case skillOpen
+    case personalMaxReassessment
 }
 
 struct PendingRankChange: Sendable, Equatable {
@@ -331,6 +336,9 @@ final class StatDomain {
     var storedCharges: Int = 0
     var bankedProgressUnits: Double = 0
     var lastResolvedWeekStart: Date?
+    var progressionAnchorDate: Date?
+    var progressionAnchorLevel: Int?
+    var progressionAnchorBaseline: Int?
     var lastAcknowledgedLevel: Int = 1
     var pendingRankChangeDirectionRaw: String?
     var pendingRankChangeFromLevel: Int?
@@ -368,6 +376,9 @@ final class StatDomain {
         storedCharges: Int = 0,
         bankedProgressUnits: Double = 0,
         lastResolvedWeekStart: Date? = nil,
+        progressionAnchorDate: Date? = nil,
+        progressionAnchorLevel: Int? = nil,
+        progressionAnchorBaseline: Int? = nil,
         lastAcknowledgedLevel: Int = 1,
         pendingRankChangeDirectionRaw: String? = nil,
         pendingRankChangeFromLevel: Int? = nil,
@@ -400,6 +411,9 @@ final class StatDomain {
         self.storedCharges = storedCharges
         self.bankedProgressUnits = bankedProgressUnits
         self.lastResolvedWeekStart = lastResolvedWeekStart
+        self.progressionAnchorDate = progressionAnchorDate
+        self.progressionAnchorLevel = progressionAnchorLevel
+        self.progressionAnchorBaseline = progressionAnchorBaseline
         self.lastAcknowledgedLevel = lastAcknowledgedLevel
         self.pendingRankChangeDirectionRaw = pendingRankChangeDirectionRaw
         self.pendingRankChangeFromLevel = pendingRankChangeFromLevel
@@ -961,6 +975,8 @@ final class Goal {
     var affectsMetrics: Bool = false
     var affectsProgression: Bool = false
     var isRecoveryMode: Bool = false
+    /// Last explicit acknowledgement of an at-risk or behind state.
+    var attentionViewedAt: Date?
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now
     var completedAt: Date?
@@ -982,6 +998,7 @@ final class Goal {
         affectsMetrics: Bool = false,
         affectsProgression: Bool = false,
         isRecoveryMode: Bool = false,
+        attentionViewedAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         completedAt: Date? = nil
@@ -1002,6 +1019,7 @@ final class Goal {
         self.affectsMetrics = affectsMetrics
         self.affectsProgression = affectsProgression
         self.isRecoveryMode = isRecoveryMode
+        self.attentionViewedAt = attentionViewedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
@@ -1566,6 +1584,9 @@ nonisolated struct StatExport: Codable, Sendable {
     var storedCharges: Int
     var bankedProgressUnits: Double
     var lastResolvedWeekStart: Date?
+    var progressionAnchorDate: Date?
+    var progressionAnchorLevel: Int?
+    var progressionAnchorBaseline: Int?
     var lastAcknowledgedLevel: Int
     var pendingRankChangeDirectionRaw: String?
     var pendingRankChangeFromLevel: Int?
@@ -1599,6 +1620,9 @@ nonisolated struct StatExport: Codable, Sendable {
         storedCharges: Int,
         bankedProgressUnits: Double,
         lastResolvedWeekStart: Date?,
+        progressionAnchorDate: Date? = nil,
+        progressionAnchorLevel: Int? = nil,
+        progressionAnchorBaseline: Int? = nil,
         lastAcknowledgedLevel: Int,
         pendingRankChangeDirectionRaw: String?,
         pendingRankChangeFromLevel: Int?,
@@ -1631,6 +1655,9 @@ nonisolated struct StatExport: Codable, Sendable {
         self.storedCharges = storedCharges
         self.bankedProgressUnits = bankedProgressUnits
         self.lastResolvedWeekStart = lastResolvedWeekStart
+        self.progressionAnchorDate = progressionAnchorDate
+        self.progressionAnchorLevel = progressionAnchorLevel
+        self.progressionAnchorBaseline = progressionAnchorBaseline
         self.lastAcknowledgedLevel = lastAcknowledgedLevel
         self.pendingRankChangeDirectionRaw = pendingRankChangeDirectionRaw
         self.pendingRankChangeFromLevel = pendingRankChangeFromLevel
@@ -1665,6 +1692,7 @@ nonisolated struct GoalExport: Codable, Sendable {
     var affectsMetrics: Bool
     var affectsProgression: Bool
     var isRecoveryMode: Bool?
+    var attentionViewedAt: Date?
     var createdAt: Date
     var updatedAt: Date
     var completedAt: Date?

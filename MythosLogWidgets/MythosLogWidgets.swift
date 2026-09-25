@@ -29,10 +29,10 @@ struct TrainingArcStatusWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TrainingArcProvider()) { entry in
             TrainingSummaryWidgetEntryView(entry: entry)
-                .widgetURL(TrainingRouteLink.url(for: entry.snapshot.pendingWeeklyReview ? .weeklyReview : .dashboard))
+                .widgetURL(TrainingRouteLink.url(for: .dashboard))
         }
         .configurationDisplayName("Mythos Log")
-        .description("Your current skill levels, weekly progress, and next training prompt.")
+        .description("Your skills at a glance, with weekly progress rings.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }
@@ -55,164 +55,62 @@ private struct TrainingSummaryWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TrainingArcEntry
 
-    private var snapshot: TrainingWidgetSnapshot { entry.snapshot }
-    private var hasData: Bool { !snapshot.stats.isEmpty }
-    private var primaryStat: TrainingWidgetStat? { snapshot.weakestStat ?? snapshot.stats.first }
-
-    private var accent: Color {
-        arcWidgetAccent(for: snapshot.trainTodayColorToken ?? primaryStat?.colorToken ?? snapshot.motivationColorToken)
-    }
-
-    private var headline: String {
-        if !hasData {
-            return "Open Mythos Log"
-        }
-
-        if snapshot.pendingWeeklyReview {
-            return "Weekly review ready"
-        }
-
-        return snapshot.trainTodayHeadline ?? snapshot.motivationTitle
-    }
-
-    private var detail: String {
-        if !hasData {
-            return "Open the app once to sync your dashboard data."
-        }
-
-        return snapshot.trainTodayDetail ?? snapshot.motivationMessage
+    private var skills: [TrainingWidgetStat] {
+        let limit = family == .systemMedium ? 7 : (family == .systemSmall ? 2 : 3)
+        // Keep snapshot order for skills at the same level.
+        return entry.snapshot.stats.enumerated()
+            .sorted { lhs, rhs in
+                lhs.element.level == rhs.element.level
+                    ? lhs.offset < rhs.offset
+                    : lhs.element.level > rhs.element.level
+            }
+            .prefix(limit)
+            .map(\.element)
     }
 
     var body: some View {
-        switch family {
-        case .systemMedium:
-            mediumWidget
-        case .accessoryRectangular:
-            accessoryWidget
-        default:
-            smallWidget
-        }
-    }
+        GeometryReader { geometry in
+            let columns = family == .systemMedium
+                ? (skills.count > 3 ? (skills.count + 1) / 2 : skills.count)
+                : skills.count
+            let rows = family == .systemMedium && skills.count > 3 ? 2 : 1
+            let spacing: CGFloat = family == .accessoryRectangular ? 10 : 16
+            let diameter = max(0, min(
+                family == .accessoryRectangular ? 48 : 64,
+                (geometry.size.width - CGFloat(max(columns - 1, 0)) * spacing) / CGFloat(max(columns, 1)),
+                (geometry.size.height - CGFloat(rows - 1) * spacing) / CGFloat(rows)
+            ))
 
-    private var smallWidget: some View {
-        arcWidgetSurface(accent: accent) {
-            VStack(alignment: .leading, spacing: 8) {
-                widgetEyebrow("MYTHOS LOG", accent: accent)
-
-                Text(headline)
-                    .font(.headline.weight(.heavy))
-                    .foregroundStyle(widgetInk)
-                    .lineLimit(2)
-
-                if let primaryStat {
-                    summaryMetric(for: primaryStat)
-                } else {
-                    Text("No synced skills yet")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(widgetInkSecondary)
+            if skills.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "circle.dotted")
+                        .font(.system(size: 28, weight: .light))
+                    Text("Open Mythos Log to sync skills")
+                        .font(.caption2)
+                        .multilineTextAlignment(.center)
                 }
-
-                Spacer(minLength: 0)
-
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(widgetInkSecondary)
-                    .lineLimit(3)
-            }
-        }
-    }
-
-    private var mediumWidget: some View {
-        arcWidgetSurface(accent: accent, topPadding: 28, bottomPadding: 26) {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    widgetEyebrow(snapshot.appName.uppercased(), accent: accent)
-
-                    Text(headline)
-                        .font(.title3.weight(.heavy))
-                        .foregroundStyle(widgetInk)
-                        .lineLimit(2)
-
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(widgetInkSecondary)
-                        .lineLimit(2)
-
-                    Spacer(minLength: 0)
-
-                    if snapshot.pendingWeeklyReview {
-                        Label("Review ready", systemImage: "calendar.badge.clock")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(widgetWarning)
-                    } else if snapshot.goalsAtRiskCount > 0 {
-                        Label("\(snapshot.goalsAtRiskCount) goal\(snapshot.goalsAtRiskCount == 1 ? "" : "s") at risk", systemImage: "target")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(widgetWarning)
-                    }
-                }
-
-                Divider()
-                    .overlay(widgetInkSecondary.opacity(0.22))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Skills")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(widgetInkSecondary)
-
-                    if snapshot.stats.isEmpty {
-                        Text("Open the app once to sync your active skills.")
-                            .font(.caption)
-                            .foregroundStyle(widgetInkSecondary)
-                            .lineLimit(4)
-                    } else {
-                        ForEach(snapshot.stats.prefix(3)) { stat in
-                            SkillProgressRow(stat: stat)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        ForEach(skills.prefix(max(columns, 1))) { stat in
+                            SkillProgressCircle(stat: stat, diameter: diameter)
                         }
                     }
-
-                    Spacer(minLength: 0)
+                    if rows > 1 {
+                        HStack(spacing: spacing) {
+                            ForEach(skills.dropFirst(columns)) { stat in
+                                SkillProgressCircle(stat: stat, diameter: diameter)
+                            }
+                        }
+                    }
                 }
-                .frame(maxWidth: 150)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-    }
-
-    private var accessoryWidget: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(headline)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-            if let primaryStat {
-                Text("\(primaryStat.name) LV \(primaryStat.level)")
-                    .font(.headline.weight(.bold))
-                    .lineLimit(1)
-                Text("\(MetricFormatting.shortMetric(primaryStat.weekActual)) / \(MetricFormatting.shortMetric(Double(primaryStat.baseline))) this week")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            } else {
-                Text("Sync dashboard")
-                    .font(.headline.weight(.bold))
-                    .lineLimit(1)
-                Text("Open Mythos Log once")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func summaryMetric(for stat: TrainingWidgetStat) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("\(stat.name) · LV \(stat.level)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(widgetInk)
-                .lineLimit(1)
-            Text("\(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline))) this week")
-                .font(.caption2)
-                .foregroundStyle(widgetInkSecondary)
-                .lineLimit(1)
+        .containerBackground(for: .widget) {
+            Color(.systemBackground)
         }
     }
 }
@@ -295,37 +193,53 @@ private struct QuickLogWidgetEntryView: View {
     }
 }
 
-private struct SkillProgressRow: View {
+private struct SkillProgressCircle: View {
     let stat: TrainingWidgetStat
+    let diameter: CGFloat
 
     private var progress: Double {
-        guard stat.baseline > 0 else { return 0 }
+        guard stat.baseline > 0, stat.weekActual.isFinite else { return 0 }
         return min(max(stat.weekActual / Double(stat.baseline), 0), 1)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(stat.name)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(widgetInk)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Text("LV \(stat.level)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(widgetInkSecondary)
-                    .lineLimit(1)
-            }
-
-            ProgressView(value: progress)
-                .progressViewStyle(.linear)
-                .tint(arcWidgetAccent(for: stat.colorToken))
-
-            Text("\(MetricFormatting.shortMetric(stat.weekActual)) / \(MetricFormatting.shortMetric(Double(stat.baseline)))")
-                .font(.caption2)
-                .foregroundStyle(widgetInkSecondary)
-                .lineLimit(1)
+    private var icon: String {
+        if let iconName = stat.iconName, !iconName.isEmpty { return iconName }
+        // Older snapshots do not include the skill's icon.
+        switch stat.colorToken {
+        case "strength": return "figure.strengthtraining.traditional"
+        case "intellect": return "brain.head.profile"
+        case "creativity": return "paintbrush.pointed.fill"
+        case "emotional": return "heart.text.square.fill"
+        case "focus": return "scope"
+        case "curiosity": return "sparkles.rectangle.stack.fill"
+        case "cardio": return "figure.run"
+        case "cooking": return "fork.knife"
+        case "reading": return "book.pages.fill"
+        default: return "sparkles"
         }
+    }
+
+    var body: some View {
+        let accent = arcWidgetAccent(for: stat.colorToken)
+        let lineWidth: CGFloat = diameter < 50 ? 3 : 4
+
+        ZStack {
+            Circle()
+                .stroke(accent.opacity(0.14), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: icon)
+                .font(.system(size: diameter * 0.34, weight: .medium))
+                .foregroundStyle(accent)
+                .widgetAccentable()
+        }
+        .padding(lineWidth / 2)
+        .frame(width: diameter, height: diameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(stat.name), level \(stat.level)")
+        .accessibilityValue("\(Int(progress * 100)) percent of weekly target")
     }
 }
 
@@ -335,8 +249,6 @@ private struct SkillProgressRow: View {
 private let widgetInk = Color(red: 0.16, green: 0.18, blue: 0.21)
 /// Secondary, softer ink for supporting copy.
 private let widgetInkSecondary = Color(red: 0.42, green: 0.45, blue: 0.49)
-/// Amber used for "at risk" / "review ready" callouts on the light surface.
-private let widgetWarning = Color(red: 0.82, green: 0.45, blue: 0.12)
 
 private func widgetEyebrow(_ text: String, accent: Color) -> some View {
     Text(text)

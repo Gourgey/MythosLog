@@ -46,6 +46,7 @@ extension TrainingStore {
     }
 
     static func updateGoal(_ goal: Goal, context: ModelContext) throws {
+        goal.attentionViewedAt = nil
         goal.updatedAt = .now
         try context.save()
         recordLocalWrite(reason: "updated goal")
@@ -54,6 +55,9 @@ extension TrainingStore {
     static func setGoalStatus(_ goal: Goal, status: GoalStatus, context: ModelContext) throws {
         let previous = goal.status
         goal.status = status
+        if status != previous {
+            goal.attentionViewedAt = nil
+        }
         if status == .completed, goal.completedAt == nil {
             goal.completedAt = .now
         }
@@ -168,6 +172,44 @@ extension TrainingStore {
         }
     }
 
+    static func goalNeedsAttention(_ progress: GoalProgressSnapshot) -> Bool {
+        progress.goal.status == .active && (progress.paceStatus == .atRisk || progress.paceStatus == .behind)
+    }
+
+    /// An acknowledgement silences the tab badge for the current week. Editing
+    /// the goal or reaching a new week makes a still-struggling goal visible
+    /// again, so "viewed" never hides future attention indefinitely.
+    static func goalAttentionIsViewed(
+        for goal: Goal,
+        progress: GoalProgressSnapshot,
+        now: Date = .now,
+        weekStartsOnMonday: Bool
+    ) -> Bool {
+        guard goalNeedsAttention(progress), let viewedAt = goal.attentionViewedAt else { return false }
+        let weekStart = WeekMath.startOfWeek(for: now, weekStartsOnMonday: weekStartsOnMonday)
+        return viewedAt >= weekStart && viewedAt >= goal.updatedAt
+    }
+
+    static func goalHasUnviewedAttention(
+        _ goal: Goal,
+        progress: GoalProgressSnapshot,
+        now: Date = .now,
+        weekStartsOnMonday: Bool
+    ) -> Bool {
+        goalNeedsAttention(progress) && !goalAttentionIsViewed(
+            for: goal,
+            progress: progress,
+            now: now,
+            weekStartsOnMonday: weekStartsOnMonday
+        )
+    }
+
+    static func markGoalAttentionViewed(_ goal: Goal, context: ModelContext, now: Date = .now) throws {
+        goal.attentionViewedAt = now
+        try context.save()
+        recordLocalWrite(reason: "viewed goal attention")
+    }
+
     static func activeWeeklyGoalTarget(for goals: [Goal], week: WeekRange) -> Int? {
         activeWeeklyGoal(for: goals, week: week).map { Int($0.targetValue.rounded()) }
     }
@@ -196,9 +238,17 @@ extension TrainingStore {
             }
             return Double(stat.rankLevel)
         case .weeklyTarget:
-            return totalForGoal(goal, in: progressionWeekInterval(containing: now), logs: inputs.logs)
+            return totalForGoal(
+                goal,
+                in: boundedPeriodInterval(progressionWeekInterval(containing: now), for: goal),
+                logs: inputs.logs
+            )
         case .monthlyTotal:
-            return totalForGoal(goal, in: monthInterval(containing: now), logs: inputs.logs)
+            return totalForGoal(
+                goal,
+                in: boundedPeriodInterval(monthInterval(containing: now), for: goal),
+                logs: inputs.logs
+            )
         case .consistency, .maintainBaseline, .improveBalance, .custom:
             let interval = goalDateInterval(for: goal, now: now)
             return totalForGoal(goal, in: interval, logs: inputs.logs)
@@ -228,6 +278,16 @@ extension TrainingStore {
         return DateInterval(start: start, end: end)
     }
 
+    /// Clips a recurring goal's current week/month to the goal's end date. The
+    /// start is deliberately not clipped: a weekly goal created mid-week counts
+    /// sessions already logged that week. Both the logged total and the pacing
+    /// clock use this same period.
+    private static func boundedPeriodInterval(_ period: DateInterval, for goal: Goal) -> DateInterval {
+        let start = period.start
+        let proposedEnd = min(period.end, goal.endDate ?? period.end)
+        return DateInterval(start: start, end: max(proposedEnd, start))
+    }
+
     private static func monthInterval(containing date: Date) -> DateInterval {
         let calendar = progressionCalendar()
         let comps = calendar.dateComponents([.year, .month], from: date)
@@ -242,7 +302,19 @@ extension TrainingStore {
         }
         guard target > 0 else { return .onPace }
 
-        let interval = goalDateInterval(for: goal, now: now)
+        let interval: DateInterval
+        switch goal.type {
+        case .weeklyTarget:
+            interval = boundedPeriodInterval(progressionWeekInterval(containing: now), for: goal)
+        case .monthlyTotal:
+            interval = boundedPeriodInterval(monthInterval(containing: now), for: goal)
+        case .reachLevel, .reachRank, .consistency, .maintainBaseline, .improveBalance, .custom:
+            // Without a deadline there is no honest expected pace to compare
+            // against, so an open-ended goal should not create a permanent
+            // warning badge merely because it is unfinished.
+            guard goal.endDate != nil else { return .onPace }
+            interval = goalDateInterval(for: goal, now: now)
+        }
         let totalDuration = interval.duration
         guard totalDuration > 0 else { return .onPace }
 

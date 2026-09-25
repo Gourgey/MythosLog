@@ -34,7 +34,7 @@ extension TrainingStore {
         now: Date = .now,
         autosave: Bool = true
     ) throws -> Bool {
-        guard let statKey = stat.statKey else { return false }
+        guard let statKey = stat.rankKey else { return false }
 
         let previousLevel = stat.rankLevel
         let previousBaseline = stat.currentBaseline
@@ -47,9 +47,15 @@ extension TrainingStore {
         // weeks produce no writes: identity stays stable for SwiftUI and
         // CloudKit no longer sees a full delete-and-recreate of the history
         // on every log mutation.
+        let anchorWeekStart = stat.progressionAnchorDate.map { progressionWeek(containing: $0).start }
         var reusableByWeekStart: [Date: WeeklyResolution] = [:]
+        var preservedResolvedWeekStarts: [Date] = []
         var staleResolutions: [WeeklyResolution] = []
         for resolution in (stat.weeklyResolutions ?? []).sorted(by: { $0.createdAt > $1.createdAt }) {
+            if let anchorWeekStart, resolution.weekStartDate < anchorWeekStart {
+                preservedResolvedWeekStarts.append(resolution.weekStartDate)
+                continue
+            }
             if reusableByWeekStart[resolution.weekStartDate] == nil {
                 reusableByWeekStart[resolution.weekStartDate] = resolution
             } else {
@@ -58,8 +64,25 @@ extension TrainingStore {
         }
         var resolutionsChanged = false
 
-        var state = ProgressionEngine.initialState(for: statKey, startingBaseline: stat.startingBaseline)
-        let completedWeeks = completedProgressionWeeks(for: stat, now: now)
+        let anchorLevel = stat.progressionAnchorLevel.map(TrainingArcConfig.clampedRankLevel)
+        let anchorBaseline = stat.progressionAnchorBaseline.map { max($0, TrainingArcConfig.minimumBaseline) }
+        var state: WeeklyProgressionState
+        if let anchorLevel, let anchorBaseline {
+            state = WeeklyProgressionState(
+                level: anchorLevel,
+                expectedWeeklyTarget: anchorBaseline,
+                bankedProgressUnits: 0
+            )
+        } else {
+            state = ProgressionEngine.initialState(
+                for: statKey,
+                startingBaseline: stat.startingBaseline
+            )
+        }
+        let completedWeeks = completedProgressionWeeks(for: stat, now: now).filter { week in
+            guard let anchorWeekStart else { return true }
+            return week.start >= anchorWeekStart
+        }
         let settings = (try? fetchExistingSettings(context: context))
         let influenceEnabled = settings?.goalsCanAffectProgression ?? false
         let goalsForStat: [Goal] = influenceEnabled ? ((try? fetchGoals(for: statKey, context: context)) ?? []) : []
@@ -78,7 +101,8 @@ extension TrainingStore {
                 isRecoveryGoal: activeGoal?.isRecoveryMode ?? false,
                 allowRankDown: allowRankDown,
                 decayEnabled: decayEnabled,
-                decaySensitivity: decaySensitivity
+                decaySensitivity: decaySensitivity,
+                personalMax: stat.personalMaxValue
             )
             let baselineAtStart = state.expectedWeeklyTarget
             let summary = summaryText(for: stat, week: week, result: result)
@@ -127,7 +151,7 @@ extension TrainingStore {
         stat.currentBaseline = state.expectedWeeklyTarget
         stat.bankedProgressUnits = state.bankedProgressUnits
         stat.chargeValue = ProgressionEngine.visibleCharge(statKey: statKey, state: state)
-        stat.lastResolvedWeekStart = completedWeeks.last?.start
+        stat.lastResolvedWeekStart = completedWeeks.last?.start ?? preservedResolvedWeekStarts.max() ?? previousResolvedWeek
 
         let acknowledgedLevel = stat.acknowledgedRankLevel
         if stat.rankLevel == acknowledgedLevel {
@@ -163,6 +187,67 @@ extension TrainingStore {
         }
 
         return didChange || context.hasChanges
+    }
+
+    /// Makes the user's believable weekly maximum the Level 10 ceiling, then
+    /// recalculates the current level from their present baseline. Earlier
+    /// weekly resolutions remain attached to the ladder that was active when
+    /// they were recorded; future weeks continue from this new anchor.
+    static func reassessPersonalMax(
+        for stat: StatDomain,
+        personalMax: Int?,
+        context: ModelContext,
+        now: Date = .now
+    ) throws {
+        guard let rankKey = stat.rankKey else { return }
+        let baselineBeforeReassessment = stat.currentBaseline
+
+        let clamped = TrainingArcConfig.clampCalibration(
+            baseline: baselineBeforeReassessment,
+            target: stat.targetValue,
+            personalMax: personalMax.map { max($0, 0) },
+            maintenance: stat.maintenanceFloor
+        )
+
+        let previousLevel = stat.rankLevel
+        let reassessedLevel = TrainingArcConfig.rankLevel(
+            for: rankKey,
+            weeklyValue: Double(baselineBeforeReassessment),
+            personalMax: clamped.max
+        )
+
+        stat.targetValue = clamped.target
+        stat.personalMaxValue = clamped.max
+        stat.maintenanceFloor = clamped.maintenance
+        // A max reassessment changes the scale, never the user's working
+        // baseline. Keep this assignment explicit so no catalog default or
+        // derived rank threshold can replace the value entered by the user.
+        stat.currentBaseline = baselineBeforeReassessment
+        stat.rankLevel = reassessedLevel
+        stat.chargeValue = 0
+        stat.bankedProgressUnits = 0
+        stat.progressionAnchorDate = now
+        stat.progressionAnchorLevel = reassessedLevel
+        stat.progressionAnchorBaseline = baselineBeforeReassessment
+
+        let acknowledgedLevel = stat.acknowledgedRankLevel
+        if reassessedLevel == acknowledgedLevel {
+            stat.clearPendingRankChange()
+        } else {
+            stat.setPendingRankChange(
+                from: acknowledgedLevel,
+                to: reassessedLevel,
+                direction: reassessedLevel > acknowledgedLevel ? .up : .down,
+                reason: .personalMaxReassessment,
+                recordedAt: now
+            )
+        }
+
+        updateDerivedFields(for: stat)
+        stat.updatedAt = now
+        try context.save()
+        recordLocalWrite(reason: "reassessed \(stat.key) personal max from level \(previousLevel) to \(reassessedLevel)")
+        try refreshWidgetSnapshot(context: context, now: now)
     }
 
     static func acknowledgePendingRankChange(for stat: StatDomain, context: ModelContext) throws {

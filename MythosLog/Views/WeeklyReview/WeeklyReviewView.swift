@@ -50,7 +50,7 @@ struct WeeklyReviewView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
-                .padding(.bottom, 118)
+                .padding(.bottom, 24)
             }
         }
         .navigationTitle("Review")
@@ -67,16 +67,32 @@ struct WeeklyReviewView: View {
             .presentationDetents([.medium, .large])
         }
         .onAppear {
-            if !hasSeenExplainer, latestResolvedWeekStart != nil {
+            // Previously gated on a resolved week existing, so a first-time
+            // reader — exactly who needs the "what does Log mean?" answer —
+            // never saw it. Now it opens on the first visit with any skill set
+            // up, and the header's help button reopens it on demand.
+            if !hasSeenExplainer, !activeStats.isEmpty {
                 showExplainer = true
                 hasSeenExplainer = true
             }
         }
     }
 
+    // The help button sits on the page header rather than on the "Last Week"
+    // header (where it used to live): the explainer now covers this week's
+    // rows and the Log button too, not just week resolution.
     private var reviewPageHeader: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 8) {
             V4PageKicker(title: "Weekly Diagnostic")
+            Spacer()
+            Button {
+                showExplainer = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainingTheme.textSecondary)
+            }
+            .accessibilityLabel("How this page works")
         }
     }
 
@@ -144,14 +160,14 @@ struct WeeklyReviewView: View {
     private var thisWeekSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if activeStats.isEmpty {
-                V4Card {
+                QuietCard {
                     Text("No active skills yet. Start onboarding to begin a week.")
                         .font(.subheadline)
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
             } else {
                 thisWeekSummaryStrip
-                V4Card(padding: 4) {
+                QuietCard(padding: 4) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(orderedReviewGroups.enumerated()), id: \.offset) { groupIndex, entry in
                             if groupIndex > 0 {
@@ -176,6 +192,21 @@ struct WeeklyReviewView: View {
         }
     }
 
+    private var hasLoggableRows: Bool {
+        currentReviewItems.contains { $0.urgency == .regressionRisk || $0.urgency == .behindPace }
+    }
+
+    // The row action used to be titled "Log" for session-based skills and
+    // "Update" for measured ones — two words for one button, neither of which
+    // said what pressing it does. It's now always "Log", with this line
+    // spelling the action out for a first-time reader.
+    private var logActionHint: some View {
+        Text("Tap **Log** on a skill to record what you did — minutes, pages, or sessions. It adds to this week's total; nothing on this page changes your data on its own.")
+            .font(.caption)
+            .foregroundStyle(TrainingTheme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private func reviewGroupHeader(_ group: ReviewUrgencyGroup, count: Int) -> some View {
         HStack(spacing: 6) {
             Text(group.title.uppercased())
@@ -193,11 +224,9 @@ struct WeeklyReviewView: View {
 
     private var thisWeekSummaryStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                V4StatusPill(text: diagnosticHeadline, tint: summaryAccent, systemImage: diagnosticIcon)
-                Spacer()
-                summaryCountsLine
-            }
+            Text("This Week")
+                .font(.title3.weight(.semibold))
+            summaryCountsLine
 
             Text(diagnosticSummaryText)
                 .font(.subheadline)
@@ -262,16 +291,20 @@ struct WeeklyReviewView: View {
                 Button {
                     openSkill(stat, openLogSheet: true)
                 } label: {
-                    Text(logActionTitle(for: stat))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(accent.opacity(0.12)))
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .heavy))
+                        Text("Log")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(accent.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(logActionTitle(for: stat)) \(stat.name)")
-                .accessibilityHint("Opens the log sheet")
+                .accessibilityLabel("Log \(stat.name)")
+                .accessibilityHint("Records \(TrainingStore.weeklyUnitLabel(for: stat)) toward this week's \(stat.name) total")
             }
         }
         .padding(.horizontal, 12)
@@ -341,10 +374,6 @@ struct WeeklyReviewView: View {
         return "\(MetricFormatting.shortMetric(item.remaining)) \(unit) still needed to protect Level \(item.snapshot.rank.level)."
     }
 
-    private func logActionTitle(for stat: StatDomain) -> String {
-        TrainingStore.primaryHabit(for: stat)?.measurementType == .booleanSession ? "Log" : "Update"
-    }
-
     private func openSkill(_ stat: StatDomain, openLogSheet: Bool) {
         guard let statKey = stat.statKey else { return }
         router.open(
@@ -372,20 +401,12 @@ struct WeeklyReviewView: View {
                     V4PageKicker(title: "Last Week", accent: TrainingTheme.textMuted)
                 }
                 Spacer()
-                Button {
-                    showExplainer = true
-                } label: {
-                    Image(systemName: "questionmark.circle")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textSecondary)
-                }
-                .accessibilityLabel("How weekly review works")
             }
 
             if let latestResolvedWeekStart {
                 resolvedSummaryCard(weekStart: latestResolvedWeekStart)
             } else {
-                V4Card {
+                QuietCard {
                     Text("No resolved weeks yet. Your previous week will appear here automatically after Sunday at midnight.")
                         .font(.subheadline)
                         .foregroundStyle(TrainingTheme.textSecondary)
@@ -406,7 +427,7 @@ struct WeeklyReviewView: View {
         return Button {
             detailWeekStart = weekStart
         } label: {
-            V4Card(padding: 16, accent: verdict.color) {
+            QuietCard(padding: 16, accent: verdict.color) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 14) {
                         ZStack {
@@ -654,6 +675,12 @@ struct WeeklyReviewExplainerSheet: View {
                     icon: "calendar.badge.checkmark",
                     title: "How weekly review works",
                     body: "Each week your skill logs roll into a weekly stat. When the week ends, the app calculates whether each skill met its baseline and whether any ranks should change."
+                )
+
+                explainerSection(
+                    icon: "plus.circle.fill",
+                    title: "The Log button",
+                    body: "Skills grouped under At Risk or Behind get a Log button. It opens that skill's log sheet, where you record what you actually did — minutes, pages, or sessions — and that amount is added to this week's total. Tapping a skill's name instead opens its full detail page."
                 )
 
                 explainerSection(

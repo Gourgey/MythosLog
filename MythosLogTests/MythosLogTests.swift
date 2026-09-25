@@ -83,6 +83,14 @@ struct ConfigTests {
         #expect(TrainingArcConfig.rankLevel(for: .focus, weeklyValue: 40) == 5)
     }
 
+    @Test func personalMaxRescalesCardioRankLadder() {
+        #expect(TrainingArcConfig.rankThresholds(for: .cardio) == [0, 15, 30, 45, 60, 90, 120, 150, 180, 240])
+        #expect(TrainingArcConfig.rankThresholds(for: .cardio, personalMax: 1_000) == [0, 63, 125, 188, 250, 375, 500, 625, 750, 1_000])
+        #expect(TrainingArcConfig.rankLevel(for: .cardio, weeklyValue: 180) == 9)
+        #expect(TrainingArcConfig.rankLevel(for: .cardio, weeklyValue: 180, personalMax: 1_000) == 3)
+        #expect(TrainingArcConfig.rankLevel(for: .cardio, weeklyValue: 1_000, personalMax: 1_000) == 10)
+    }
+
     @Test func findYourRankConfigExposesQuestionsAndThresholdPreviews() {
         let creativityOnboarding = TrainingArcConfig.onboardingConfiguration(for: .creativity)
         let intellectOnboarding = TrainingArcConfig.onboardingConfiguration(for: .intellect)
@@ -154,13 +162,13 @@ struct ConfigTests {
         }
     }
 
-    @Test func nonStrengthRosterFallsBackWithoutInvalidLockedAssets() {
+    @Test func focusRosterUsesLockedArtForFutureLevels() {
         let entries = TrainingArcConfig.characterRosterEntries(for: .focus, currentLevel: 2)
 
         #expect(entries.count == 10)
         #expect(entries[1].isLocked == false)
         #expect(entries[2].isLocked == true)
-        #expect(entries[2].image == nil)
+        #expect(entries[2].image == .asset(name: "Focus_Level_3_Locked"))
     }
 
     @Test func calibrationClampingPreservesBaselinePrinciple() {
@@ -230,6 +238,71 @@ struct ConfigTests {
 
 @Suite("ProgressionTests")
 struct ProgressionTests {
+    @Test @MainActor func reassessingCardioMaxImmediatelyRecalculatesCurrentLevel() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        try TrainingStore.seedDefaultProfile(
+            context: context,
+            baselines: [.cardio: 180],
+            completeOnboarding: true
+        )
+        let cardio = try #require(
+            try TrainingStore.fetchStats(context: context).first(where: { $0.statKey == .cardio })
+        )
+        let reassessedAt = isoDate("2026-08-13T12:00:00Z")
+
+        #expect(cardio.rankLevel == 9)
+        cardio.createdAt = isoDate("2026-01-01T12:00:00Z")
+        cardio.acknowledgedRankLevel = 9
+        cardio.bankedProgressUnits = 3
+        cardio.chargeValue = 3
+        try context.save()
+
+        try TrainingStore.reassessPersonalMax(
+            for: cardio,
+            personalMax: 1_000,
+            context: context,
+            now: reassessedAt
+        )
+
+        #expect(cardio.personalMaxValue == 1_000)
+        #expect(cardio.currentBaseline == 180)
+        #expect(cardio.rankLevel == 3)
+        #expect(cardio.rankTitle == TrainingArcConfig.rankTitle(for: .cardio, level: 3))
+        #expect(cardio.bankedProgressUnits == 0)
+        #expect(cardio.chargeValue == 0)
+        #expect(cardio.progressionAnchorDate == reassessedAt)
+        #expect(cardio.progressionAnchorLevel == 3)
+        #expect(cardio.progressionAnchorBaseline == 180)
+        #expect(cardio.pendingRankChange?.direction == .down)
+        #expect(cardio.pendingRankChange?.fromLevel == 9)
+        #expect(cardio.pendingRankChange?.toLevel == 3)
+        #expect(cardio.pendingRankChange?.reason == .personalMaxReassessment)
+
+        try TrainingStore.refreshProgress(
+            for: cardio,
+            context: context,
+            reason: .appRefresh,
+            now: reassessedAt
+        )
+        #expect(cardio.rankLevel == 3, "Routine refresh must continue from the max-reassessment anchor")
+        #expect(cardio.currentBaseline == 180, "Max reassessment must never restore Cardio's 60-minute catalog default")
+    }
+
+    @Test func progressionUsesReassessedMaxForFutureRankSteps() {
+        let result = ProgressionEngine.evaluateWeek(
+            statKey: .cardio,
+            state: WeeklyProgressionState(level: 3, expectedWeeklyTarget: 180, bankedProgressUnits: 3),
+            actualTotal: 243,
+            personalMax: 1_000
+        )
+
+        #expect(result.weeklyChargeDelta == 1)
+        #expect(result.didLevelUp)
+        #expect(result.levelAfter == 4)
+        #expect(result.state.expectedWeeklyTarget == 188)
+    }
+
     @Test func strongWeeksCanInstantlyRankUpWhenTheyReachPlusFourCharge() {
         let startingState = ProgressionEngine.initialState(for: .strength, startingBaseline: 3)
         let result = ProgressionEngine.evaluateWeek(statKey: .strength, state: startingState, actualTotal: 12)
@@ -245,83 +318,190 @@ struct ProgressionTests {
         #expect(result.visibleChargesAfter == 0)
     }
 
-    @Test func positiveChargeDecaysTowardZeroAcrossBaselineWeeks() {
+    // Strength Level 6 targets 5 sessions with the rank below at 4, so each
+    // missed session is one charge of shortfall debt.
+
+    @Test func weekAtTargetKeepsEarnedCharge() {
         let week = ProgressionEngine.evaluateWeek(
             statKey: .strength,
             state: WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3),
             actualTotal: 5
         )
 
-        #expect(week.levelBefore == 6)
-        #expect(week.levelAfter == 6)
-        #expect(!week.didLevelUp)
-        #expect(!week.didLevelDown)
-        #expect(week.chargeBeforeDecay == 3)
-        #expect(week.chargeAfterDecay == 2)
+        #expect(!week.didDecayTowardZero)
+        #expect(week.chargeAfterDecay == 3)
         #expect(week.weeklyChargeDelta == 0)
-        #expect(week.visibleChargesAfter == 2)
+        #expect(week.visibleChargesAfter == 3)
     }
 
-    @Test func forgivingStrictnessKeepsChargeNearZeroThroughIdleWeek() {
-        // Charge of +1, an idle week (actual == target). Forgiving strictness
-        // makes the last point sticky; Balanced bleeds it to zero.
+    @Test func surplusWeekIsNotEatenByDecay() {
+        // +3 charge and a +1 week must reach +4 and rank up, not decay to +2
+        // first and stall at +3.
+        let week = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3),
+            actualTotal: 6
+        )
+
+        #expect(!week.didDecayTowardZero)
+        #expect(week.weeklyChargeDelta == 1)
+        #expect(week.didLevelUp)
+        #expect(week.levelAfter == 7)
+    }
+
+    @Test func positiveChargeDecaysOnMissedWeek() {
+        let week = ProgressionEngine.evaluateWeek(
+            statKey: .strength,
+            state: WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3),
+            actualTotal: 4
+        )
+
+        #expect(week.chargeBeforeDecay == 3)
+        #expect(week.chargeAfterDecay == 2)
+        #expect(week.weeklyChargeDelta == -1)
+        #expect(week.visibleChargesAfter == 1)
+    }
+
+    @Test func forgivingStrictnessKeepsLastEarnedChargeThroughMissedWeek() {
         let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 1)
 
         let forgiving = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 0.7
+            statKey: .strength, state: state, actualTotal: 4, decaySensitivity: 0.7
         )
         #expect(forgiving.chargeBeforeDecay == 1)
         #expect(forgiving.chargeAfterDecay == 1)
-        #expect(forgiving.visibleChargesAfter == 1)
+        #expect(forgiving.visibleChargesAfter == 0)
 
         let balanced = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 1.0
+            statKey: .strength, state: state, actualTotal: 4, decaySensitivity: 1.0
         )
         #expect(balanced.chargeAfterDecay == 0)
-        #expect(balanced.visibleChargesAfter == 0)
+        #expect(balanced.visibleChargesAfter == -1)
     }
 
-    @Test func strictStrictnessDecaysChargeTwoStepsPerWeek() {
-        // Charge of +3, an idle week. Strict removes two steps; the near-zero
-        // floor still holds (never crosses zero).
+    @Test func strictStrictnessDecaysChargeTwoStepsPerMissedWeek() {
         let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3)
 
         let strict = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: state, actualTotal: 5, decaySensitivity: 1.3
+            statKey: .strength, state: state, actualTotal: 4, decaySensitivity: 1.3
         )
         #expect(strict.chargeBeforeDecay == 3)
         #expect(strict.chargeAfterDecay == 1)
-        #expect(strict.visibleChargesAfter == 1)
+        #expect(strict.visibleChargesAfter == 0)
 
         let lowCharge = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 1)
         let clampedAtZero = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: lowCharge, actualTotal: 5, decaySensitivity: 1.3
+            statKey: .strength, state: lowCharge, actualTotal: 4, decaySensitivity: 1.3
         )
         #expect(clampedAtZero.chargeAfterDecay == 0)
     }
 
-    @Test func disablingDecayFreezesChargeRegardlessOfSensitivity() {
-        // enableDecay == false must short-circuit decay entirely, so an idle
-        // week neither bleeds charge nor honors the strictness step size.
+    @Test func disablingDecayKeepsEarnedChargeButStillChargesShortfall() {
         let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3)
         let frozen = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: state, actualTotal: 5, decayEnabled: false, decaySensitivity: 1.3
+            statKey: .strength, state: state, actualTotal: 4, decayEnabled: false, decaySensitivity: 1.3
         )
         #expect(frozen.chargeBeforeDecay == 3)
         #expect(frozen.chargeAfterDecay == 3)
-        #expect(frozen.visibleChargesAfter == 3)
+        #expect(frozen.visibleChargesAfter == 2)
+
+        let decayed = ProgressionEngine.evaluateWeek(
+            statKey: .strength, state: state, actualTotal: 4, decayEnabled: true, decaySensitivity: 1.3
+        )
+        #expect(decayed.chargeAfterDecay == 1)
     }
 
-    @Test func enablingDecayBleedsChargeTowardZeroForIdenticalState() {
-        // Same state as disablingDecayFreezesChargeRegardlessOfSensitivity,
-        // decayEnabled flipped to true: proves the flag is the thing that
-        // branches decay behavior, not some other input difference.
-        let state = WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: 3)
-        let decayed = ProgressionEngine.evaluateWeek(
-            statKey: .strength, state: state, actualTotal: 5, decayEnabled: true, decaySensitivity: 1.3
+    @Test func debtNeverDecaysTowardZero() {
+        for sensitivity in [0.7, 1.0, 1.3] {
+            let week = ProgressionEngine.evaluateWeek(
+                statKey: .strength,
+                state: WeeklyProgressionState(level: 6, expectedWeeklyTarget: 5, bankedProgressUnits: -2),
+                actualTotal: 4,
+                decaySensitivity: sensitivity
+            )
+            #expect(week.chargeAfterDecay == -2)
+            #expect(week.visibleChargesAfter == -3)
+        }
+    }
+
+    @Test func smallMissWithNoPositiveChargeCostsAtLeastOneCharge() {
+        // Focus Level 3: target 20, rank below 10. A 5-minute shortfall is
+        // under one full step but must still cost a charge.
+        let state = WeeklyProgressionState(level: 3, expectedWeeklyTarget: 20, bankedProgressUnits: 0)
+        let week = ProgressionEngine.evaluateWeek(statKey: .focus, state: state, actualTotal: 15)
+        #expect(week.weeklyChargeDelta == -1)
+        #expect(week.visibleChargesAfter == -1)
+
+        let inDebt = ProgressionEngine.evaluateWeek(
+            statKey: .focus,
+            state: WeeklyProgressionState(level: 3, expectedWeeklyTarget: 20, bankedProgressUnits: -1),
+            actualTotal: 15
         )
-        #expect(decayed.chargeBeforeDecay == 3)
-        #expect(decayed.chargeAfterDecay == 1)
+        #expect(inDebt.visibleChargesAfter == -2)
+    }
+
+    @Test func smallMissWithEarnedChargeOnlyDecays() {
+        let week = ProgressionEngine.evaluateWeek(
+            statKey: .focus,
+            state: WeeklyProgressionState(level: 3, expectedWeeklyTarget: 20, bankedProgressUnits: 2),
+            actualTotal: 15
+        )
+        #expect(week.chargeAfterDecay == 1)
+        #expect(week.weeklyChargeDelta == 0)
+        #expect(week.visibleChargesAfter == 1)
+    }
+
+    @Test func meetingActiveGoalWaivesMinimumMissPenalty() {
+        let week = ProgressionEngine.evaluateWeek(
+            statKey: .focus,
+            state: WeeklyProgressionState(level: 3, expectedWeeklyTarget: 20, bankedProgressUnits: 0),
+            actualTotal: 15,
+            activeGoalTarget: 15
+        )
+        #expect(week.goalTargetMet)
+        #expect(week.weeklyChargeDelta == 1)
+    }
+
+    @Test func levelOneTakesNoDebt() {
+        let week = ProgressionEngine.evaluateWeek(
+            statKey: .focus,
+            state: WeeklyProgressionState(level: 1, expectedWeeklyTarget: 5, bankedProgressUnits: 0),
+            actualTotal: 0
+        )
+        #expect(week.weeklyChargeDelta == 0)
+        #expect(week.visibleChargesAfter == 0)
+    }
+
+    @Test func idleWeeksRankDownAtEveryStrictness() {
+        // Regression: Focus Level 2 used to settle at -1 forever because
+        // decay pulled each week's debt back toward zero.
+        for sensitivity in [0.7, 1.0, 1.3] {
+            var state = WeeklyProgressionState(level: 2, expectedWeeklyTarget: 10, bankedProgressUnits: 0)
+            var weeksToRankDown: Int?
+            for week in 1...8 {
+                let result = ProgressionEngine.evaluateWeek(
+                    statKey: .focus, state: state, actualTotal: 0, decaySensitivity: sensitivity
+                )
+                state = result.state
+                if result.didLevelDown {
+                    weeksToRankDown = week
+                    break
+                }
+            }
+            #expect(weeksToRankDown == 4, "sensitivity \(sensitivity)")
+            #expect(state.level == 1)
+        }
+
+        var level3 = WeeklyProgressionState(level: 3, expectedWeeklyTarget: 20, bankedProgressUnits: 0)
+        var level3Weeks = 0
+        while level3.level == 3, level3Weeks < 8 {
+            level3 = ProgressionEngine.evaluateWeek(
+                statKey: .focus, state: level3, actualTotal: 0, decaySensitivity: 1.3
+            ).state
+            level3Weeks += 1
+        }
+        #expect(level3.level == 2, "Strict must not be more lenient than Balanced")
+        #expect(level3Weeks == 2)
     }
 
     @Test func negativeWeekCreatesDebtAndSingleRankDownPerWeek() {
@@ -1127,6 +1307,100 @@ struct GoalsTests {
         #expect(fetched.isRecoveryMode == false)
     }
 
+    @Test @MainActor func goalAttentionCanBeAcknowledgedForTheCurrentWeek() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let now = isoDate("2026-04-08T12:00:00Z")
+        let goal = try TrainingStore.createGoal(
+            title: "Needs attention",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            context: fixture.context
+        )
+        goal.updatedAt = isoDate("2026-04-06T09:00:00Z")
+        try fixture.context.save()
+
+        let progress = GoalProgressSnapshot(
+            id: goal.id,
+            goal: goal,
+            currentValue: 0,
+            targetValue: 5,
+            progressRatio: 0,
+            remainingValue: 5,
+            paceStatus: .behind,
+            timeRemainingLabel: "Ongoing",
+            statusLabel: "Behind"
+        )
+
+        #expect(TrainingStore.goalHasUnviewedAttention(
+            goal,
+            progress: progress,
+            now: now,
+            weekStartsOnMonday: true
+        ))
+
+        try TrainingStore.markGoalAttentionViewed(goal, context: fixture.context, now: now)
+
+        #expect(TrainingStore.goalAttentionIsViewed(
+            for: goal,
+            progress: progress,
+            now: now,
+            weekStartsOnMonday: true
+        ))
+        #expect(!TrainingStore.goalHasUnviewedAttention(
+            goal,
+            progress: progress,
+            now: now,
+            weekStartsOnMonday: true
+        ))
+    }
+
+    @Test @MainActor func viewedGoalAttentionReturnsInANewWeekOrAfterAnEdit() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let viewedAt = isoDate("2026-04-08T12:00:00Z")
+        let goal = try TrainingStore.createGoal(
+            title: "Still behind",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            context: fixture.context
+        )
+        goal.updatedAt = isoDate("2026-04-06T09:00:00Z")
+        goal.attentionViewedAt = viewedAt
+
+        let progress = GoalProgressSnapshot(
+            id: goal.id,
+            goal: goal,
+            currentValue: 0,
+            targetValue: 5,
+            progressRatio: 0,
+            remainingValue: 5,
+            paceStatus: .behind,
+            timeRemainingLabel: "Ongoing",
+            statusLabel: "Behind"
+        )
+
+        let nextWeek = isoDate("2026-04-13T12:00:00Z")
+        #expect(TrainingStore.goalHasUnviewedAttention(
+            goal,
+            progress: progress,
+            now: nextWeek,
+            weekStartsOnMonday: true
+        ))
+
+        goal.updatedAt = isoDate("2026-04-08T13:00:00Z")
+        #expect(TrainingStore.goalHasUnviewedAttention(
+            goal,
+            progress: progress,
+            now: isoDate("2026-04-08T14:00:00Z"),
+            weekStartsOnMonday: true
+        ))
+    }
+
     @Test @MainActor func setGoalStatusTransitionsAndTimestampsCorrectly() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let goal = try TrainingStore.createGoal(
@@ -1172,6 +1446,50 @@ struct GoalsTests {
         #expect(snapshot.targetValue == 5)
         #expect(snapshot.progressRatio == 0.6)
         #expect(snapshot.remainingValue == 2)
+    }
+
+    @Test @MainActor func weeklyGoalPaceUsesTheCurrentWeekInsteadOfItsWholeLifetime() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let now = isoDate("2026-04-08T12:00:00Z")
+        let weekStart = TrainingStore.progressionWeek(containing: now).start
+        try addSessionLogs(count: 3, habit: fixture.habit, weekStart: weekStart, context: fixture.context)
+
+        let goal = try TrainingStore.createGoal(
+            title: "Five this week",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .weeklyTarget,
+            measurementType: .booleanSession,
+            targetValue: 5,
+            startDate: isoDate("2026-03-01T00:00:00Z"),
+            context: fixture.context
+        )
+
+        let snapshot = TrainingStore.goalProgress(for: goal, context: fixture.context, now: now)
+        #expect(snapshot.currentValue == 3)
+        #expect(snapshot.paceStatus == .ahead)
+    }
+
+    @Test @MainActor func undatedNonRecurringGoalDoesNotCreatePermanentAttention() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let goal = try TrainingStore.createGoal(
+            title: "Open-ended level goal",
+            scope: .skill,
+            linkedStatKey: .strength,
+            type: .reachLevel,
+            measurementType: .customNumber,
+            targetValue: 10,
+            startDate: isoDate("2026-03-01T00:00:00Z"),
+            context: fixture.context
+        )
+
+        let snapshot = TrainingStore.goalProgress(
+            for: goal,
+            context: fixture.context,
+            now: isoDate("2026-04-08T12:00:00Z")
+        )
+        #expect(snapshot.paceStatus == .onPace)
+        #expect(!TrainingStore.goalNeedsAttention(snapshot))
     }
 
     @Test @MainActor func goalProgressHandlesZeroTargetWithoutDividingByZero() throws {

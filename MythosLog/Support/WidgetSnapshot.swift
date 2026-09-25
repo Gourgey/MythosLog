@@ -97,6 +97,7 @@ struct TrainingWidgetStat: Codable, Identifiable, Sendable {
     var weekActual: Double
     var progressToNextLevel: Double
     var colorToken: String
+    var iconName: String? = nil
 }
 
 struct TrainingWidgetHabit: Codable, Identifiable, Sendable {

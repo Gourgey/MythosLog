@@ -4,6 +4,7 @@ import SwiftUI
 struct GoalsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Goal.createdAt, order: .reverse) private var goals: [Goal]
+    @Query private var settingsRecords: [AppSettings]
     @State private var presentedEditor: GoalEditorSeed?
     @State private var initialStatKey: StatKey?
 
@@ -15,6 +16,10 @@ struct GoalsView: View {
     private var completedGoals: [Goal] { goals.filter { $0.status == .completed } }
     private var pausedGoals: [Goal] { goals.filter { $0.status == .paused } }
     private var archivedGoals: [Goal] { goals.filter { $0.status == .archived || $0.status == .failed } }
+
+    private var weekStartsOnMonday: Bool {
+        settingsRecords.first?.weekStartsOnMonday ?? true
+    }
 
     // WS17: with only one status group on screen, its section label ("ACTIVE")
     // is a third layer of chrome stacked under the page kicker for a single
@@ -123,24 +128,19 @@ struct GoalsView: View {
 
     private var emptyState: some View {
         let accent = TrainingArcConfig.color(for: "focus")
-        return V4Card(accent: accent) {
+        return QuietCard(accent: accent) {
             VStack(alignment: .leading, spacing: 12) {
                 V4SerifTitle(text: "No goals yet", size: 28)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    explainerRow(
-                        title: "Goal",
-                        body: "A time-scoped target with a deadline. Lives here on the Goals tab, has a priority, and shows up in your weekly review."
-                    )
-                    explainerRow(
-                        title: "Skill target / baseline",
-                        body: "Your steady-state weekly expectations for a skill. Lives on the skill itself (set during calibration) and drives the dashboard rings and rank progression."
-                    )
-                }
-
-                Text("Create a goal when you want to push a skill above its baseline for a defined stretch of time.")
-                    .font(.footnote)
+                Text("Choose a target and a deadline to work toward.")
+                    .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
+
+                DisclosureGroup("How goals work") {
+                    Text("Goals track a target over time. Your skill baseline remains your normal weekly expectation; a goal can give you a separate focus for a defined stretch.")
+                        .font(.footnote)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                }
 
                 Button {
                     presentedEditor = GoalEditorSeed(goal: nil, initialStatKey: initialStatKey)
@@ -182,9 +182,22 @@ struct GoalsView: View {
             }
 
             ForEach(goals) { goal in
-                GoalCardView(goal: goal, progress: TrainingStore.goalProgress(for: goal, inputs: inputs)) {
-                    presentedEditor = GoalEditorSeed(goal: goal, initialStatKey: nil)
-                }
+                let progress = TrainingStore.goalProgress(for: goal, inputs: inputs)
+                GoalCardView(
+                    goal: goal,
+                    progress: progress,
+                    attentionIsViewed: TrainingStore.goalAttentionIsViewed(
+                        for: goal,
+                        progress: progress,
+                        weekStartsOnMonday: weekStartsOnMonday
+                    ),
+                    onTap: {
+                        presentedEditor = GoalEditorSeed(goal: goal, initialStatKey: nil)
+                    },
+                    onMarkAttentionViewed: {
+                        try? TrainingStore.markGoalAttentionViewed(goal, context: modelContext)
+                    }
+                )
             }
         }
     }
@@ -199,7 +212,9 @@ private struct GoalEditorSeed: Identifiable {
 private struct GoalCardView: View {
     let goal: Goal
     let progress: GoalProgressSnapshot
+    let attentionIsViewed: Bool
     let onTap: () -> Void
+    let onMarkAttentionViewed: () -> Void
 
     private var accent: Color {
         if let key = goal.linkedStatKey {
@@ -209,45 +224,70 @@ private struct GoalCardView: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            V4Card(accent: accent) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(goal.displayTitle)
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(TrainingTheme.textPrimary)
-                            Text(subtitle)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(TrainingTheme.textSecondary)
-                                .tracking(0.5)
+        QuietCard(accent: accent) {
+            VStack(alignment: .leading, spacing: 10) {
+                Button(action: onTap) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(goal.displayTitle)
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(TrainingTheme.textPrimary)
+                                Text(subtitle)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(TrainingTheme.textSecondary)
+                                    .tracking(0.5)
+                            }
+                            Spacer()
+                            statusPill
                         }
-                        Spacer()
-                        statusPill
+
+                        progressBar
+
+                        HStack {
+                            Text("\(MetricFormatting.shortMetric(progress.currentValue)) / \(MetricFormatting.shortMetric(progress.targetValue))")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(TrainingTheme.textPrimary)
+                                .monospacedDigit()
+                            Spacer()
+                            Text(progress.timeRemainingLabel)
+                                .font(.caption)
+                                .foregroundStyle(TrainingTheme.textSecondary)
+                        }
+
+                        if !goal.affectsProgression {
+                            Text("Tracking only — doesn’t affect charge or rank.")
+                                .font(.caption2)
+                                .foregroundStyle(TrainingTheme.textMuted)
+                        }
                     }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens goal details and editing")
 
-                    progressBar
+                if TrainingStore.goalNeedsAttention(progress) {
+                    Divider().overlay(TrainingTheme.border.opacity(0.5))
 
-                    HStack {
-                        Text("\(MetricFormatting.shortMetric(progress.currentValue)) / \(MetricFormatting.shortMetric(progress.targetValue))")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                            .monospacedDigit()
-                        Spacer()
-                        Text(progress.timeRemainingLabel)
-                            .font(.caption)
+                    if attentionIsViewed {
+                        Label("Viewed this week", systemImage: "checkmark")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(TrainingTheme.textSecondary)
-                    }
-
-                    if !goal.affectsProgression {
-                        Text("Tracking only — doesn’t affect charge or rank.")
-                            .font(.caption2)
-                            .foregroundStyle(TrainingTheme.textMuted)
+                    } else {
+                        Button(action: onMarkAttentionViewed) {
+                            HStack(spacing: 8) {
+                                Label("Mark viewed", systemImage: "checkmark.circle")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(accent)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Clears this goal's tab badge for the current week")
                     }
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 
     private var subtitle: String {

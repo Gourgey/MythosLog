@@ -1,5 +1,36 @@
 import SwiftUI
 
+/// Geometry of the commissioned rank PNGs, measured off the shipped assets
+/// rather than guessed: all 133 files are 672x1008 (2:3) and the drawn art
+/// starts 13% down the canvas and ends at 98% of it, so 15% of every file is
+/// transparent padding — 124 of the 133 match those bounds exactly and the
+/// nine that don't (four Focus, two Intellect, one Creativity plus their
+/// locked twins) start *lower*, so treating 13%/98% as the content band never
+/// crops anything. The hero treatment sizes the canvas from that band instead
+/// of the file, which is what lets the character reach the edges of its row.
+enum RankArtworkGeometry {
+    static let canvasAspectRatio: CGFloat = 672.0 / 1008.0
+    static let contentTop: CGFloat = 0.13
+    static let contentBottom: CGFloat = 0.98
+    static let contentHeightFraction = contentBottom - contentTop
+
+    /// Visible height of the hero. The ceiling here is the skill page, not the
+    /// art: measured on a 402pt phone, 450 is the tallest the row can be while
+    /// the baseline/pace figures under it still clear the sticky Log button
+    /// with the longest rank titles (the ones that wrap to two lines). At this
+    /// height the canvas behind the art is ~370pt wide, so on that phone the
+    /// character is already spanning the full content column.
+    static let heroHeight: CGFloat = 450
+
+    /// Height the full PNG must be drawn at for its *content band* to stand
+    /// `heroHeight` tall.
+    static var heroCanvasHeight: CGFloat { heroHeight / contentHeightFraction }
+
+    /// Transparent strip left below the art once the canvas is that tall, so
+    /// the character's feet can be pinned to the bottom of the row.
+    static var heroBottomPadding: CGFloat { heroCanvasHeight * (1 - contentBottom) }
+}
+
 enum RankArtworkStyle: Sendable {
     case hero
     case compact
@@ -9,7 +40,26 @@ enum RankArtworkStyle: Sendable {
     case dashboardBare
 }
 
+enum ArtworkPreferences {
+    static let dashboardIconsKey = "appearance.dashboardIcons"
+    static let appIconsKey = "appearance.appIcons"
+}
+
+private struct DashboardArtworkContextKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isDashboardArtwork: Bool {
+        get { self[DashboardArtworkContextKey.self] }
+        set { self[DashboardArtworkContextKey.self] = newValue }
+    }
+}
+
 struct RankArtworkView: View {
+    @AppStorage(ArtworkPreferences.dashboardIconsKey) private var dashboardIcons = false
+    @AppStorage(ArtworkPreferences.appIconsKey) private var appIcons = false
+    @Environment(\.isDashboardArtwork) private var isDashboardArtwork
     let habitName: String
     let level: Int
     let title: String
@@ -18,6 +68,43 @@ struct RankArtworkView: View {
     var style: RankArtworkStyle = .hero
 
     var body: some View {
+        if appIcons || (isDashboardArtwork && dashboardIcons) {
+            iconArtwork
+                .accessibilityLabel("\(habitName), \(title), level \(level)")
+        } else {
+            artwork
+        }
+    }
+
+    @ViewBuilder
+    private var iconArtwork: some View {
+        switch style {
+        case .hero:
+            skillIcon.frame(height: 200)
+        case .compact:
+            skillIcon.frame(width: 84, height: 112)
+        case .tile:
+            skillIcon.frame(width: 92, height: 92)
+        case .dashboardCompact:
+            skillIcon.frame(width: 104, height: 136)
+        case .dashboardTile:
+            skillIcon.frame(height: 220)
+        case .dashboardBare:
+            skillIcon
+        }
+    }
+
+    private var skillIcon: some View {
+        GeometryReader { proxy in
+            Image(systemName: statFallbackIcon)
+                .font(.system(size: min(proxy.size.width, proxy.size.height) * 0.40, weight: .medium))
+                .foregroundStyle(accent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
         switch style {
         case .hero:
             heroArtwork
@@ -34,16 +121,28 @@ struct RankArtworkView: View {
         }
     }
 
+    // `scaledToFit` sizes the art by whichever axis runs out first, and with a
+    // 2:3 canvas on a phone that is always the height — so the figure sat in a
+    // narrow column and paid for 15% of transparent padding on top of that,
+    // leaving wide dead bands either side of it. Drawing the canvas tall
+    // enough that its *content band* fills the row's height (and clipping the
+    // padding that then hangs off the top) makes the art width-limited
+    // instead, which is the largest the character can be drawn whole.
     private var heroArtwork: some View {
         ZStack(alignment: .bottom) {
             if let image {
-                transparentCharacterImage(for: image)
+                heroCharacterImage(for: image)
             } else {
                 placeholderArtwork
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 323)
+        // `.bottom`, emphatically not the default `.center`: the canvas inside
+        // this row is deliberately taller than the row, and centring it would
+        // hang half the overflow below the row for `.clipped()` to cut the
+        // character's feet off.
+        .frame(height: RankArtworkGeometry.heroHeight, alignment: .bottom)
+        .clipped()
     }
 
     private var compactArtwork: some View {
@@ -154,24 +253,23 @@ struct RankArtworkView: View {
         .shadow(color: accent.opacity(0.24), radius: 16, x: 0, y: 8)
     }
 
-    // WS13: skills with commissioned character art and skills on the icon
-    // fallback used to read as two different families on the dashboard grid
-    // — the fallback drew itself inside a circle, but the character image
-    // rendered at a fixed 147pt height regardless of the ring it sat inside,
-    // so it could overflow the ring the tile drew around it (most visibly on
-    // tall art like Strength). Filling the actual space the parent gives this
-    // view and clipping both branches to the same circle makes every tile's
-    // art fill its ring identically, with nothing spilling past the edge.
+    // The commissioned PNGs share a transparent top margin of roughly 15%.
+    // Compensate for it in the character-first dashboard treatment so the
+    // visible art, rather than its invisible canvas, fills the ring. Keeping
+    // the scale bottom-anchored lets the character break the top edge by a
+    // few points without drifting into the progress text below. This style is
+    // intentionally not clipped: the slight overlap makes the figure read as
+    // the foreground while the fallback crest remains naturally contained.
     private var dashboardBareArtwork: some View {
         ZStack {
             if let image {
                 dashboardCharacterImage(for: image, horizontalPadding: 0, topPadding: 0)
+                    .scaleEffect(1.2, anchor: .bottom)
             } else {
                 barePlaceholderArtwork
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(Circle())
     }
 
     private var backgroundOrnament: some View {
@@ -334,15 +432,17 @@ struct RankArtworkView: View {
     }
 
     @ViewBuilder
-    private func transparentCharacterImage(for reference: RankImageReference) -> some View {
+    private func heroCharacterImage(for reference: RankImageReference) -> some View {
         switch reference {
         case .asset(let name):
             Image(name)
                 .resizable()
                 .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.horizontal, 4)
-                .padding(.top, 4)
+                .frame(maxWidth: .infinity)
+                .frame(height: RankArtworkGeometry.heroCanvasHeight, alignment: .bottom)
+                // Slides the canvas down until the art's baseline — not the
+                // transparent strip below it — rests on the bottom of the row.
+                .offset(y: RankArtworkGeometry.heroBottomPadding)
         }
     }
 
@@ -447,6 +547,11 @@ struct RankArtworkView: View {
     }
 
     private var statFallbackIcon: String {
+        if let definition = TrainingArcConfig.habitDefinitions.first(where: {
+            $0.displayName.localizedCaseInsensitiveCompare(habitName) == .orderedSame
+        }) {
+            return definition.iconName
+        }
         switch habitName.lowercased() {
         case "strength":
             return "figure.strengthtraining.traditional"
@@ -462,6 +567,10 @@ struct RankArtworkView: View {
             return "sparkles.rectangle.stack.fill"
         case "cardio":
             return "figure.run"
+        case "cooking":
+            return "fork.knife"
+        case "reading":
+            return "book.pages.fill"
         default:
             return "person.crop.circle.fill"
         }

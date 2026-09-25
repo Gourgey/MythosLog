@@ -12,6 +12,7 @@ import SwiftData
 
 @MainActor
 enum TrainingStore {
+    nonisolated static let didRecordLocalWriteNotification = Notification.Name("TrainingStore.didRecordLocalWrite")
     private static let syncLogger = Logger(subsystem: "studio.curateddesign.MythosLog", category: "SwiftDataCloudKit")
     private static let lastLocalWriteDefaultsKey = "mythoslog.syncDiagnostics.lastLocalWriteAt"
     private static let lastLocalWriteReasonDefaultsKey = "mythoslog.syncDiagnostics.lastLocalWriteReason"
@@ -300,6 +301,7 @@ enum TrainingStore {
     static func recordLocalWrite(reason: String) {
         diagnosticDefaults.set(Date(), forKey: lastLocalWriteDefaultsKey)
         diagnosticDefaults.set(reason, forKey: lastLocalWriteReasonDefaultsKey)
+        NotificationCenter.default.post(name: didRecordLocalWriteNotification, object: nil)
 
         #if DEBUG
         syncLogger.info("Local SwiftData write: \(reason, privacy: .public)")

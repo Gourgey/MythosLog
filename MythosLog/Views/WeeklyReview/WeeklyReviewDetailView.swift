@@ -103,7 +103,9 @@ struct WeeklyReviewDetailView: View {
                         healthOverlapsCard
                     }
 
-                    healthWeekCard
+                    DisclosureGroup("Apple Health summary") {
+                        healthWeekCard
+                    }
 
                     if !weekResolutions.isEmpty {
                         Text("PER SKILL")
@@ -113,7 +115,9 @@ struct WeeklyReviewDetailView: View {
 
                         let goalsByStatKey = goalsByStatKey
                         ForEach(weekResolutions) { resolution in
-                            perSkillCard(resolution, goalsByStatKey: goalsByStatKey)
+                            DisclosureGroup(resolution.statName) {
+                                perSkillCard(resolution, goalsByStatKey: goalsByStatKey)
+                            }
                         }
                     }
                 }
@@ -185,7 +189,7 @@ struct WeeklyReviewDetailView: View {
     @ViewBuilder
     private var verdictCard: some View {
         let verdict = weekVerdict
-        V4Card(accent: verdict.color) {
+        QuietCard(accent: verdict.color) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("VERDICT")
@@ -238,7 +242,7 @@ struct WeeklyReviewDetailView: View {
     private var weeklyRecapCard: some View {
         if let recap = try? TrainingStore.weeklyRecap(weekStart: weekStart, context: modelContext, settings: settings),
            recap.hasContent {
-            V4Card {
+            QuietCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("WEEK RECAP")
                         .font(.caption.weight(.heavy))
@@ -342,7 +346,7 @@ struct WeeklyReviewDetailView: View {
     // MARK: - Health cards
 
     private var healthOverlapsCard: some View {
-        V4Card(accent: TrainingTheme.warning) {
+        QuietCard(accent: TrainingTheme.warning) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -378,7 +382,7 @@ struct WeeklyReviewDetailView: View {
     private var healthWeekCard: some View {
         let summary = healthWeekSummary
         if summary.hasActivity {
-            V4Card(accent: .pink) {
+            QuietCard(accent: .pink) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
                         Image(systemName: "heart.fill")
@@ -444,7 +448,7 @@ struct WeeklyReviewDetailView: View {
 
     private func perSkillCard(_ resolution: WeeklyResolution, goalsByStatKey: [StatKey: [Goal]]) -> some View {
         let accent = TrainingArcConfig.color(for: resolution.statDomain?.colorToken ?? "focus")
-        return V4Card(accent: accent) {
+        return QuietCard(accent: accent) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(resolution.statName)
