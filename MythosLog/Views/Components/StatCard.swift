@@ -725,16 +725,17 @@ struct DashboardGridTile: View {
 /// visible; negative charges fill from the divider toward the left.
 struct DashboardChargeTrack: View {
     let charge: Int
+    var dotSize: CGFloat = 7
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: dotSize * 3 / 7) {
             ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
                 dot(filled: DashboardChargeDots.negativeDots(from: charge) > DashboardChargeDots.slotsPerSide - index - 1,
                     tint: TrainingTheme.danger)
             }
             Rectangle()
                 .fill(TrainingTheme.textSecondary.opacity(0.5))
-                .frame(width: 1, height: 9)
+                .frame(width: 1, height: dotSize * 9 / 7)
                 .padding(.horizontal, 2)
             ForEach(0..<DashboardChargeDots.slotsPerSide, id: \.self) { index in
                 dot(filled: DashboardChargeDots.positiveDots(from: charge) > index,
@@ -749,6 +750,6 @@ struct DashboardChargeTrack: View {
         Circle()
             .fill(filled ? tint : Color.clear)
             .overlay(Circle().strokeBorder(filled ? tint : TrainingTheme.textSecondary.opacity(0.65), lineWidth: 0.9))
-            .frame(width: 7, height: 7)
+            .frame(width: dotSize, height: dotSize)
     }
 }

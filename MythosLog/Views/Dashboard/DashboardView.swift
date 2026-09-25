@@ -68,11 +68,15 @@ struct DashboardView: View {
     /// text size; carried a point over so the estimate errs toward a slightly
     /// larger bottom gap rather than a row that runs into the tab bar. Scaled
     /// so it tracks Dynamic Type, where the labels are what actually grow.
-    @ScaledMetric(relativeTo: .body) private var honeycombTileChromeHeight: CGFloat = 67
+    @ScaledMetric(relativeTo: .body) private var compactHoneycombTileChromeHeight: CGFloat = 67
+    /// The same allowance for iPad, whose tiles use larger labels, charge
+    /// dots and spacing (see `GameDashboardTile`).
+    @ScaledMetric(relativeTo: .body) private var regularHoneycombTileChromeHeight: CGFloat = 112
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private let twoColumnColumns = 2
     private let twoColumnSpacing: CGFloat = 16
     private let gameGridColumnCount = 3
-    private let gameGridSpacing: CGFloat = 6
+    private var gameGridSpacing: CGFloat { isRegularWidth ? 20 : 6 }
     private let gameGridRowSpacing: CGFloat = 24
     private let dashboardContentSpacing: CGFloat = 18
     private let dashboardContentTopPadding: CGFloat = 4
@@ -86,6 +90,12 @@ struct DashboardView: View {
 
     private var settings: AppSettings? {
         settingsRecords.first
+    }
+
+    private var isRegularWidth: Bool { horizontalSizeClass == .regular }
+
+    private var honeycombTileChromeHeight: CGFloat {
+        isRegularWidth ? regularHoneycombTileChromeHeight : compactHoneycombTileChromeHeight
     }
 
     private var activeStats: [StatDomain] {
@@ -942,8 +952,10 @@ struct DashboardView: View {
         return clampedHoneycombTileWidth(min(widthCap, heightCap))
     }
 
+    /// iPhone rings top out at 160pt; iPad lets them grow until the three
+    /// rows fill the screen, as they do on a phone.
     private func clampedHoneycombTileWidth(_ width: CGFloat) -> CGFloat {
-        min(max(width, 96), 160)
+        min(max(width, 96), isRegularWidth ? 340 : 160)
     }
 
     private func gameDashboardTile(for stat: StatDomain, hasUnmatchedImports: Bool) -> some View {
@@ -1337,12 +1349,19 @@ private struct GameDashboardTile: View {
     let onShowUnmatched: () -> Void
 
     @State private var indicatorPulse = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// iPad tiles are roughly twice the size of iPhone ones, so their labels,
+    /// ring stroke and charge dots scale up to match.
+    private var isRegularWidth: Bool { horizontalSizeClass == .regular }
 
     private var accent: Color {
         TrainingArcConfig.color(for: stat.colorToken)
     }
 
     private var ringTint: Color { accent }
+    private var ringLineWidth: CGFloat { isRegularWidth ? 5 : 3 }
+    private var labelFont: Font { isRegularWidth ? .title3 : .caption }
 
     private var rankIndicatorTint: Color {
         guard let direction = snapshot.pendingRankChange?.direction else { return .clear }
@@ -1374,9 +1393,9 @@ private struct GameDashboardTile: View {
     }
 
     private var tileContent: some View {
-            VStack(spacing: 7) {
+            VStack(spacing: isRegularWidth ? 12 : 7) {
                 Text(stat.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font((isRegularWidth ? Font.title2 : .subheadline).weight(.semibold))
                     .foregroundStyle(TrainingTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -1385,12 +1404,12 @@ private struct GameDashboardTile: View {
 
                 ZStack {
                     Circle()
-                        .stroke(TrainingTheme.backgroundTertiary, lineWidth: 3)
+                        .stroke(TrainingTheme.backgroundTertiary, lineWidth: ringLineWidth)
                         .padding(2)
 
                     Circle()
                         .trim(from: 0, to: snapshot.weeklyTargetProgress)
-                        .stroke(ringTint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(ringTint, style: StrokeStyle(lineWidth: ringLineWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .padding(2)
                         .animation(.spring(response: 0.55, dampingFraction: 0.82), value: snapshot.weeklyTargetProgress)
@@ -1409,24 +1428,24 @@ private struct GameDashboardTile: View {
 
                 HStack(spacing: 6) {
                     Text(snapshot.weeklyTargetFractionLabel)
-                        .font(.caption.weight(.bold))
+                        .font(labelFont.weight(.bold))
                         .foregroundStyle(TrainingTheme.textPrimary)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                     Text("·")
-                        .font(.caption.weight(.bold))
+                        .font(labelFont.weight(.bold))
                         .foregroundStyle(TrainingTheme.textMuted)
                     Text("LV \(V4Style.displayNumber(snapshot.rank.level))")
-                        .font(.caption.weight(.semibold))
+                        .font(labelFont.weight(.semibold))
                         .foregroundStyle(accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
                 .frame(maxWidth: .infinity)
 
-                DashboardChargeTrack(charge: snapshot.charge.current)
-                    .frame(height: 12)
+                DashboardChargeTrack(charge: snapshot.charge.current, dotSize: isRegularWidth ? 12 : 7)
+                    .frame(height: isRegularWidth ? 18 : 12)
                     .frame(maxWidth: .infinity)
 
             }
