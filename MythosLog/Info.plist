@@ -36,6 +36,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Mythos Log reads workout data from Apple Health to log eligible Strength and Cardio sessions automatically.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Mythos Log only reads your workouts from Apple Health. It never writes or changes any data in Apple Health.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
