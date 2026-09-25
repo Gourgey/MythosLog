@@ -518,4 +518,67 @@ extension TrainingStore {
             context.insert(log)
         }
     }
+
+    #if DEBUG
+    /// Debug-only data set for App Store screenshots: ten weeks of history
+    /// with a different shape per skill so ranks and charge vary across the
+    /// dashboard. Triggered by the `-SeedScreenshotData` launch argument.
+    static func seedScreenshotData(context: ModelContext, now: Date = .now) throws {
+        try clearAll(context: context)
+        try seedDefaultProfile(context: context, completeOnboarding: true)
+
+        let currentWeekStart = progressionWeek(containing: now).start
+        let calendar = progressionCalendar()
+        let patterns: [[Double]] = [
+            [1.3, 1.4, 1.6, 1.5, 1.7, 1.6, 1.8, 1.7, 1.9, 1.8],
+            [1.1, 1.2, 1.0, 1.3, 1.4, 1.2, 1.5, 1.4, 1.6, 1.5],
+            [0.9, 1.1, 1.2, 1.1, 1.3, 1.2, 1.1, 1.3, 1.2, 1.4],
+            [1.4, 1.5, 1.7, 1.8, 1.6, 1.9, 2.0, 1.8, 2.1, 2.0],
+            [1.0, 1.1, 1.0, 1.2, 1.1, 1.0, 1.2, 1.1, 1.3, 1.2],
+            [1.2, 1.3, 1.1, 1.4, 1.3, 1.5, 1.4, 1.6, 1.5, 1.7],
+            [1.0, 0.9, 1.1, 1.2, 1.1, 1.3, 1.2, 1.1, 1.3, 1.2],
+        ]
+        let thisWeekShare: [Double] = [1.2, 1.0, 1.3, 0.8, 1.1, 1.0, 0.6]
+
+        // Counted habits read oddly with fractional totals ("1.8 times"), so
+        // seed them as whole numbers, one per log.
+        func wholeIfCounted(_ total: Double, _ habit: Habit) -> Double {
+            habit.measurementType == .count ? total.rounded() : total
+        }
+
+        let stats = try fetchActiveStats(context: context)
+        for (index, stat) in stats.enumerated() {
+            let pattern = patterns[index % patterns.count]
+            for habit in activeHabits(for: stat) {
+                for (weekIndex, multiplier) in pattern.enumerated() {
+                    let offset = pattern.count - weekIndex
+                    guard let weekStart = calendar.date(byAdding: .day, value: -(offset * 7), to: currentWeekStart) else { continue }
+                    try addSeededLogs(for: habit, weekStart: weekStart, total: wholeIfCounted(habit.targetPerPeriod * multiplier, habit), context: context)
+                }
+                try addSeededLogs(
+                    for: habit,
+                    weekStart: currentWeekStart,
+                    total: wholeIfCounted(habit.targetPerPeriod * thisWeekShare[index % thisWeekShare.count], habit),
+                    context: context
+                )
+            }
+        }
+
+        try context.save()
+        try refreshAllProgress(context: context, reason: .appRefresh, now: now)
+        for stat in try fetchActiveStats(context: context) {
+            stat.acknowledgedRankLevel = stat.rankLevel
+            stat.clearPendingRankChange()
+            updateDerivedFields(for: stat)
+        }
+        try context.save()
+        try seedSampleGoals(context: context, now: now)
+        for goal in try context.fetch(FetchDescriptor<Goal>()) {
+            goal.attentionViewedAt = max(now, goal.updatedAt)
+        }
+        try context.save()
+        try refreshWidgetSnapshot(context: context)
+        UserDefaults.standard.set(true, forKey: "weeklyReview.hasSeenExplainer")
+    }
+    #endif
 }

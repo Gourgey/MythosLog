@@ -111,6 +111,26 @@ struct MythosLogApp: App {
     @UIApplicationDelegateAdaptor(MythosLogAppDelegate.self) private var appDelegate
     #endif
 
+    #if DEBUG
+    init() {
+        if ProcessInfo.processInfo.arguments.contains("-SeedScreenshotData") {
+            try? TrainingStore.seedScreenshotData(context: TrainingStore.sharedModelContainer.mainContext)
+        }
+        // `-ScreenshotRoute goals` or `-ScreenshotRoute skill:strength` opens
+        // a screen at launch without the system's deep-link confirmation.
+        if let routeValue = UserDefaults.standard.string(forKey: "ScreenshotRoute") {
+            if routeValue.hasPrefix("skill:") {
+                let key = String(routeValue.dropFirst("skill:".count))
+                PendingDestinationStore.queue(PendingAppDestination(
+                    skillDetail: PendingSkillDestination(statKeyRaw: key, openLogSheet: false)
+                ))
+            } else if let route = TrainingRoute(rawValue: routeValue) {
+                PendingDestinationStore.queue(PendingAppDestination(route: route))
+            }
+        }
+    }
+    #endif
+
     var body: some Scene {
         WindowGroup {
             ContentView()

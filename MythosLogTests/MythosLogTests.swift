@@ -1511,6 +1511,30 @@ struct GoalsTests {
         #expect(snapshot.progressRatio.isFinite)
     }
 
+    @Test @MainActor func overallSessionGoalCountsMinutesLogsAsSessions() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let weekStart = TrainingStore.progressionWeek(containing: .now).start
+        try addSessionLogs(count: 2, habit: fixture.habit, weekStart: weekStart, context: fixture.context)
+
+        let cardio = try #require(try TrainingStore.fetchStats(context: fixture.context).first(where: { $0.statKey == .cardio }))
+        let minutesHabit = try #require(TrainingStore.activeHabits(for: cardio).first(where: { $0.measurementType == .minutes }))
+        fixture.context.insert(HabitLog(date: weekStart, numericValue: 45, note: "", sourceType: .debug, habit: minutesHabit))
+        try fixture.context.save()
+
+        let goal = try TrainingStore.createGoal(
+            title: "Log 20 sessions",
+            scope: .overall,
+            linkedStatKey: nil,
+            type: .weeklyTarget,
+            measurementType: .count,
+            targetValue: 20,
+            context: fixture.context
+        )
+
+        let snapshot = TrainingStore.goalProgress(for: goal, context: fixture.context)
+        #expect(snapshot.currentValue == 3, "45 cardio minutes is one session, not 45")
+    }
+
     @Test @MainActor func goalProgressComputesForArchivedSkillWithoutCrashing() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let weekStart = TrainingStore.progressionWeek(containing: .now).start

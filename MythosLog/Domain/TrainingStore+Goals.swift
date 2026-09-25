@@ -266,7 +266,17 @@ extension TrainingStore {
             }
             return true
         }
-        return filtered.reduce(0) { $0 + $1.numericValue }
+        // A session/count goal spanning several habits (e.g. "Log 20 sessions
+        // this month") counts a minutes or pages log as one session rather
+        // than adding its minutes or pages to the total.
+        let countsSessions = goal.measurementType == .booleanSession || goal.measurementType == .count
+        return filtered.reduce(0) { total, log in
+            guard countsSessions, let habitType = log.habit?.measurementType,
+                  habitType != .booleanSession, habitType != .count else {
+                return total + log.numericValue
+            }
+            return total + 1
+        }
     }
 
     private static func goalDateInterval(for goal: Goal, now: Date) -> DateInterval {
