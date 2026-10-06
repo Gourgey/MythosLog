@@ -272,7 +272,7 @@ struct SkillCharacterRosterView: View {
     }
 
     private func rankBaselineLabel(for level: Int) -> String {
-        "Baseline: \(rankBaseline(for: level)) \(weeklyUnit) per week"
+        "Baseline: \(rankBaseline(for: level)) \(MetricFormatting.unit(weeklyUnit, count: Double(rankBaseline(for: level)))) per week"
     }
 
     var body: some View {
@@ -473,7 +473,7 @@ struct SkillCharacterRosterView: View {
                     .foregroundStyle(isActualCurrent ? accent : TrainingTheme.textSecondary)
                     .monospacedDigit()
                 if isActualCurrent, activeStat.currentBaseline != rankBaseline(for: entry.level) {
-                    Text("Your current baseline: \(activeStat.currentBaseline) \(weeklyUnit) per week")
+                    Text("Your current baseline: \(activeStat.currentBaseline) \(MetricFormatting.unit(weeklyUnit, count: Double(activeStat.currentBaseline))) per week")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(TrainingTheme.textSecondary)
                         .monospacedDigit()

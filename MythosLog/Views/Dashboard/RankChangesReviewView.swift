@@ -34,7 +34,7 @@ struct RankChangesReviewView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 4)
 
-                        ForEach(stats) { stat in
+                        ForEach(stats, id: \.key) { stat in
                             rankChangeRow(stat)
                         }
                     }
@@ -87,7 +87,7 @@ struct RankChangesReviewView: View {
                         }
 
                         if let resolution {
-                            Text("\(MetricFormatting.shortMetric(resolution.actualCompletedValue)) \(unit) logged · target \(MetricFormatting.shortMetric(resolution.expectedTotal)) \(unit)")
+                            Text("\(MetricFormatting.shortMetric(resolution.actualCompletedValue)) \(MetricFormatting.unit(unit, count: resolution.actualCompletedValue)) logged · target \(MetricFormatting.shortMetric(resolution.expectedTotal)) \(MetricFormatting.unit(unit, count: resolution.expectedTotal))")
                                 .font(.caption)
                                 .foregroundStyle(TrainingTheme.textSecondary)
                                 .monospacedDigit()

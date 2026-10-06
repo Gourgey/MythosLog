@@ -6,6 +6,13 @@ enum MetricFormatting {
         return "\(rounded) \(unit)"
     }
 
+    /// Singular form of a plural unit label ("sessions" -> "session") when
+    /// `count` is exactly one, so labels never read "1 sessions".
+    static func unit(_ pluralUnit: String, count: Double) -> String {
+        guard count == 1, pluralUnit.hasSuffix("s") else { return pluralUnit }
+        return String(pluralUnit.dropLast())
+    }
+
     static func shortMetric(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
     }

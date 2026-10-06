@@ -504,7 +504,7 @@ extension TrainingStore {
             if remainingToTarget <= 0 {
                 return "On target this week"
             }
-            return "\(MetricFormatting.shortMetric(remainingToTarget)) \(unitLabel) needed to stay on target"
+            return "\(MetricFormatting.shortMetric(remainingToTarget)) \(MetricFormatting.unit(unitLabel, count: remainingToTarget)) needed to stay on target"
         }()
         let levelUpSummary: String = {
             guard let nextRequirement else { return "No further level-ups available" }

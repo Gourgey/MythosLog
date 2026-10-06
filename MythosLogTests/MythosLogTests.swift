@@ -66,6 +66,14 @@ private func addSessionLogs(
 
 @Suite("ConfigTests")
 struct ConfigTests {
+    @Test func unitLabelsAreSingularForExactlyOne() {
+        #expect(MetricFormatting.unit("sessions", count: 1) == "session")
+        #expect(MetricFormatting.unit("minutes", count: 1) == "minute")
+        #expect(MetricFormatting.unit("sessions", count: 0) == "sessions")
+        #expect(MetricFormatting.unit("sessions", count: 2) == "sessions")
+        #expect(MetricFormatting.unit("minutes", count: 1.5) == "minutes")
+    }
+
     @Test func rankTitlesUseCentralConfig() {
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 1) == "Untrained")
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 10) == "Master of Strength")

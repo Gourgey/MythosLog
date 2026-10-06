@@ -1340,6 +1340,7 @@ private struct RankChangeRevealView: View {
     let hapticsEnabled: Bool
     let dismiss: () -> Void
 
+    @AppStorage(ArtworkPreferences.appIconsKey) private var appIcons = false
     @State private var phase: RankRevealPhase = .summary
     @State private var burstToken = 0
     @State private var showNewEmblem = false
@@ -1398,7 +1399,6 @@ private struct RankChangeRevealView: View {
                     Spacer(minLength: 12)
 
                     emblemStack
-                        .frame(height: 280)
 
                     titleBlock
 
@@ -1419,9 +1419,17 @@ private struct RankChangeRevealView: View {
         }
     }
 
+    /// The reveal is the payoff for a week of training, so the character is
+    /// drawn at full size rather than as a roster card. It is a little
+    /// shorter before the reveal so the weekly summary and the Reveal button
+    /// still fit on screen.
+    private var emblemHeight: CGFloat {
+        phase == .summary ? 340 : 440
+    }
+
     private var emblemStack: some View {
         ZStack {
-            AuraView(color: highlight, size: 240)
+            AuraView(color: highlight, size: emblemHeight * 0.8)
                 .opacity(phase == .revealing ? 0.85 : 0.55)
 
             if phase == .revealing || phase == .resolved {
@@ -1430,48 +1438,57 @@ private struct RankChangeRevealView: View {
                     tint: change.direction == .up ? .yellow : .gray,
                     triggerToken: burstToken
                 )
-                .frame(width: 320, height: 320)
+                .frame(width: 380, height: 380)
             }
 
             if phase == .summary {
-                RankArtworkView(
-                    habitName: statName,
-                    level: change.fromLevel,
-                    title: change.fromTitle,
-                    image: fromImage,
-                    accent: highlight,
-                    style: .compact
-                )
-                .overlay(alignment: .topTrailing) {
-                    // topTrailing (not .top) so this doesn't sit on top of
-                    // the "LV n" pill, which RankArtworkView's .compact
-                    // style renders at topLeading.
-                    Image(systemName: change.direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                        .font(.system(size: 44, weight: .black))
-                        .foregroundStyle(highlight)
-                        .background(
-                            Circle()
-                                .fill(.white)
-                                .frame(width: 50, height: 50)
-                        )
-                        .offset(x: 12, y: -18)
-                }
-                .transition(.opacity)
+                revealArtwork(level: change.fromLevel, title: change.fromTitle, image: fromImage)
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: change.direction == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 44, weight: .black))
+                            .foregroundStyle(highlight)
+                            .background(
+                                Circle()
+                                    .fill(.white)
+                                    .frame(width: 50, height: 50)
+                            )
+                    }
+                    .transition(.opacity)
             }
 
             if phase == .revealing || phase == .resolved {
-                RankArtworkView(
-                    habitName: statName,
-                    level: change.toLevel,
-                    title: change.toTitle,
-                    image: toImage,
-                    accent: highlight,
-                    style: .compact
-                )
-                .scaleEffect(showNewEmblem ? 1 : 0.4)
-                .opacity(showNewEmblem ? 1 : 0)
-                .animation(.spring(response: 0.62, dampingFraction: 0.78), value: showNewEmblem)
+                revealArtwork(level: change.toLevel, title: change.toTitle, image: toImage)
+                    .scaleEffect(showNewEmblem ? 1 : 0.4)
+                    .opacity(showNewEmblem ? 1 : 0)
+                    .animation(.spring(response: 0.62, dampingFraction: 0.78), value: showNewEmblem)
             }
+        }
+        .frame(height: emblemHeight)
+        .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.85), value: phase)
+    }
+
+    /// Full-height character with its level badge. Falls back to the roster
+    /// card when there is no artwork or the user prefers icons over art.
+    @ViewBuilder
+    private func revealArtwork(level: Int, title: String, image: RankImageReference?) -> some View {
+        if !appIcons, case .asset(let name)? = image {
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .frame(height: emblemHeight)
+                .overlay(alignment: .topLeading) {
+                    V4LevelBadge(level: level, tint: highlight)
+                }
+                .accessibilityLabel("\(statName), \(title), level \(level)")
+        } else {
+            RankArtworkView(
+                habitName: statName,
+                level: level,
+                title: title,
+                image: image,
+                accent: highlight,
+                style: .compact
+            )
         }
     }
 
@@ -1537,12 +1554,12 @@ private struct RankChangeRevealView: View {
             HStack {
                 summaryStat(
                     label: "Logged",
-                    value: "\(MetricFormatting.shortMetric(resolution.actualCompletedValue)) \(weeklyUnitLabel)"
+                    value: "\(MetricFormatting.shortMetric(resolution.actualCompletedValue)) \(MetricFormatting.unit(weeklyUnitLabel, count: resolution.actualCompletedValue))"
                 )
                 Spacer(minLength: 8)
                 summaryStat(
                     label: "Target",
-                    value: "\(MetricFormatting.shortMetric(resolution.expectedTotal)) \(weeklyUnitLabel)"
+                    value: "\(MetricFormatting.shortMetric(resolution.expectedTotal)) \(MetricFormatting.unit(weeklyUnitLabel, count: resolution.expectedTotal))"
                 )
             }
 

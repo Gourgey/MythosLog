@@ -371,7 +371,7 @@ struct WeeklyReviewView: View {
         guard item.remaining > 0 else {
             return "Baseline complete; keep this skill steady through the week."
         }
-        return "\(MetricFormatting.shortMetric(item.remaining)) \(unit) still needed to protect Level \(item.snapshot.rank.level)."
+        return "\(MetricFormatting.shortMetric(item.remaining)) \(MetricFormatting.unit(unit, count: item.remaining)) still needed to protect Level \(item.snapshot.rank.level)."
     }
 
     private func openSkill(_ stat: StatDomain, openLogSheet: Bool) {

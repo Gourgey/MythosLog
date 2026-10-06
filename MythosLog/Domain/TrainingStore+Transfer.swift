@@ -580,5 +580,15 @@ extension TrainingStore {
         try refreshWidgetSnapshot(context: context)
         UserDefaults.standard.set(true, forKey: "weeklyReview.hasSeenExplainer")
     }
+
+    /// Debug-only: leaves one skill with an unseen level-up so opening it
+    /// shows the rank reveal. Triggered by `-ScreenshotLevelUp <skill key>`.
+    static func stageScreenshotLevelUp(statKeyRaw: String, context: ModelContext, now: Date = .now) throws {
+        guard let stat = try fetchActiveStats(context: context).first(where: { $0.statKey?.rawValue == statKeyRaw }),
+              stat.rankLevel > 1 else { return }
+        stat.acknowledgedRankLevel = stat.rankLevel - 1
+        stat.setPendingRankChange(from: stat.rankLevel - 1, to: stat.rankLevel, direction: .up, reason: .appRefresh, recordedAt: now)
+        try context.save()
+    }
     #endif
 }

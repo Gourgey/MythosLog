@@ -119,6 +119,9 @@ struct MythosLogApp: App {
         if ProcessInfo.processInfo.arguments.contains("-SeedScreenshotData") {
             try? TrainingStore.seedScreenshotData(context: TrainingStore.sharedModelContainer.mainContext)
         }
+        if let levelUpKey = UserDefaults.standard.string(forKey: "ScreenshotLevelUp") {
+            try? TrainingStore.stageScreenshotLevelUp(statKeyRaw: levelUpKey, context: TrainingStore.sharedModelContainer.mainContext)
+        }
         // `-ScreenshotRoute goals` or `-ScreenshotRoute skill:strength` opens
         // a screen at launch without the system's deep-link confirmation.
         if let routeValue = UserDefaults.standard.string(forKey: "ScreenshotRoute") {

@@ -688,7 +688,7 @@ struct HistoryView: View {
                 }
 
                 if let target = stat.targetValue {
-                    Text("Active target: \(target) \(TrainingStore.weeklyUnitLabel(for: stat)) per week")
+                    Text("Active target: \(target) \(MetricFormatting.unit(TrainingStore.weeklyUnitLabel(for: stat), count: Double(target))) per week")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)
                         .monospacedDigit()
