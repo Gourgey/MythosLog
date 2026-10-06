@@ -5,7 +5,7 @@ struct WeeklyReviewDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var router: AppRouter
     @Query private var resolutions: [WeeklyResolution]
-    @Query private var healthWorkouts: [HealthImportedWorkout]
+    @Query private var healthWorkouts: [LocalHealthImportedWorkout]
     @Query private var settingsRecords: [AppSettings]
 
     let weekStart: Date
@@ -31,7 +31,7 @@ struct WeeklyReviewDetailView: View {
             sort: [SortDescriptor(\.statName)]
         )
         _healthWorkouts = Query(
-            filter: #Predicate<HealthImportedWorkout> { $0.startDate >= bufferedStart && $0.startDate < bufferedEnd },
+            filter: #Predicate<LocalHealthImportedWorkout> { $0.startDate >= bufferedStart && $0.startDate < bufferedEnd },
             sort: [SortDescriptor(\.startDate, order: .reverse)]
         )
     }
@@ -40,7 +40,7 @@ struct WeeklyReviewDetailView: View {
 
     private var weekResolutions: [WeeklyResolution] { resolutions }
 
-    private var healthOverlapWarnings: [HealthImportedWorkout] {
+    private var healthOverlapWarnings: [LocalHealthImportedWorkout] {
         healthWorkouts
             .filter { weekInterval.contains($0.startDate) }
             .filter { $0.wasImported && $0.overlapsImportedWorkout && !$0.isDuplicate }
@@ -428,13 +428,13 @@ struct WeeklyReviewDetailView: View {
         return detail
     }
 
-    private func healthWarningTitle(for workout: HealthImportedWorkout) -> String {
+    private func healthWarningTitle(for workout: LocalHealthImportedWorkout) -> String {
         let source = workout.sourceName?.isEmpty == false ? workout.sourceName ?? "Apple Health" : "Apple Health"
         let skill = StatKey(rawValue: workout.statKeyRaw)?.displayName ?? "Workout"
         return "\(source) \(skill)"
     }
 
-    private func healthWarningDetail(for workout: HealthImportedWorkout) -> String {
+    private func healthWarningDetail(for workout: LocalHealthImportedWorkout) -> String {
         let interval = "\(workout.startDate.formatted(date: .abbreviated, time: .shortened))-\(workout.endDate.formatted(date: .omitted, time: .shortened))"
         guard let related = workout.relatedWorkoutUUID.flatMap({ relatedID in healthWorkouts.first { $0.workoutUUID == relatedID } }) else {
             return "\(interval) overlaps another imported workout."

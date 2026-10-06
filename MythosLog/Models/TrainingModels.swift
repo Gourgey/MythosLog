@@ -516,11 +516,14 @@ extension StatDomain {
 
     func setPendingRankChange(from fromLevel: Int, to toLevel: Int, direction: RankChangeDirection, reason: RankChangeReason, recordedAt: Date) {
         let isNewChange =
-            pendingRankChangeRecordedAt != recordedAt ||
+            pendingRankChangeRecordedAt == nil ||
             pendingRankChangeFromLevel != TrainingArcConfig.clampedRankLevel(fromLevel) ||
             pendingRankChangeToLevel != TrainingArcConfig.clampedRankLevel(toLevel) ||
             pendingRankChangeDirection != direction
 
+        // Rechecking progress is not a new rank change. Preserve the original
+        // timestamp and seen state to avoid repeated writes and badge resets.
+        guard isNewChange else { return }
         pendingRankChangeFromLevel = TrainingArcConfig.clampedRankLevel(fromLevel)
         pendingRankChangeToLevel = TrainingArcConfig.clampedRankLevel(toLevel)
         pendingRankChangeDirection = direction
@@ -826,8 +829,9 @@ final class AppSettings {
 
 @Model
 final class HealthImportedWorkout {
-    // workoutUUID is the natural key; duplicates are prevented in the import
-    // path, not by the schema (unique constraints are unavailable with CloudKit).
+    // Compatibility model for the original CloudKit store. Never insert new
+    // workouts here. The store copies legacy/imported rows to the local model
+    // before deleting them. Retain this entity when upgrading existing stores.
     var workoutUUID: String = ""
     var statKeyRaw: String = ""
     var habitSystemKey: String?
@@ -875,6 +879,90 @@ final class HealthImportedWorkout {
         self.overlapsImportedWorkout = overlapsImportedWorkout
         self.relatedWorkoutUUID = relatedWorkoutUUID
         self.awaitingHabitAssignment = awaitingHabitAssignment
+        self.createdAt = createdAt
+    }
+}
+
+/// Workout details used by the app. This distinct entity lives only in the
+/// local store, so keeping the legacy entity does not route new data to iCloud.
+@Model
+final class LocalHealthImportedWorkout {
+    var workoutUUID: String = ""
+    var statKeyRaw: String = ""
+    var habitSystemKey: String?
+    var sourceName: String?
+    var sourceBundleIdentifier: String?
+    var activityTypeRaw: Int = 0
+    var startDate: Date = Date.now
+    var endDate: Date = Date.now
+    var durationMinutes: Double = 0
+    var wasImported: Bool = true
+    var isDuplicate: Bool = false
+    var overlapsImportedWorkout: Bool = false
+    var relatedWorkoutUUID: String?
+    var awaitingHabitAssignment: Bool = false
+    var createdAt: Date = Date.now
+
+    init(
+        workoutUUID: String,
+        statKeyRaw: String,
+        habitSystemKey: String?,
+        sourceName: String? = nil,
+        sourceBundleIdentifier: String?,
+        activityTypeRaw: Int,
+        startDate: Date,
+        endDate: Date,
+        durationMinutes: Double,
+        wasImported: Bool = true,
+        isDuplicate: Bool = false,
+        overlapsImportedWorkout: Bool = false,
+        relatedWorkoutUUID: String? = nil,
+        awaitingHabitAssignment: Bool = false,
+        createdAt: Date = .now
+    ) {
+        self.workoutUUID = workoutUUID
+        self.statKeyRaw = statKeyRaw
+        self.habitSystemKey = habitSystemKey
+        self.sourceName = sourceName
+        self.sourceBundleIdentifier = sourceBundleIdentifier
+        self.activityTypeRaw = activityTypeRaw
+        self.startDate = startDate
+        self.endDate = endDate
+        self.durationMinutes = durationMinutes
+        self.wasImported = wasImported
+        self.isDuplicate = isDuplicate
+        self.overlapsImportedWorkout = overlapsImportedWorkout
+        self.relatedWorkoutUUID = relatedWorkoutUUID
+        self.awaitingHabitAssignment = awaitingHabitAssignment
+        self.createdAt = createdAt
+    }
+
+    convenience init(legacy: HealthImportedWorkout) {
+        self.init(
+            workoutUUID: legacy.workoutUUID, statKeyRaw: legacy.statKeyRaw,
+            habitSystemKey: legacy.habitSystemKey, sourceName: legacy.sourceName,
+            sourceBundleIdentifier: legacy.sourceBundleIdentifier,
+            activityTypeRaw: legacy.activityTypeRaw, startDate: legacy.startDate,
+            endDate: legacy.endDate, durationMinutes: legacy.durationMinutes,
+            wasImported: legacy.wasImported, isDuplicate: legacy.isDuplicate,
+            overlapsImportedWorkout: legacy.overlapsImportedWorkout,
+            relatedWorkoutUUID: legacy.relatedWorkoutUUID,
+            awaitingHabitAssignment: legacy.awaitingHabitAssignment,
+            createdAt: legacy.createdAt
+        )
+    }
+}
+
+/// A Health workout the user deleted or chose to ignore. Synced, and holds only
+/// the opaque workout UUID, so other devices sharing Apple Health data don't
+/// import it again.
+@Model
+final class DismissedHealthWorkout {
+    var workoutUUID: String = ""
+    var createdAt: Date = Date.now
+
+    init(workoutUUID: String, createdAt: Date = .now) {
+        self.workoutUUID = workoutUUID
         self.createdAt = createdAt
     }
 }

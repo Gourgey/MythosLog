@@ -19,10 +19,15 @@ enum TrainingStore {
     private static let lastCloudKitEventDefaultsKey = "mythoslog.syncDiagnostics.lastCloudKitEvent"
     private static let lastCloudKitEventDateDefaultsKey = "mythoslog.syncDiagnostics.lastCloudKitEventDate"
     private static var cloudKitEventObserver: NSObjectProtocol?
+    private static var cloudKitReconciliationTask: Task<Void, Never>?
+    private static let storeLocationDefaultsKey = "mythoslog.persistence.selectedLocation.v1"
+    private(set) static var persistentStoreError: String?
 
     private struct PersistentStoreCandidate {
-        let configuration: ModelConfiguration
+        let configurations: [ModelConfiguration]
+        /// The synced store; diagnostics report this one.
         let storeURL: URL?
+        let localOnlyStoreURL: URL?
         let usesCloudKit: Bool
         let usesAppGroup: Bool
         let isInMemory: Bool
@@ -61,15 +66,28 @@ enum TrainingStore {
         fallbackReason: "ModelContainer has not been created yet."
     )
 
-    static let schema = Schema([
+    /// Models mirrored to the user's private CloudKit database. The original
+    /// Health entity is retained only to migrate and remove pre-upgrade rows.
+    static let syncedModelTypes: [any PersistentModel.Type] = [
         StatDomain.self,
         Habit.self,
         HabitLog.self,
         WeeklyResolution.self,
         AppSettings.self,
-        HealthImportedWorkout.self,
-        Goal.self
-    ])
+        Goal.self,
+        HealthImportedWorkout.self, // legacy entity; drained to local storage
+        DismissedHealthWorkout.self
+    ]
+
+    /// Models that never leave the device. Workout details read from HealthKit
+    /// stay here: App Review guideline 5.1.3(ii) bars health data in iCloud.
+    static let localOnlyModelTypes: [any PersistentModel.Type] = [
+        LocalHealthImportedWorkout.self
+    ]
+
+    static let schema = Schema(syncedModelTypes + localOnlyModelTypes)
+    private static let syncedSchema = Schema(syncedModelTypes)
+    private static let localOnlySchema = Schema(localOnlyModelTypes)
 
     static let sharedModelContainer = makeModelContainer()
 
@@ -90,15 +108,7 @@ enum TrainingStore {
         )
         description.shouldAddStoreAsynchronously = false
 
-        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: [
-            StatDomain.self,
-            Habit.self,
-            HabitLog.self,
-            WeeklyResolution.self,
-            AppSettings.self,
-            HealthImportedWorkout.self,
-            Goal.self
-        ]) else {
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: syncedModelTypes) else {
             syncLogger.error("CloudKit schema init: could not build a managed object model")
             return
         }
@@ -132,61 +142,78 @@ enum TrainingStore {
             forSecurityApplicationGroupIdentifier: AppIdentity.appGroupIdentifier
         ) != nil
 
-        let candidates: [PersistentStoreCandidate]
-        if inMemory {
-            candidates = [
-                makeConfigurationCandidate(inMemory: true, useAppGroup: false, useCloudKit: false, allowsStoreReset: false)
-            ]
-        } else {
-            let canUseCloudKit = canAttemptCloudKitPersistence()
-            candidates = [
-                canUseCloudKit ? makeConfigurationCandidate(inMemory: false, useAppGroup: canUseAppGroup, useCloudKit: true, allowsStoreReset: false) : nil,
-                canUseCloudKit ? makeConfigurationCandidate(inMemory: false, useAppGroup: false, useCloudKit: true, allowsStoreReset: false) : nil,
-                makeConfigurationCandidate(inMemory: false, useAppGroup: canUseAppGroup, useCloudKit: false, allowsStoreReset: true),
-                makeConfigurationCandidate(inMemory: false, useAppGroup: false, useCloudKit: false, allowsStoreReset: true)
-            ].compactMap(\.self)
-        }
-        var lastError: Error?
-
-        for candidate in candidates {
-            logStoreCandidate(candidate)
-            do {
-                let container = try ModelContainer(for: schema, configurations: candidate.configuration)
-                recordRuntimeStoreInfo(candidate: candidate, fallbackReason: fallbackReason(for: candidate, lastError: lastError))
-                logICloudAccountState()
-                return container
-            } catch {
-                lastError = error
-                logStoreCandidateFailure(candidate, error: error)
-
-                guard candidate.allowsStoreReset, let storeURL = candidate.storeURL else {
-                    continue
-                }
-
-                do {
-                    try resetPersistentStore(at: storeURL)
-                    let container = try ModelContainer(for: schema, configurations: candidate.configuration)
-                    recordRuntimeStoreInfo(candidate: candidate, fallbackReason: "Created after local store reset. Previous error: \(String(describing: error))")
-                    logICloudAccountState()
-                    return container
-                } catch {
-                    lastError = error
-                    logStoreCandidateFailure(candidate, error: error)
-                    continue
-                }
+        let savedLocation = diagnosticDefaults.string(forKey: storeLocationDefaultsKey)
+        let useAppGroup = !inMemory && selectedStoreUsesAppGroup(
+            canUseAppGroup: canUseAppGroup,
+            appLocalStoreExists: fileManager.fileExists(atPath: persistentStoreURL(useAppGroup: false).path),
+            savedLocation: savedLocation
+        )
+        let candidate = makeConfigurationCandidate(
+            inMemory: inMemory, useAppGroup: useAppGroup,
+            useCloudKit: !inMemory && canAttemptCloudKitPersistence(), allowsStoreReset: false
+        )
+        logStoreCandidate(candidate)
+        do {
+            if !inMemory, savedLocation == "shared", !canUseAppGroup {
+                throw CocoaError(.fileReadNoPermission)
             }
+            if !inMemory, savedLocation != nil, let url = candidate.storeURL,
+               !fileManager.fileExists(atPath: url.path) {
+                throw CocoaError(.fileReadNoSuchFile)
+            }
+            let container = try openStore(candidate)
+            recordRuntimeStoreInfo(candidate: candidate, fallbackReason: nil)
+            if !inMemory {
+                persistentStoreError = nil
+                diagnosticDefaults.set(useAppGroup ? "shared" : "app-local", forKey: storeLocationDefaultsKey)
+                logICloudAccountState()
+            }
+            return container
+        } catch {
+            logStoreCandidateFailure(candidate, error: error)
+            if !inMemory { persistentStoreError = String(describing: error) }
         }
 
-        // Last resort: never crash-loop the app over a broken store. Run
-        // in-memory so the app still opens; runtimeStoreInfo carries the
-        // reason for the sync diagnostics screen.
-        let message = lastError.map { String(describing: $0) } ?? "Unknown SwiftData error"
+        // The memory container supports the startup error screen only. Normal
+        // UI and background writes are disabled: never present an empty profile
+        // as if it were the user's saved data, or reset/switch stores on failure.
+        let message = persistentStoreError ?? "Unable to open the data store."
         let emergency = makeConfigurationCandidate(inMemory: true, useAppGroup: false, useCloudKit: false, allowsStoreReset: false)
-        if let container = try? ModelContainer(for: schema, configurations: emergency.configuration) {
-            recordRuntimeStoreInfo(candidate: emergency, fallbackReason: "All persistent store candidates failed; running in-memory. Last error: \(message)")
+        if let container = try? ModelContainer(for: schema, configurations: emergency.configurations) {
+            recordRuntimeStoreInfo(candidate: emergency, fallbackReason: "Saved store could not be opened; normal UI and writes are paused. Error: \(message)")
             return container
         }
         fatalError("Unable to create ModelContainer. \(message)")
+    }
+
+    static func selectedStoreUsesAppGroup(canUseAppGroup: Bool, appLocalStoreExists: Bool, savedLocation: String?) -> Bool {
+        guard canUseAppGroup else { return false }
+        if let savedLocation { return savedLocation == "shared" }
+        // Earlier builds could silently fall back to app-local storage. Keep
+        // that installation's latest edits; the old shared store stays intact.
+        return !appLocalStoreExists
+    }
+
+    /// Also used by on-disk upgrade regression tests with isolated URLs.
+    static func makePersistentContainer(at storeURL: URL) throws -> ModelContainer {
+        try openStore(makeConfigurationCandidate(
+            inMemory: false, useAppGroup: false, useCloudKit: false,
+            allowsStoreReset: false, explicitStoreURL: storeURL
+        ))
+    }
+
+    private static func openStore(_ candidate: PersistentStoreCandidate) throws -> ModelContainer {
+        if let storeURL = candidate.storeURL {
+            try backupBeforeSchemaChange(at: storeURL)
+        }
+        let container = try ModelContainer(for: schema, configurations: candidate.configurations)
+        if let storeURL = candidate.storeURL {
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            try importPreviousLocalHealthStore(beside: storeURL, context: context)
+            try moveLegacyHealthImportsToLocalStore(context: context)
+        }
+        return container
     }
 
     nonisolated static func canAttemptCloudKitPersistence() -> Bool {
@@ -202,17 +229,27 @@ enum TrainingStore {
         inMemory: Bool,
         useAppGroup: Bool,
         useCloudKit: Bool,
-        allowsStoreReset: Bool
+        allowsStoreReset: Bool,
+        explicitStoreURL: URL? = nil
     ) -> PersistentStoreCandidate {
         if inMemory {
             return PersistentStoreCandidate(
-                configuration: ModelConfiguration(
-                    AppIdentity.displayName,
-                    schema: schema,
-                    isStoredInMemoryOnly: true,
-                    cloudKitDatabase: .none
-                ),
+                configurations: [
+                    ModelConfiguration(
+                        AppIdentity.displayName,
+                        schema: syncedSchema,
+                        isStoredInMemoryOnly: true,
+                        cloudKitDatabase: .none
+                    ),
+                    ModelConfiguration(
+                        localOnlyConfigurationName,
+                        schema: localOnlySchema,
+                        isStoredInMemoryOnly: true,
+                        cloudKitDatabase: .none
+                    )
+                ],
                 storeURL: nil,
+                localOnlyStoreURL: nil,
                 usesCloudKit: false,
                 usesAppGroup: false,
                 isInMemory: true,
@@ -220,17 +257,28 @@ enum TrainingStore {
             )
         }
 
-        let storeURL = persistentStoreURL(useAppGroup: useAppGroup)
+        let storeURL = explicitStoreURL ?? persistentStoreURL(useAppGroup: useAppGroup)
+        let localOnlyStoreURL = storeURL.deletingLastPathComponent()
+            .appendingPathComponent("\(AppIdentity.internalProjectName)-HealthLocal-v2.store")
         try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         return PersistentStoreCandidate(
-            configuration: ModelConfiguration(
-                AppIdentity.displayName,
-                schema: schema,
-                url: storeURL,
-                cloudKitDatabase: useCloudKit ? .private(AppIdentity.iCloudContainerIdentifier) : .none
-            ),
+            configurations: [
+                ModelConfiguration(
+                    AppIdentity.displayName,
+                    schema: syncedSchema,
+                    url: storeURL,
+                    cloudKitDatabase: useCloudKit ? .private(AppIdentity.iCloudContainerIdentifier) : .none
+                ),
+                ModelConfiguration(
+                    localOnlyConfigurationName,
+                    schema: localOnlySchema,
+                    url: localOnlyStoreURL,
+                    cloudKitDatabase: .none
+                )
+            ],
             storeURL: storeURL,
+            localOnlyStoreURL: localOnlyStoreURL,
             usesCloudKit: useCloudKit,
             usesAppGroup: useAppGroup,
             isInMemory: false,
@@ -238,10 +286,7 @@ enum TrainingStore {
         )
     }
 
-    private static func fallbackReason(for candidate: PersistentStoreCandidate, lastError: Error?) -> String? {
-        guard !candidate.usesCloudKit, let lastError else { return nil }
-        return "CloudKit store candidate failed before falling back to local-only persistence: \(String(describing: lastError))"
-    }
+    private static let localOnlyConfigurationName = "LocalOnly"
 
     private static func recordRuntimeStoreInfo(candidate: PersistentStoreCandidate, fallbackReason: String?) {
         runtimeStoreInfo = RuntimeStoreInfo(
@@ -290,6 +335,7 @@ enum TrainingStore {
 
     private static func logICloudAccountState() {
         #if DEBUG
+        guard canAttemptCloudKitPersistence(), runtimeStoreInfo.usesCloudKit else { return }
         syncLogger.info("ubiquityIdentityToken present: \(FileManager.default.ubiquityIdentityToken != nil)")
         CKContainer(identifier: AppIdentity.iCloudContainerIdentifier).accountStatus { status, error in
             Task { @MainActor in
@@ -318,6 +364,27 @@ enum TrainingStore {
 
             Task { @MainActor in
                 recordCloudKitEvent(event)
+                guard event.type == .import, event.endDate != nil, event.succeeded else { return }
+                guard persistentStoreError == nil else { return }
+                // Coalesce a burst of completed imports, then reconcile even
+                // when the user keeps the dashboard open throughout the sync.
+                cloudKitReconciliationTask?.cancel()
+                cloudKitReconciliationTask = Task { @MainActor in
+                    do {
+                        try await Task.sleep(for: .milliseconds(250))
+                        try Task.checkCancellation()
+                        let context = ModelContext(sharedModelContainer)
+                        _ = try reconcileSyncedData(context: context)
+                        // Publish the imported state. Replaying progression or
+                        // rewriting the catalog on each import can provoke a
+                        // new export/import cycle while sync is still settling.
+                        try refreshWidgetSnapshot(context: context)
+                    } catch is CancellationError {
+                        // A newer import will perform the refresh.
+                    } catch {
+                        logRefreshFailure("CloudKit import reconciliation", error)
+                    }
+                }
             }
         }
     }
@@ -335,7 +402,7 @@ enum TrainingStore {
             type = "unknown"
         }
 
-        var summary = "\(type) \(event.succeeded ? "succeeded" : "failed")"
+        var summary = event.endDate == nil ? "\(type) started" : "\(type) \(event.succeeded ? "succeeded" : "failed")"
         if let endDate = event.endDate {
             summary += " at \(endDate.formatted(date: .abbreviated, time: .standard))"
         }
@@ -398,34 +465,44 @@ enum TrainingStore {
         return baseDirectory.appendingPathComponent("\(AppIdentity.internalProjectName).store")
     }
 
-    private static func resetPersistentStore(at storeURL: URL) throws {
-        let fileManager = FileManager.default
-        let candidateURLs = [
-            storeURL,
-            storeURL.appendingPathExtension("sqlite"),
-            storeURL.appendingPathExtension("sqlite-shm"),
-            storeURL.appendingPathExtension("sqlite-wal"),
-            storeURL.appendingPathExtension("shm"),
-            storeURL.appendingPathExtension("wal"),
-            URL(fileURLWithPath: storeURL.path + "-shm"),
-            URL(fileURLWithPath: storeURL.path + "-wal")
-        ]
-
-        // Move the broken store aside instead of deleting it so the data can
-        // still be recovered manually if the reset turns out to be wrong.
-        let backupSuffix = "corrupt-\(Int(Date.now.timeIntervalSince1970))"
-        for candidateURL in Set(candidateURLs) where fileManager.fileExists(atPath: candidateURL.path) {
-            let backupURL = candidateURL.appendingPathExtension(backupSuffix)
-            do {
-                try? fileManager.removeItem(at: backupURL)
-                try fileManager.moveItem(at: candidateURL, to: backupURL)
-            } catch {
-                try fileManager.removeItem(at: candidateURL)
-            }
+    static func backupBeforeSchemaChange(at storeURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: storeURL.path) else { return }
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
+            ofType: NSSQLiteStoreType, at: storeURL, options: [NSReadOnlyPersistentStoreOption: true]
+        )
+        // SwiftData stores the complete container model in each configured
+        // store's metadata, even though its rows are partitioned by schema.
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: syncedModelTypes + localOnlyModelTypes) else {
+            throw CocoaError(.persistentStoreInvalidType)
         }
+        guard !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let backupDirectory = storeURL.deletingLastPathComponent()
+            .appendingPathComponent("StoreBackups", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
+        var excludedDirectory = backupDirectory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try excludedDirectory.setResourceValues(values)
+        // Core Data copies the complete store, including uncheckpointed WAL
+        // data and CloudKit metadata. Never copy just the SQLite main file.
+        try copyPersistentStore(from: storeURL, to: backupDirectory.appendingPathComponent(storeURL.lastPathComponent))
+    }
+
+    static func copyPersistentStore(from sourceURL: URL, to destinationURL: URL) throws {
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: syncedModelTypes) else {
+            throw CocoaError(.persistentStoreInvalidType)
+        }
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        try coordinator.replacePersistentStore(
+            at: destinationURL,
+            destinationOptions: nil, withPersistentStoreFrom: sourceURL,
+            sourceOptions: [NSReadOnlyPersistentStoreOption: true], ofType: NSSQLiteStoreType
+        )
     }
 
     static func refreshAppState() {
+        guard persistentStoreError == nil else { return }
         let context = ModelContext(sharedModelContainer)
         do { _ = try reconcileSyncedData(context: context) } catch { logRefreshFailure("reconcileSyncedData", error) }
         do { try synchronizeCatalog(context: context) } catch { logRefreshFailure("synchronizeCatalog", error) }
@@ -507,7 +584,7 @@ enum TrainingStore {
     }
 
     static func fetchActiveStats(context: ModelContext) throws -> [StatDomain] {
-        try fetchStats(context: context).filter { $0.isActive }
+        canonicalStats(try fetchStats(context: context)).filter { $0.isActive }
     }
 
     /// All non-archived but disabled, plus archived, skills — i.e. everything that
@@ -535,13 +612,38 @@ enum TrainingStore {
         return try context.fetch(descriptor)
     }
 
-    static func fetchImportedHealthWorkouts(context: ModelContext) throws -> [HealthImportedWorkout] {
-        let descriptor = FetchDescriptor<HealthImportedWorkout>(sortBy: [SortDescriptor(\.startDate, order: .reverse)])
+    static func fetchImportedHealthWorkouts(context: ModelContext) throws -> [LocalHealthImportedWorkout] {
+        let descriptor = FetchDescriptor<LocalHealthImportedWorkout>(sortBy: [SortDescriptor(\.startDate, order: .reverse)])
         return try context.fetch(descriptor)
     }
 
+    static func fetchDismissedHealthWorkoutIDs(context: ModelContext) throws -> Set<String> {
+        Set(try context.fetch(FetchDescriptor<DismissedHealthWorkout>()).map(\.workoutUUID))
+    }
+
+    /// Health-sourced logs keyed by workout UUID. Logs sync across devices, so
+    /// this is how a device learns a workout was already imported elsewhere.
+    static func fetchHealthLogsByWorkoutID(context: ModelContext) throws -> [String: HabitLog] {
+        var logsByWorkoutID: [String: HabitLog] = [:]
+        for log in try fetchLogs(context: context) where log.sourceType == .health {
+            guard let workoutID = log.healthWorkoutUUID, logsByWorkoutID[workoutID] == nil else { continue }
+            logsByWorkoutID[workoutID] = log
+        }
+        return logsByWorkoutID
+    }
+
+    /// Records that the user removed or ignored a Health workout so no device
+    /// imports it again. Inserts only; the caller saves.
+    static func dismissHealthWorkout(uuid workoutUUID: String, context: ModelContext) {
+        let descriptor = FetchDescriptor<DismissedHealthWorkout>(
+            predicate: #Predicate { $0.workoutUUID == workoutUUID }
+        )
+        guard ((try? context.fetchCount(descriptor)) ?? 0) == 0 else { return }
+        context.insert(DismissedHealthWorkout(workoutUUID: workoutUUID))
+    }
+
     static func awaitingAttributionStatKeys(context: ModelContext) throws -> Set<String> {
-        let descriptor = FetchDescriptor<HealthImportedWorkout>(
+        let descriptor = FetchDescriptor<LocalHealthImportedWorkout>(
             predicate: #Predicate { record in
                 record.awaitingHabitAssignment == true && record.isDuplicate == false
             }
@@ -551,7 +653,7 @@ enum TrainingStore {
     }
 
     static func unmatchedWorkoutCount(forStatKey statKey: String, context: ModelContext) -> Int {
-        let descriptor = FetchDescriptor<HealthImportedWorkout>(
+        let descriptor = FetchDescriptor<LocalHealthImportedWorkout>(
             predicate: #Predicate { record in
                 record.statKeyRaw == statKey &&
                 record.awaitingHabitAssignment == true &&
@@ -584,7 +686,7 @@ enum TrainingStore {
             logs: ((try? context.fetch(FetchDescriptor<HabitLog>())) ?? []).count,
             weeklyResolutions: ((try? context.fetch(FetchDescriptor<WeeklyResolution>())) ?? []).count,
             settings: ((try? context.fetch(FetchDescriptor<AppSettings>())) ?? []).count,
-            healthImports: ((try? context.fetch(FetchDescriptor<HealthImportedWorkout>())) ?? []).count,
+            healthImports: ((try? context.fetch(FetchDescriptor<LocalHealthImportedWorkout>())) ?? []).count,
             goals: ((try? context.fetch(FetchDescriptor<Goal>())) ?? []).count
         )
     }
@@ -666,7 +768,9 @@ enum TrainingStore {
     }
 
     static func clearAll(context: ModelContext) throws {
+        for item in try context.fetch(FetchDescriptor<HealthImportedWorkout>()) { context.delete(item) }
         for item in try fetchImportedHealthWorkouts(context: context) { context.delete(item) }
+        for item in try context.fetch(FetchDescriptor<DismissedHealthWorkout>()) { context.delete(item) }
         for item in try fetchLogs(context: context) { context.delete(item) }
         for item in try fetchResolutions(context: context) { context.delete(item) }
         for item in try fetchGoals(context: context) { context.delete(item) }
@@ -677,7 +781,7 @@ enum TrainingStore {
         recordLocalWrite(reason: "cleared all local SwiftData records")
         let defaults = UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
         defaults.removeObject(forKey: AppIdentity.healthWorkoutAnchorKey)
-        defaults.removeObject(forKey: "training.arc.health.lastYearBackfillAt")
+        defaults.removeObject(forKey: AppIdentity.healthLastYearBackfillKey)
         try refreshWidgetSnapshot(context: context)
     }
 
@@ -702,7 +806,7 @@ enum TrainingStore {
     }
 
     static func synchronizeCatalog(context: ModelContext) throws {
-        let existingStats = try fetchStats(context: context)
+        let existingStats = canonicalStats(try fetchStats(context: context))
         guard !existingStats.isEmpty else { return }
 
         var didMutate = false
@@ -813,6 +917,9 @@ enum TrainingStore {
     static func delete(_ log: HabitLog, context: ModelContext) throws {
         let stat = log.habit?.statDomain
         let affectedDate = log.date
+        if log.sourceType == .health, let workoutUUID = log.healthWorkoutUUID {
+            dismissHealthWorkout(uuid: workoutUUID, context: context)
+        }
         context.delete(log)
         try context.save()
         recordLocalWrite(reason: "deleted habit entry")

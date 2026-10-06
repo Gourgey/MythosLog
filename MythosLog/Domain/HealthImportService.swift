@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import OSLog
 #if canImport(HealthKit)
 import HealthKit
 #endif
@@ -27,6 +28,8 @@ enum HealthAuthorizationState: Sendable {
 
 struct HealthSyncSummary: Sendable {
     var importedCount: Int
+    var removedCount: Int
+    var updatedCount: Int
     var duplicateCount: Int
     var overlapCount: Int
     var ignoredCount: Int
@@ -37,6 +40,14 @@ struct HealthSyncSummary: Sendable {
 
         if importedCount > 0 {
             parts.append("Imported \(importedCount) workout\(importedCount == 1 ? "" : "s") from Apple Health.")
+        }
+
+        if removedCount > 0 {
+            parts.append("Removed \(removedCount) workout\(removedCount == 1 ? "" : "s") deleted from Apple Health.")
+        }
+
+        if updatedCount > 0 {
+            parts.append("Updated \(updatedCount) changed workout\(updatedCount == 1 ? "" : "s") from Apple Health.")
         }
 
         if duplicateCount > 0 {
@@ -51,7 +62,7 @@ struct HealthSyncSummary: Sendable {
             return parts.joined(separator: " ")
         }
 
-        return ignoredCount > 0 ? "No new eligible Apple Health workouts were found." : "Apple Health is up to date. No new workouts were imported."
+        return ignoredCount > 0 ? "No new eligible Apple Health workouts were found." : "Apple Health is up to date."
     }
 }
 
@@ -155,7 +166,7 @@ enum HealthImportService {
 
     private static let healthStore = HKHealthStore()
     private static let connectedDefaultsKey = "training.arc.health.connected"
-    private static let lastYearBackfillDefaultsKey = "training.arc.health.lastYearBackfillAt"
+    private static let lastYearBackfillDefaultsKey = AppIdentity.healthLastYearBackfillKey
     private static var workoutObserverQuery: HKObserverQuery?
 
     /// Guards against overlapping `performSync` runs. Many entry points can
@@ -166,6 +177,8 @@ enum HealthImportService {
     /// is `@MainActor`, this flag is only ever read/written between `await`
     /// points on the main actor, so no lock is needed.
     private static var isSyncing = false
+    private static var syncWaiters: [CheckedContinuation<Void, Never>] = []
+    nonisolated private static let logger = Logger(subsystem: "studio.curateddesign.MythosLog", category: "HealthImport")
 
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
@@ -208,6 +221,7 @@ enum HealthImportService {
     }
 
     static func startWorkoutObserverIfEnabled() {
+        guard TrainingStore.persistentStoreError == nil else { return }
         guard HKHealthStore.isHealthDataAvailable(), workoutObserverQuery == nil else { return }
 
         let context = ModelContext(TrainingStore.sharedModelContainer)
@@ -221,18 +235,29 @@ enum HealthImportService {
         }
 
         let query = HKObserverQuery(sampleType: workoutType, predicate: nil) { _, completionHandler, error in
-            if error == nil {
-                Task { @MainActor in
-                    await syncIfEnabled()
+            guard error == nil else {
+                completionHandler()
+                return
+            }
+            Task { @MainActor in
+                // Keep the HealthKit wake alive until importing and writing the
+                // shared snapshot have finished, including an in-flight sync.
+                defer { completionHandler() }
+                do {
+                    try await WidgetRefreshService.refresh()
+                } catch {
+                    logger.error("Health background refresh failed: \(String(describing: error), privacy: .public)")
                 }
             }
-
-            completionHandler()
         }
 
         workoutObserverQuery = query
         healthStore.execute(query)
-        healthStore.enableBackgroundDelivery(for: workoutType, frequency: .hourly) { _, _ in }
+        healthStore.enableBackgroundDelivery(for: workoutType, frequency: .immediate) { success, error in
+            if !success {
+                logger.error("Health background delivery failed: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     static func stopWorkoutObserver() {
@@ -240,11 +265,28 @@ enum HealthImportService {
         healthStore.stop(workoutObserverQuery)
         self.workoutObserverQuery = nil
         // Release the paired background wake-ups too; otherwise the system keeps
-        // launching us hourly after the user has turned auto-import off.
+        // waking us after the user has turned auto-import off.
         healthStore.disableBackgroundDelivery(for: workoutType) { _, _ in }
     }
 
     static func syncIfEnabled() async {
+        do {
+            try await syncForWidget()
+        } catch {
+            logger.error("Health sync failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    static func syncForWidget() async throws {
+        guard TrainingStore.persistentStoreError == nil else {
+            throw CocoaError(.persistentStoreOpen)
+        }
+        // A widget/background caller must wait for an existing import rather
+        // than publishing a stale snapshot and ending its background wake.
+        while isSyncing {
+            await withCheckedContinuation { syncWaiters.append($0) }
+        }
+        try Task.checkCancellation()
         guard HKHealthStore.isHealthDataAvailable() else { return }
 
         let context = ModelContext(TrainingStore.sharedModelContainer)
@@ -260,7 +302,7 @@ enum HealthImportService {
 
         startWorkoutObserverIfEnabled()
         let scope: SyncScope = shouldRunYearBackfill() ? .yearBackfill : .anchored
-        _ = try? await performSync(context: context, settings: settings, scope: scope)
+        _ = try await performSync(context: context, settings: settings, scope: scope)
     }
 
     static func syncNow() async throws -> String {
@@ -308,6 +350,8 @@ enum HealthImportService {
         guard !isSyncing else {
             return HealthSyncSummary(
                 importedCount: 0,
+                removedCount: 0,
+                updatedCount: 0,
                 duplicateCount: 0,
                 overlapCount: 0,
                 ignoredCount: 0,
@@ -315,25 +359,85 @@ enum HealthImportService {
             )
         }
         isSyncing = true
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            let waiters = syncWaiters
+            syncWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
 
-        let anchor = scope == .anchored ? loadAnchor() : nil
+        let anchor = loadAnchor()
         let predicate: NSPredicate? = anchor == nil
             ? HKQuery.predicateForSamples(withStart: yearBackfillStartDate(), end: nil, options: .strictStartDate)
             : nil
-        let (workouts, newAnchor) = try await fetchWorkouts(anchor: anchor, predicate: predicate)
+        let (recentWorkouts, deletedWorkoutIDs, newAnchor) = try await fetchWorkouts(anchor: anchor, predicate: predicate)
+        // A full backfill still needs the saved anchor above: querying only
+        // today's Health snapshot would miss deletions since the last sync.
+        let backfillWorkouts: [HKWorkout]
+        let backfillDeletedIDs: Set<String>
+        if scope == .yearBackfill, anchor != nil {
+            (backfillWorkouts, backfillDeletedIDs, _) = try await fetchWorkouts(
+                anchor: nil,
+                predicate: HKQuery.predicateForSamples(withStart: yearBackfillStartDate(), end: nil, options: .strictStartDate)
+            )
+        } else if scope == .yearBackfill {
+            backfillWorkouts = recentWorkouts
+            backfillDeletedIDs = []
+        } else {
+            backfillWorkouts = []
+            backfillDeletedIDs = []
+        }
+        try Task.checkCancellation()
+        let allDeletedIDs = deletedWorkoutIDs.union(backfillDeletedIDs)
+        let workouts = Array(Dictionary(
+            recentWorkouts.map { ($0.uuid.uuidString, $0) } + backfillWorkouts.map { ($0.uuid.uuidString, $0) },
+            uniquingKeysWith: { newer, _ in newer }
+        ).values).filter { !allDeletedIDs.contains($0.uuid.uuidString) }
+        let priorAssignmentsBeforeChanges = TrainingStore.priorHealthImportAssignments(
+            from: try TrainingStore.fetchImportedHealthWorkouts(context: context)
+        )
+        var removedCount = try removeHealthWorkouts(withIDs: allDeletedIDs, context: context)
+        // Older builds advanced the anchor while discarding deletion results.
+        // On a full sync, repair those missed deletions when at least one
+        // workout is visible (an empty result can also mean read access revoked).
+        if scope == .yearBackfill, !backfillWorkouts.isEmpty {
+            let visibleIDs = Set(backfillWorkouts.map { $0.uuid.uuidString })
+            let staleIDs = Set(try TrainingStore.fetchImportedHealthWorkouts(context: context)
+                .filter { $0.startDate >= yearBackfillStartDate() && !visibleIDs.contains($0.workoutUUID) }
+                .map(\.workoutUUID))
+            removedCount += try removeHealthWorkouts(withIDs: staleIDs, context: context)
+        }
+        var updatedCount = 0
+        var updatedWorkoutIDs = Set<String>()
+        let recordsByID = Dictionary(
+            try TrainingStore.fetchImportedHealthWorkouts(context: context).map { ($0.workoutUUID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for workout in workouts {
+            guard let record = recordsByID[workout.uuid.uuidString], workoutDetailsChanged(workout, from: record) else { continue }
+            _ = try removeHealthWorkouts(withIDs: [record.workoutUUID], context: context)
+            updatedCount += 1
+            updatedWorkoutIDs.insert(record.workoutUUID)
+        }
         let activeStats = try TrainingStore.fetchActiveStats(context: context)
 
         // The self-healing normalization pass is O(n^2) over every imported
         // record. Only pay for it when the fetch actually returned new samples;
         // cross-device duplicates arrive through CloudKit and are reconciled by
         // TrainingStore.reconcileSyncedData, not here.
-        let existingRecords: [HealthImportedWorkout] = workouts.isEmpty
+        let existingRecords: [LocalHealthImportedWorkout] = workouts.isEmpty && removedCount == 0 && updatedCount == 0
             ? try TrainingStore.fetchImportedHealthWorkouts(context: context)
             : try normalizeExistingHealthImports(context: context)
 
-        let priorHabitKeyByWorkoutTitle = TrainingStore.priorHealthImportAssignments(from: existingRecords)
+        let priorHabitKeyByWorkoutTitle = priorAssignmentsBeforeChanges.merging(
+            TrainingStore.priorHealthImportAssignments(from: existingRecords),
+            uniquingKeysWith: { _, current in current }
+        )
         var existingWorkoutIDs = Set(existingRecords.map(\.workoutUUID))
+        // Import records are local-only, so another device's decisions arrive
+        // through these synced tables instead.
+        let healthLogsByWorkoutID = try TrainingStore.fetchHealthLogsByWorkoutID(context: context)
+        let dismissedWorkoutIDs = try TrainingStore.fetchDismissedHealthWorkoutIDs(context: context)
         var processedRecords = existingRecords
             .filter { $0.wasImported || $0.isDuplicate }
             .sorted { $0.startDate < $1.startDate }
@@ -355,9 +459,40 @@ enum HealthImportService {
             .sorted { $0.workout.startDate < $1.workout.startDate }
 
         for candidate in candidates {
+            try Task.checkCancellation()
             let workout = candidate.workout
             let workoutID = workout.uuid.uuidString
             if existingWorkoutIDs.contains(workoutID) {
+                continue
+            }
+
+            if dismissedWorkoutIDs.contains(workoutID) {
+                let record = healthRecord(
+                    for: candidate,
+                    wasImported: false,
+                    isDuplicate: false,
+                    overlapsImportedWorkout: false,
+                    relatedWorkoutUUID: nil
+                )
+                record.habitSystemKey = nil
+                context.insert(record)
+                existingWorkoutIDs.insert(workoutID)
+                continue
+            }
+
+            if let existingLog = healthLogsByWorkoutID[workoutID] {
+                let overlappingRecord = processedRecords.first(where: { overlaps(candidate, with: $0) && !isDuplicate(candidate, of: $0) })
+                let record = healthRecord(
+                    for: candidate,
+                    wasImported: true,
+                    isDuplicate: false,
+                    overlapsImportedWorkout: overlappingRecord != nil,
+                    relatedWorkoutUUID: overlappingRecord?.workoutUUID
+                )
+                record.habitSystemKey = existingLog.habit?.systemKey
+                context.insert(record)
+                processedRecords.append(record)
+                existingWorkoutIDs.insert(workoutID)
                 continue
             }
 
@@ -434,13 +569,20 @@ enum HealthImportService {
 
             processedRecords.append(record)
             existingWorkoutIDs.insert(workoutID)
-            importedCount += 1
+            if !updatedWorkoutIDs.contains(workoutID) {
+                importedCount += 1
+            }
             if overlappingRecord != nil {
                 overlapCount += 1
             }
         }
 
-        if importedCount > 0 {
+        // Local bookkeeping for workouts another device already handled.
+        if context.hasChanges {
+            try context.save()
+        }
+
+        if importedCount > 0 || removedCount > 0 || updatedCount > 0 {
             try TrainingStore.refreshAllProgress(context: context, reason: .logMutation)
         }
 
@@ -456,7 +598,7 @@ enum HealthImportService {
         // CloudKit write that itself provokes more sync traffic. Skip it on idle
         // background checks: only stamp when something changed, when the user or
         // weekly backfill explicitly requested a full sync, or hourly at most.
-        let didChange = importedCount + duplicateCount + overlapCount > 0
+        let didChange = importedCount + removedCount + updatedCount + duplicateCount + overlapCount > 0
         let stampIsStale = settings.lastHealthSyncAt.map { Date().timeIntervalSince($0) > 3600 } ?? true
         if didChange || scope == .yearBackfill || stampIsStale {
             settings.lastHealthSyncAt = .now
@@ -472,6 +614,8 @@ enum HealthImportService {
 
         return HealthSyncSummary(
             importedCount: importedCount,
+            removedCount: removedCount,
+            updatedCount: updatedCount,
             duplicateCount: duplicateCount,
             overlapCount: overlapCount,
             ignoredCount: ignoredCount,
@@ -551,9 +695,9 @@ enum HealthImportService {
         overlapsImportedWorkout: Bool,
         relatedWorkoutUUID: String?,
         awaitingHabitAssignment: Bool = false
-    ) -> HealthImportedWorkout {
+    ) -> LocalHealthImportedWorkout {
         let workout = candidate.workout
-        return HealthImportedWorkout(
+        return LocalHealthImportedWorkout(
             workoutUUID: workout.uuid.uuidString,
             statKeyRaw: candidate.mapping.statKey.rawValue,
             habitSystemKey: candidate.habit?.systemKey,
@@ -575,16 +719,17 @@ enum HealthImportService {
     /// duplicates an earlier one (deleting its logged entry) and recomputes the
     /// overlap flags. Only writes to the store when something actually changed,
     /// so an idle sync doesn't churn CloudKit.
-    private static func normalizeExistingHealthImports(context: ModelContext) throws -> [HealthImportedWorkout] {
+    private static func normalizeExistingHealthImports(context: ModelContext) throws -> [LocalHealthImportedWorkout] {
         let records = try TrainingStore.fetchImportedHealthWorkouts(context: context)
             .sorted { $0.startDate < $1.startDate }
         var didMutate = false
+        var removedImportedLog = false
 
         // Pass 1: keep the earliest of any duplicate cluster; demote the rest.
-        var importedRecords: [HealthImportedWorkout] = []
+        var importedRecords: [LocalHealthImportedWorkout] = []
         for record in records where record.wasImported && !record.isDuplicate {
             if let duplicateRecord = importedRecords.first(where: { isDuplicate(record, of: $0) }) {
-                try deleteImportedHealthLog(for: record, context: context)
+                removedImportedLog = try deleteImportedHealthLog(for: record, context: context) || removedImportedLog
                 record.wasImported = false
                 record.isDuplicate = true
                 record.overlapsImportedWorkout = false
@@ -613,22 +758,63 @@ enum HealthImportService {
 
         try context.save()
         TrainingStore.recordLocalWrite(reason: "normalized Health import records")
+        if removedImportedLog {
+            try TrainingStore.refreshAllProgress(context: context, reason: .deleteMutation)
+            try TrainingStore.refreshWidgetSnapshot(context: context)
+        }
         return try TrainingStore.fetchImportedHealthWorkouts(context: context)
     }
 
-    private static func deleteImportedHealthLog(for record: HealthImportedWorkout, context: ModelContext) throws {
+    /// Remove Health-driven changes without creating a user-dismissal marker.
+    /// That lets a replacement sample from an edit be imported immediately.
+    @discardableResult
+    static func removeHealthWorkouts(withIDs workoutIDs: Set<String>, context: ModelContext) throws -> Int {
+        guard !workoutIDs.isEmpty else { return 0 }
+        let records = try TrainingStore.fetchImportedHealthWorkouts(context: context)
         let logs = try TrainingStore.fetchLogs(context: context)
+        var removedIDs = Set<String>()
 
+        for record in records where workoutIDs.contains(record.workoutUUID) {
+            if !logs.contains(where: { $0.sourceType == .health && $0.healthWorkoutUUID == record.workoutUUID }) {
+                try deleteImportedHealthLog(for: record, from: logs, context: context)
+            }
+            context.delete(record)
+            removedIDs.insert(record.workoutUUID)
+        }
+        // The synced log can exist before this device has built its local
+        // import record. Remove it by UUID as well.
+        for log in logs where log.sourceType == .health && workoutIDs.contains(log.healthWorkoutUUID ?? "") {
+            context.delete(log)
+            if let workoutID = log.healthWorkoutUUID { removedIDs.insert(workoutID) }
+        }
+        return removedIDs.count
+    }
+
+    private static func workoutDetailsChanged(_ workout: HKWorkout, from record: LocalHealthImportedWorkout) -> Bool {
+        workout.startDate != record.startDate ||
+        workout.endDate != record.endDate ||
+        abs(workout.duration / 60 - record.durationMinutes) > 0.001 ||
+        Int(workout.workoutActivityType.rawValue) != record.activityTypeRaw
+    }
+
+    @discardableResult
+    private static func deleteImportedHealthLog(for record: LocalHealthImportedWorkout, context: ModelContext) throws -> Bool {
+        let logs = try TrainingStore.fetchLogs(context: context)
+        return try deleteImportedHealthLog(for: record, from: logs, context: context)
+    }
+
+    @discardableResult
+    private static func deleteImportedHealthLog(for record: LocalHealthImportedWorkout, from logs: [HabitLog], context: ModelContext) throws -> Bool {
         // Prefer an exact match on the workout UUID that was stamped onto the log
         // at import time — robust even when two short workouts sit seconds apart.
         if let log = logs.first(where: { $0.sourceType == .health && $0.healthWorkoutUUID == record.workoutUUID }) {
-            try TrainingStore.delete(log, context: context)
-            return
+            context.delete(log)
+            return true
         }
 
         // Fallback for any legacy log written before UUIDs were stamped: match
         // the same habit within a two-minute window of the workout's end.
-        guard let habitSystemKey = record.habitSystemKey else { return }
+        guard record.wasImported, let habitSystemKey = record.habitSystemKey else { return false }
         let nearest = logs
             .filter { log in
                 log.sourceType == .health &&
@@ -638,8 +824,10 @@ enum HealthImportService {
             .min { abs($0.date.timeIntervalSince(record.endDate)) < abs($1.date.timeIntervalSince(record.endDate)) }
 
         if let nearest {
-            try TrainingStore.delete(nearest, context: context)
+            context.delete(nearest)
+            return true
         }
+        return false
     }
 
     static func purgeDeprecatedAutoMappings(context: ModelContext) throws -> Bool {
@@ -651,10 +839,15 @@ enum HealthImportService {
             .filter { danceRawValues.contains($0.activityTypeRaw) && $0.wasImported && !$0.isDuplicate }
         guard !records.isEmpty else { return false }
 
+        var removedImportedLog = false
         for record in records {
-            try deleteImportedHealthLog(for: record, context: context)
+            removedImportedLog = try deleteImportedHealthLog(for: record, context: context) || removedImportedLog
             record.wasImported = false
             record.overlapsImportedWorkout = false
+        }
+        if removedImportedLog {
+            try TrainingStore.refreshAllProgress(context: context, reason: .deleteMutation)
+            try TrainingStore.refreshWidgetSnapshot(context: context)
         }
         return true
     }
@@ -671,7 +864,7 @@ enum HealthImportService {
         Calendar(identifier: .gregorian).date(byAdding: .year, value: -1, to: now) ?? now.addingTimeInterval(-365 * 24 * 60 * 60)
     }
 
-    private static func isDuplicate(_ candidate: HealthWorkoutCandidate, of record: HealthImportedWorkout) -> Bool {
+    private static func isDuplicate(_ candidate: HealthWorkoutCandidate, of record: LocalHealthImportedWorkout) -> Bool {
         guard candidate.mapping.statKey.rawValue == record.statKeyRaw else { return false }
         return isDuplicate(
             startDate: candidate.workout.startDate,
@@ -681,7 +874,7 @@ enum HealthImportService {
         )
     }
 
-    private static func isDuplicate(_ record: HealthImportedWorkout, of otherRecord: HealthImportedWorkout) -> Bool {
+    private static func isDuplicate(_ record: LocalHealthImportedWorkout, of otherRecord: LocalHealthImportedWorkout) -> Bool {
         guard record.statKeyRaw == otherRecord.statKeyRaw, record.workoutUUID != otherRecord.workoutUUID else { return false }
         return isDuplicate(
             startDate: record.startDate,
@@ -695,7 +888,7 @@ enum HealthImportService {
         startDate: Date,
         endDate: Date,
         durationMinutes: Double,
-        of record: HealthImportedWorkout
+        of record: LocalHealthImportedWorkout
     ) -> Bool {
         let startDelta = abs(startDate.timeIntervalSince(record.startDate))
         let endDelta = abs(endDate.timeIntervalSince(record.endDate))
@@ -713,7 +906,7 @@ enum HealthImportService {
         return overlapRatio >= 0.85 && durationDelta <= 15
     }
 
-    private static func overlaps(_ candidate: HealthWorkoutCandidate, with record: HealthImportedWorkout) -> Bool {
+    private static func overlaps(_ candidate: HealthWorkoutCandidate, with record: LocalHealthImportedWorkout) -> Bool {
         overlapDuration(
             firstStart: candidate.workout.startDate,
             firstEnd: candidate.workout.endDate,
@@ -722,7 +915,7 @@ enum HealthImportService {
         ) > 0
     }
 
-    private static func overlaps(_ record: HealthImportedWorkout, with otherRecord: HealthImportedWorkout) -> Bool {
+    private static func overlaps(_ record: LocalHealthImportedWorkout, with otherRecord: LocalHealthImportedWorkout) -> Bool {
         guard record.workoutUUID != otherRecord.workoutUUID else { return false }
         return overlapDuration(
             firstStart: record.startDate,
@@ -746,21 +939,22 @@ enum HealthImportService {
     private static func fetchWorkouts(
         anchor: HKQueryAnchor?,
         predicate: NSPredicate?
-    ) async throws -> ([HKWorkout], HKQueryAnchor?) {
+    ) async throws -> ([HKWorkout], Set<String>, HKQueryAnchor?) {
         try await withCheckedThrowingContinuation { continuation in
             let query = HKAnchoredObjectQuery(
                 type: workoutType,
                 predicate: predicate,
                 anchor: anchor,
                 limit: HKObjectQueryNoLimit
-            ) { _, samples, _, newAnchor, error in
+            ) { _, samples, deletedObjects, newAnchor, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return
                 }
 
                 let workouts = (samples as? [HKWorkout]) ?? []
-                continuation.resume(returning: (workouts, newAnchor))
+                let deletedIDs = Set((deletedObjects ?? []).map { $0.uuid.uuidString })
+                continuation.resume(returning: (workouts, deletedIDs, newAnchor))
             }
 
             healthStore.execute(query)

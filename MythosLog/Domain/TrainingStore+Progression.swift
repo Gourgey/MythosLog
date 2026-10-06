@@ -254,9 +254,29 @@ extension TrainingStore {
         stat.acknowledgedRankLevel = stat.rankLevel
         stat.clearPendingRankChange()
         updateDerivedFields(for: stat)
+        stat.updatedAt = .now
         try context.save()
         recordLocalWrite(reason: "acknowledged rank change")
         try refreshWidgetSnapshot(context: context)
+    }
+
+    /// Acknowledge the new levels together, without presenting skill reveals.
+    /// Reconcile first so an imported duplicate cannot restore an old notice.
+    @discardableResult
+    static func acknowledgeAllPendingRankChanges(context: ModelContext, now: Date = .now) throws -> Int {
+        _ = try reconcileSyncedData(context: context)
+        let pending = try fetchActiveStats(context: context).filter { $0.pendingRankChange != nil }
+        guard !pending.isEmpty else { return 0 }
+        for stat in pending {
+            stat.acknowledgedRankLevel = stat.rankLevel
+            stat.clearPendingRankChange()
+            updateDerivedFields(for: stat)
+            stat.updatedAt = now
+        }
+        try context.save()
+        recordLocalWrite(reason: "acknowledged all rank changes")
+        try refreshWidgetSnapshot(context: context, now: now)
+        return pending.count
     }
 
     static func markRankChangeSeen(for stat: StatDomain, context: ModelContext, now: Date = .now) throws {

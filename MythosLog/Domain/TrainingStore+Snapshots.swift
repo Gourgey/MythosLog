@@ -42,8 +42,8 @@ extension TrainingStore {
     /// many logs so per-row attribution stays cheap. Built on the main actor and
     /// kept entirely out of the value-type snapshots it produces.
     struct HealthAttributionContext {
-        var recordsByUUID: [String: HealthImportedWorkout]
-        var recordsByHabitKey: [String: [HealthImportedWorkout]]
+        var recordsByUUID: [String: LocalHealthImportedWorkout]
+        var recordsByHabitKey: [String: [LocalHealthImportedWorkout]]
         var statsByKey: [String: StatDomain]
         var goalAffectsAllSkills: Bool
         var goalSkillKeys: Set<String>
@@ -79,7 +79,7 @@ extension TrainingStore {
             )
         }
 
-        private func matchedRecord(for log: HabitLog) -> HealthImportedWorkout? {
+        private func matchedRecord(for log: HabitLog) -> LocalHealthImportedWorkout? {
             if let uuid = log.healthWorkoutUUID, let record = recordsByUUID[uuid] {
                 return record
             }
@@ -100,7 +100,7 @@ extension TrainingStore {
     static func healthAttributionContext(context: ModelContext) -> HealthAttributionContext {
         let records = (try? fetchImportedHealthWorkouts(context: context)) ?? []
         let recordsByUUID = Dictionary(records.map { ($0.workoutUUID, $0) }) { lhs, _ in lhs }
-        let recordsByHabitKey = Dictionary(grouping: records.compactMap { record -> (String, HealthImportedWorkout)? in
+        let recordsByHabitKey = Dictionary(grouping: records.compactMap { record -> (String, LocalHealthImportedWorkout)? in
             guard let key = record.habitSystemKey else { return nil }
             return (key, record)
         }, by: \.0).mapValues { $0.map(\.1) }

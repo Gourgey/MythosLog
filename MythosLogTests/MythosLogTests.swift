@@ -765,11 +765,11 @@ struct SyncReconciliationTests {
         #expect(duplicateHabitAfterMerge.statDomain?.id == strengthStats.first?.id)
     }
 
-    @Test @MainActor func reconcileSyncedDataDeduplicatesHealthImportedWorkouts() throws {
+    @Test @MainActor func reconcileSyncedDataDeduplicatesLocalHealthImportedWorkouts() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let workoutID = UUID().uuidString
         let workoutEnd = isoDate("2026-03-24T18:00:00Z")
-        let importedRecord = HealthImportedWorkout(
+        let importedRecord = LocalHealthImportedWorkout(
             workoutUUID: workoutID,
             statKeyRaw: StatKey.strength.rawValue,
             habitSystemKey: fixture.habit.systemKey,
@@ -782,7 +782,7 @@ struct SyncReconciliationTests {
             isDuplicate: false,
             createdAt: isoDate("2026-03-24T18:01:00Z")
         )
-        let duplicateRecord = HealthImportedWorkout(
+        let duplicateRecord = LocalHealthImportedWorkout(
             workoutUUID: workoutID,
             statKeyRaw: StatKey.strength.rawValue,
             habitSystemKey: fixture.habit.systemKey,
@@ -806,6 +806,102 @@ struct SyncReconciliationTests {
         #expect(records.count == 1)
         #expect(records.first?.workoutUUID == workoutID)
         #expect(records.first?.wasImported == true)
+    }
+
+    @Test @MainActor func healthImportRecordsStayOutOfTheSyncedStore() {
+        let syncedNames = Set(TrainingStore.syncedModelTypes.map { String(describing: $0) })
+        #expect(!syncedNames.contains(String(describing: LocalHealthImportedWorkout.self)))
+        #expect(syncedNames.contains(String(describing: DismissedHealthWorkout.self)))
+    }
+
+    @Test @MainActor func reconcileSyncedDataKeepsOneLogPerHealthWorkout() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let workoutID = UUID().uuidString
+        let loggedAt = isoDate("2026-03-24T18:00:00Z")
+        for createdAt in ["2026-03-24T18:01:00Z", "2026-03-24T18:02:00Z"] {
+            fixture.context.insert(
+                HabitLog(
+                    date: loggedAt,
+                    numericValue: 1,
+                    note: "Imported from Apple Health",
+                    sourceType: .health,
+                    healthWorkoutUUID: workoutID,
+                    createdAt: isoDate(createdAt),
+                    habit: fixture.habit
+                )
+            )
+        }
+        try fixture.context.save()
+
+        try TrainingStore.reconcileSyncedData(context: fixture.context)
+
+        let healthLogs = try TrainingStore.fetchLogs(context: fixture.context).filter { $0.healthWorkoutUUID == workoutID }
+        #expect(healthLogs.count == 1)
+        #expect(healthLogs.first?.createdAt == isoDate("2026-03-24T18:01:00Z"))
+    }
+
+    @Test @MainActor func reconcileSyncedDataSettlesWorkoutsHandledOnAnotherDevice() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        func pendingRecord(_ workoutID: String) -> LocalHealthImportedWorkout {
+            LocalHealthImportedWorkout(
+                workoutUUID: workoutID,
+                statKeyRaw: StatKey.strength.rawValue,
+                habitSystemKey: nil,
+                sourceBundleIdentifier: "com.apple.Health",
+                activityTypeRaw: 50,
+                startDate: isoDate("2026-03-24T17:00:00Z"),
+                endDate: isoDate("2026-03-24T18:00:00Z"),
+                durationMinutes: 60,
+                wasImported: false,
+                awaitingHabitAssignment: true
+            )
+        }
+        let loggedElsewhereID = UUID().uuidString
+        let dismissedElsewhereID = UUID().uuidString
+        fixture.context.insert(pendingRecord(loggedElsewhereID))
+        fixture.context.insert(pendingRecord(dismissedElsewhereID))
+        fixture.context.insert(
+            HabitLog(
+                date: isoDate("2026-03-24T18:00:00Z"),
+                numericValue: 1,
+                note: "Imported from Apple Health",
+                sourceType: .health,
+                healthWorkoutUUID: loggedElsewhereID,
+                habit: fixture.habit
+            )
+        )
+        fixture.context.insert(DismissedHealthWorkout(workoutUUID: dismissedElsewhereID))
+        fixture.context.insert(DismissedHealthWorkout(workoutUUID: dismissedElsewhereID))
+        try fixture.context.save()
+
+        try TrainingStore.reconcileSyncedData(context: fixture.context)
+
+        let records = Dictionary(uniqueKeysWithValues: try TrainingStore.fetchImportedHealthWorkouts(context: fixture.context).map { ($0.workoutUUID, $0) })
+        #expect(records[loggedElsewhereID]?.wasImported == true)
+        #expect(records[loggedElsewhereID]?.awaitingHabitAssignment == false)
+        #expect(records[loggedElsewhereID]?.habitSystemKey == fixture.habit.systemKey)
+        #expect(records[dismissedElsewhereID]?.wasImported == false)
+        #expect(records[dismissedElsewhereID]?.awaitingHabitAssignment == false)
+        #expect(try TrainingStore.fetchDismissedHealthWorkoutIDs(context: fixture.context) == [dismissedElsewhereID])
+        #expect(try fixture.context.fetchCount(FetchDescriptor<DismissedHealthWorkout>()) == 1)
+    }
+
+    @Test @MainActor func deletingHealthLogDismissesItsWorkout() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let workoutID = UUID().uuidString
+        let log = try TrainingStore.log(
+            habit: fixture.habit,
+            value: 60,
+            date: isoDate("2026-03-24T18:00:00Z"),
+            note: "Imported from Apple Health",
+            source: .health,
+            healthWorkoutUUID: workoutID,
+            context: fixture.context
+        )
+
+        try TrainingStore.delete(log, context: fixture.context)
+
+        #expect(try TrainingStore.fetchDismissedHealthWorkoutIDs(context: fixture.context) == [workoutID])
     }
 
     @Test @MainActor func reconcileSyncedDataPreservesDistinctManualLogs() throws {
@@ -1107,7 +1203,7 @@ struct HealthImportTests {
         context: ModelContext
     ) {
         context.insert(
-            HealthImportedWorkout(
+            LocalHealthImportedWorkout(
                 workoutUUID: workoutID,
                 statKeyRaw: StatKey.strength.rawValue,
                 habitSystemKey: habit.systemKey,
@@ -1165,6 +1261,65 @@ struct HealthImportTests {
         #expect(SupportedWorkoutType.mapping(for: .yoga)?.statKey == .focus)
         // An activity absent from the catalog is not importable.
         #expect(SupportedWorkoutType.mapping(for: .americanFootball) == nil)
+    }
+
+    @Test @MainActor func healthDeletionRemovesLogAndRecordWithoutDismissingReplacement() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let oldID = UUID().uuidString
+        let replacementID = UUID().uuidString
+        let loggedAt = isoDate("2026-04-02T18:00:00Z")
+        insertHealthRecord(habit: fixture.habit, workoutID: oldID, endDate: loggedAt, context: fixture.context)
+        fixture.context.insert(HabitLog(
+            date: loggedAt,
+            numericValue: 60,
+            note: "Imported from Apple Health",
+            sourceType: .health,
+            healthWorkoutUUID: oldID,
+            habit: fixture.habit
+        ))
+        try fixture.context.save()
+
+        let removed = try HealthImportService.removeHealthWorkouts(withIDs: [oldID], context: fixture.context)
+        try fixture.context.save()
+
+        #expect(removed == 1)
+        #expect(try TrainingStore.fetchImportedHealthWorkouts(context: fixture.context).isEmpty)
+        #expect(try TrainingStore.fetchHealthLogsByWorkoutID(context: fixture.context).isEmpty)
+        #expect(try TrainingStore.fetchDismissedHealthWorkoutIDs(context: fixture.context).isEmpty)
+
+        // Editing a workout can replace its Health UUID. The new sample must
+        // be free to import while the original log stays removed.
+        insertHealthRecord(habit: fixture.habit, workoutID: replacementID, endDate: loggedAt, context: fixture.context)
+        let replacement = try TrainingStore.log(
+            habit: fixture.habit,
+            value: 75,
+            date: loggedAt.addingTimeInterval(900),
+            note: "Imported from Apple Health",
+            source: .health,
+            healthWorkoutUUID: replacementID,
+            context: fixture.context
+        )
+        #expect(replacement.healthWorkoutUUID == replacementID)
+        #expect(try TrainingStore.fetchHealthLogsByWorkoutID(context: fixture.context).count == 1)
+    }
+
+    @Test @MainActor func healthDeletionRemovesSyncedLogWithoutLocalRecord() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        let workoutID = UUID().uuidString
+        fixture.context.insert(HabitLog(
+            date: isoDate("2026-04-02T18:00:00Z"),
+            numericValue: 1,
+            note: "Imported on another device",
+            sourceType: .health,
+            healthWorkoutUUID: workoutID,
+            habit: fixture.habit
+        ))
+        try fixture.context.save()
+
+        #expect(try HealthImportService.removeHealthWorkouts(withIDs: [workoutID], context: fixture.context) == 1)
+        try fixture.context.save()
+        #expect(try TrainingStore.fetchHealthLogsByWorkoutID(context: fixture.context).isEmpty)
+        #expect(try TrainingStore.fetchDismissedHealthWorkoutIDs(context: fixture.context).isEmpty)
     }
 
     @Test @MainActor func healthAttributionMatchesByWorkoutUUIDAndCountsTowardWeek() throws {
@@ -2197,4 +2352,287 @@ struct SkillTaxonomyTests {
         #expect(curiosity.isArchived)
     }
 
+}
+
+@Suite("WidgetBackgroundRefreshTests")
+struct WidgetBackgroundRefreshTests {
+    @Test func expirationCompletesOnlyOnce() {
+        var results: [Bool] = []
+        let completion = WidgetRefreshTaskCompletion { results.append($0) }
+        completion.finish(success: false)
+        completion.finish(success: true)
+        #expect(results == [false])
+    }
+
+    @Test func successCompletesOnlyOnce() {
+        var results: [Bool] = []
+        let completion = WidgetRefreshTaskCompletion { results.append($0) }
+        completion.finish(success: true)
+        completion.finish(success: false)
+        #expect(results == [true])
+    }
+
+    @Test @MainActor func localRefreshUpdatesDailyTotalsWithoutHealth() throws {
+        let fixture = try makeStrengthFixture(baseline: 3)
+        // Quick Log shows the first four habits; make this fixture visible.
+        fixture.habit.sortOrder = -1
+        let now = Date()
+        fixture.context.insert(HabitLog(date: now, numericValue: 2, note: "", sourceType: .manual, createdAt: now, habit: fixture.habit))
+        try fixture.context.save()
+        try WidgetRefreshService.refreshLocalProgress(context: fixture.context, now: now)
+        let today = WidgetSnapshotStore.load()
+        #expect(today.todayHabits.first(where: { $0.id == fixture.habit.id })?.todayValue == 2)
+
+        let tomorrow = try #require(Calendar.current.date(byAdding: .day, value: 1, to: now))
+        try WidgetRefreshService.refreshLocalProgress(context: fixture.context, now: tomorrow)
+        let refreshed = WidgetSnapshotStore.load()
+        #expect(refreshed.generatedAt == tomorrow)
+        #expect(refreshed.todayHabits.first(where: { $0.id == fixture.habit.id })?.todayValue == 0)
+    }
+}
+
+@Suite("RankReviewAndSyncTests")
+struct RankReviewAndSyncTests {
+    @Test @MainActor func importedDuplicatesHaveOneDisplayRecordBeforeCleanup() throws {
+        let fixture = try makeStrengthFixture()
+        let newer = StatDomain(
+            key: fixture.stat.key, name: "Strength", iconName: "bolt.fill",
+            colorToken: "strength", descriptor: "", currentTierName: "",
+            startingBaseline: 3, currentBaseline: 3,
+            createdAt: fixture.stat.createdAt,
+            updatedAt: fixture.stat.updatedAt.addingTimeInterval(60)
+        )
+        fixture.context.insert(newer)
+        try fixture.context.save()
+        let rows = try TrainingStore.fetchStats(context: fixture.context)
+        #expect(rows.filter { $0.key == newer.key }.count == 2)
+        let visible = TrainingStore.canonicalStats(rows).filter { $0.key == newer.key }
+        #expect(visible.count == 1)
+        #expect(visible.first?.id == newer.id)
+        #expect(TrainingStore.canonicalStats(Array(rows.reversed())).map(\.id) == TrainingStore.canonicalStats(rows).map(\.id))
+
+        _ = try TrainingStore.reconcileSyncedData(context: fixture.context)
+        let merged = try TrainingStore.fetchStats(context: fixture.context).filter { $0.key == newer.key }
+        #expect(merged.count == 1)
+        #expect(merged.first?.id == newer.id)
+        #expect(fixture.habit.statDomain?.id == newer.id)
+    }
+
+    @Test @MainActor func newerArchivedRecordDoesNotExposeOlderActiveDuplicate() throws {
+        let fixture = try makeStrengthFixture()
+        let newer = StatDomain(
+            key: fixture.stat.key, name: "Strength", iconName: "bolt.fill",
+            colorToken: "strength", descriptor: "", currentTierName: "",
+            startingBaseline: 3, currentBaseline: 3,
+            updatedAt: fixture.stat.updatedAt.addingTimeInterval(60)
+        )
+        newer.isArchived = true
+        fixture.context.insert(newer)
+        try fixture.context.save()
+        #expect(try TrainingStore.fetchActiveStats(context: fixture.context).allSatisfy { $0.key != newer.key })
+    }
+
+    @Test @MainActor func unchangedRankChangeKeepsTimestampAndSeenState() throws {
+        let now = isoDate("2026-03-30T12:00:00Z")
+        let week = isoDate("2026-03-23T00:00:00Z")
+        let fixture = try makeStrengthFixture(baseline: 3, createdAt: week)
+        try addSessionLogs(count: 12, habit: fixture.habit, weekStart: week, context: fixture.context)
+        try TrainingStore.refreshProgress(for: fixture.stat, context: fixture.context, reason: .appRefresh, now: now)
+        let original = try #require(fixture.stat.pendingRankChange)
+        let seenAt = now.addingTimeInterval(1)
+        try TrainingStore.markRankChangeSeen(for: fixture.stat, context: fixture.context, now: seenAt)
+        try TrainingStore.refreshProgress(for: fixture.stat, context: fixture.context, reason: .appRefresh, now: now.addingTimeInterval(60))
+        #expect(fixture.stat.pendingRankChange == original)
+        #expect(fixture.stat.pendingRankChangeViewedAt == seenAt)
+    }
+
+    @Test @MainActor func dismissAllKeepsLevelsLogsAndHistory() throws {
+        let fixture = try makeStrengthFixture()
+        let stats = try TrainingStore.fetchActiveStats(context: fixture.context)
+        let cardio = try #require(stats.first { $0.statKey == .cardio })
+        let now = Date()
+        fixture.stat.createdAt = now.addingTimeInterval(-14 * 24 * 60 * 60)
+        try TrainingStore.refreshProgress(for: fixture.stat, context: fixture.context, reason: .appRefresh, now: now)
+        #expect(!(fixture.stat.weeklyResolutions ?? []).isEmpty)
+        fixture.stat.rankLevel = 5
+        fixture.stat.acknowledgedRankLevel = 4
+        fixture.stat.setPendingRankChange(from: 4, to: 5, direction: .up, reason: .appRefresh, recordedAt: now)
+        cardio.rankLevel = 2
+        cardio.acknowledgedRankLevel = 3
+        cardio.setPendingRankChange(from: 3, to: 2, direction: .down, reason: .appRefresh, recordedAt: now)
+        try addSessionLogs(count: 2, habit: fixture.habit, weekStart: now, context: fixture.context)
+        let logIDs = Set(try TrainingStore.fetchLogs(context: fixture.context).map(\.id))
+        let resolutionIDs = Set(try TrainingStore.fetchResolutions(context: fixture.context).map(\.id))
+        let count = try TrainingStore.acknowledgeAllPendingRankChanges(context: fixture.context, now: now)
+        #expect(count == 2)
+        #expect(fixture.stat.rankLevel == 5)
+        #expect(cardio.rankLevel == 2)
+        #expect(fixture.stat.acknowledgedRankLevel == 5)
+        #expect(cardio.acknowledgedRankLevel == 2)
+        #expect(fixture.stat.pendingRankChange == nil)
+        #expect(cardio.pendingRankChange == nil)
+        #expect(Set(try TrainingStore.fetchLogs(context: fixture.context).map(\.id)) == logIDs)
+        #expect(Set(try TrainingStore.fetchResolutions(context: fixture.context).map(\.id)) == resolutionIDs)
+        let reloaded = try TrainingStore.fetchStats(context: ModelContext(fixture.context.container))
+        let savedStrength = try #require(reloaded.first { $0.id == fixture.stat.id })
+        let savedCardio = try #require(reloaded.first { $0.id == cardio.id })
+        #expect(savedStrength.acknowledgedRankLevel == 5 && savedStrength.pendingRankChange == nil)
+        #expect(savedCardio.acknowledgedRankLevel == 2 && savedCardio.pendingRankChange == nil)
+        #expect(try TrainingStore.acknowledgeAllPendingRankChanges(context: fixture.context, now: now) == 0)
+    }
+}
+
+@Suite("PersistentStoreUpgradeTests", .serialized)
+@MainActor
+struct PersistentStoreUpgradeTests {
+    private func temporaryStore() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MythosUpgrade-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("MythosLog.store")
+    }
+
+    private func legacyWorkout(id: String = "legacy-workout") -> HealthImportedWorkout {
+        HealthImportedWorkout(
+            workoutUUID: id, statKeyRaw: "strength", habitSystemKey: "strength-session",
+            sourceName: "Fixture Watch", sourceBundleIdentifier: "test.watch", activityTypeRaw: 50,
+            startDate: isoDate("2026-03-24T17:00:00Z"), endDate: isoDate("2026-03-24T18:00:00Z"),
+            durationMinutes: 60, wasImported: false, isDuplicate: true,
+            overlapsImportedWorkout: true, relatedWorkoutUUID: "related-workout", awaitingHabitAssignment: true,
+            createdAt: isoDate("2026-03-24T18:01:00Z")
+        )
+    }
+
+    @Test func originalStoreUpgradePreservesRelationshipsAndBacksUpData() throws {
+        let url = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let originalSchema = Schema([
+            StatDomain.self, Habit.self, HabitLog.self, WeeklyResolution.self,
+            AppSettings.self, HealthImportedWorkout.self, Goal.self
+        ])
+        let logID = UUID()
+        try autoreleasepool {
+            let original = try ModelContainer(for: originalSchema, configurations: [
+                ModelConfiguration(AppIdentity.displayName, schema: originalSchema, url: url, cloudKitDatabase: .none)
+            ])
+            let context = ModelContext(original)
+            let stat = StatDomain(key: "strength", name: "Strength", iconName: "dumbbell", colorToken: "strength",
+                                  descriptor: "", sortOrder: 0, currentTierName: "Untrained", startingBaseline: 3, currentBaseline: 3)
+            let habit = Habit(name: "My session", measurementType: .booleanSession, unitLabel: "sessions",
+                              scheduleType: .weekly, targetPerPeriod: 3, sortOrder: 0, statDomain: stat)
+            context.insert(stat)
+            context.insert(habit)
+            context.insert(HabitLog(id: logID, date: .now, numericValue: 1, note: "Keep this", sourceType: .manual, habit: habit))
+            context.insert(AppSettings(hasCompletedOnboarding: true))
+            context.insert(legacyWorkout())
+            try context.save()
+            // Exercise the backup while committed data may still be in WAL.
+            try TrainingStore.backupBeforeSchemaChange(at: url)
+        }
+        try autoreleasepool {
+            let upgraded = try TrainingStore.makePersistentContainer(at: url)
+            let context = ModelContext(upgraded)
+            let log = try #require(try context.fetch(FetchDescriptor<HabitLog>()).first)
+            #expect(log.id == logID)
+            #expect(log.note == "Keep this")
+            #expect(log.habit?.name == "My session")
+            #expect(log.habit?.statDomain?.key == "strength")
+            #expect(try context.fetch(FetchDescriptor<HealthImportedWorkout>()).isEmpty)
+            let workout = try #require(try TrainingStore.fetchImportedHealthWorkouts(context: context).first)
+            #expect(workout.workoutUUID == "legacy-workout")
+            #expect(workout.sourceName == "Fixture Watch")
+            #expect(workout.durationMinutes == 60)
+            #expect(workout.awaitingHabitAssignment)
+            #expect(workout.isDuplicate && workout.overlapsImportedWorkout && !workout.wasImported)
+            #expect(workout.relatedWorkoutUUID == "related-workout")
+        }
+        let backupDirectory = url.deletingLastPathComponent().appendingPathComponent("StoreBackups")
+        let backupCount = try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil).count
+        let reopened = try TrainingStore.makePersistentContainer(at: url)
+        #expect(try TrainingStore.fetchImportedHealthWorkouts(context: ModelContext(reopened)).count == 1)
+        let backups = try FileManager.default.contentsOfDirectory(
+            at: backupDirectory, includingPropertiesForKeys: nil
+        )
+        #expect(!backups.isEmpty)
+        #expect(backups.count == backupCount)
+        let backup = try ModelContainer(for: originalSchema, configurations: [
+            ModelConfiguration(AppIdentity.displayName, schema: originalSchema,
+                               url: backups[0].appendingPathComponent(url.lastPathComponent), cloudKitDatabase: .none)
+        ])
+        let backupContext = ModelContext(backup)
+        #expect(try backupContext.fetch(FetchDescriptor<HabitLog>()).first?.id == logID)
+        #expect(try backupContext.fetch(FetchDescriptor<HealthImportedWorkout>()).count == 1)
+    }
+
+    @Test func interimSplitStoreCopiesWorkoutsOnceAndKeepsSource() throws {
+        let url = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let oldLocalURL = url.deletingLastPathComponent().appendingPathComponent("MythosLog-LocalOnly.store")
+        let oldSynced = Schema([StatDomain.self, Habit.self, HabitLog.self, WeeklyResolution.self,
+                                AppSettings.self, Goal.self, DismissedHealthWorkout.self])
+        let oldLocal = Schema([HealthImportedWorkout.self])
+        try autoreleasepool {
+            let old = try ModelContainer(for: Schema([
+                StatDomain.self, Habit.self, HabitLog.self, WeeklyResolution.self,
+                AppSettings.self, Goal.self, DismissedHealthWorkout.self, HealthImportedWorkout.self
+            ]), configurations: [
+                ModelConfiguration(AppIdentity.displayName, schema: oldSynced, url: url, cloudKitDatabase: .none),
+                ModelConfiguration("LocalOnly", schema: oldLocal, url: oldLocalURL, cloudKitDatabase: .none)
+            ])
+            let context = ModelContext(old)
+            context.insert(AppSettings(hasCompletedOnboarding: true))
+            context.insert(DismissedHealthWorkout(workoutUUID: "dismissed"))
+            context.insert(legacyWorkout())
+            try context.save()
+        }
+        try autoreleasepool {
+            let container = try TrainingStore.makePersistentContainer(at: url)
+            let context = ModelContext(container)
+            #expect(try context.fetch(FetchDescriptor<DismissedHealthWorkout>()).first?.workoutUUID == "dismissed")
+            let record = try #require(try TrainingStore.fetchImportedHealthWorkouts(context: context).first)
+            #expect(record.awaitingHabitAssignment)
+            context.delete(record)
+            try context.save()
+        }
+        let container = try TrainingStore.makePersistentContainer(at: url)
+        #expect(try TrainingStore.fetchImportedHealthWorkouts(context: ModelContext(container)).isEmpty)
+        let verificationURL = url.deletingLastPathComponent().appendingPathComponent("VerifyOldLocal.store")
+        try TrainingStore.copyPersistentStore(from: oldLocalURL, to: verificationURL)
+        let original = try ModelContainer(for: oldLocal, configurations: [
+            ModelConfiguration("LocalOnly", schema: oldLocal, url: verificationURL, cloudKitDatabase: .none)
+        ])
+        #expect(try ModelContext(original).fetch(FetchDescriptor<HealthImportedWorkout>()).count == 1)
+    }
+
+    @Test func repeatedCloudImportKeepsNewerLocalAssignment() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        let current = LocalHealthImportedWorkout(legacy: legacyWorkout())
+        current.habitSystemKey = "user-chosen-habit"
+        current.awaitingHabitAssignment = false
+        context.insert(current)
+        context.insert(legacyWorkout())
+        try context.save()
+        #expect(try TrainingStore.moveLegacyHealthImportsToLocalStore(context: context))
+        #expect(try TrainingStore.fetchImportedHealthWorkouts(context: context).count == 1)
+        #expect(current.habitSystemKey == "user-chosen-habit")
+        #expect(!current.awaitingHabitAssignment)
+        #expect(try context.fetch(FetchDescriptor<HealthImportedWorkout>()).isEmpty)
+        #expect(try !TrainingStore.moveLegacyHealthImportsToLocalStore(context: context))
+    }
+
+    @Test func unreadableStoreIsNeverDeletedOrReplaced() throws {
+        let url = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let original = Data("Unrecognized store: must remain untouched".utf8)
+        try original.write(to: url)
+        #expect(throws: (any Error).self) { try TrainingStore.makePersistentContainer(at: url) }
+        #expect(try Data(contentsOf: url) == original)
+    }
+
+    @Test func existingFallbackRemainsSelectedAcrossLaunches() {
+        #expect(!TrainingStore.selectedStoreUsesAppGroup(canUseAppGroup: true, appLocalStoreExists: true, savedLocation: nil))
+        #expect(!TrainingStore.selectedStoreUsesAppGroup(canUseAppGroup: true, appLocalStoreExists: true, savedLocation: "app-local"))
+        #expect(TrainingStore.selectedStoreUsesAppGroup(canUseAppGroup: true, appLocalStoreExists: true, savedLocation: "shared"))
+        #expect(TrainingStore.selectedStoreUsesAppGroup(canUseAppGroup: true, appLocalStoreExists: false, savedLocation: nil))
+    }
 }

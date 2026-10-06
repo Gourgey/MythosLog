@@ -90,3 +90,19 @@ The Settings screen includes development tools to:
 - The app is intentionally local-first and does not require a backend.
 - Cloud sync is not enabled in V1, but the model layer is separated cleanly enough for later SwiftData + CloudKit work.
 - The project file was rebuilt to include the app, widget, and test targets explicitly. If it ever needs regeneration, the Ruby script in `Scripts/` documents that setup.
+
+## Widget refresh
+
+- Health workout changes wake the app through HealthKit background delivery. The app registers its observer at launch and finishes the callback after syncing.
+- A background app refresh requests the next check no earlier than 30 minutes later. iOS controls actual delivery; Background App Refresh settings, battery conditions, and app usage affect timing.
+- Open the updated app once to register background delivery and scheduling. Health auto-import must be enabled for automatic workout imports.
+
+Verification on a signed physical device: leave the app in the background, save, edit, and delete a Health workout, and check that the widget and Mythos Log follow those changes without opening the app. Health background delivery cannot be verified in the simulator. For scheduled refresh, use Xcode's debugger to simulate the `studio.curateddesign.MythosLog.widgetRefresh` task launch and expiration; confirm the task completes once and schedules its next check.
+
+### Existing-installation storage upgrades
+
+- `HealthImportedWorkout` remains in the synced schema only for compatibility with older stores. Startup and completed CloudKit imports copy those rows into `LocalHealthImportedWorkout`, save the local copy, then delete the legacy rows. New Health imports use only the local model.
+- The interim `MythosLog-LocalOnly.store` is read without saving to it. Its workout assignments are copied once into `MythosLog-HealthLocal-v2.store`; the original is retained. An interrupted copy can be retried without duplicating workouts.
+- Before changing a synced store's schema, Core Data makes a complete backup under the adjacent `StoreBackups` directory, including committed WAL data. These recovery backups are excluded from device backup.
+- An existing app-local store remains selected, including installations that previously fell back from the App Group store. The selected location is remembered. Startup no longer switches to another store or resets files after an error; it displays a storage error and pauses normal UI/background writes instead.
+- `PersistentStoreUpgradeTests` exercises original and interim store upgrades, relationships, readable backups, repeated imports, and preservation of unreadable files. Live CloudKit metadata and Health background delivery still require a signed-device check.

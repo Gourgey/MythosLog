@@ -69,44 +69,46 @@ private struct TrainingSummaryWidgetEntryView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let columns = family == .systemMedium
-                ? (skills.count > 3 ? (skills.count + 1) / 2 : skills.count)
-                : skills.count
-            let rows = family == .systemMedium && skills.count > 3 ? 2 : 1
-            let spacing: CGFloat = family == .accessoryRectangular ? 10 : 16
-            let diameter = max(0, min(
-                family == .accessoryRectangular ? 48 : 64,
-                (geometry.size.width - CGFloat(max(columns - 1, 0)) * spacing) / CGFloat(max(columns, 1)),
-                (geometry.size.height - CGFloat(rows - 1) * spacing) / CGFloat(rows)
-            ))
+        VStack(spacing: 4) {
+            GeometryReader { geometry in
+                let columns = family == .systemMedium
+                    ? (skills.count > 3 ? (skills.count + 1) / 2 : skills.count)
+                    : skills.count
+                let rows = family == .systemMedium && skills.count > 3 ? 2 : 1
+                let spacing: CGFloat = family == .accessoryRectangular ? 10 : 16
+                let diameter = max(0, min(
+                    family == .accessoryRectangular ? 48 : 64,
+                    (geometry.size.width - CGFloat(max(columns - 1, 0)) * spacing) / CGFloat(max(columns, 1)),
+                    (geometry.size.height - CGFloat(rows - 1) * spacing) / CGFloat(rows)
+                ))
 
-            if skills.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "circle.dotted")
-                        .font(.system(size: 28, weight: .light))
-                    Text("Open Mythos Log to sync skills")
-                        .font(.caption2)
-                        .multilineTextAlignment(.center)
-                }
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: spacing) {
-                    HStack(spacing: spacing) {
-                        ForEach(skills.prefix(max(columns, 1))) { stat in
-                            SkillProgressCircle(stat: stat, diameter: diameter)
-                        }
+                if skills.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "circle.dotted")
+                            .font(.system(size: 28, weight: .light))
+                        Text("Open Mythos Log to sync skills")
+                            .font(.caption2)
+                            .multilineTextAlignment(.center)
                     }
-                    if rows > 1 {
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: spacing) {
                         HStack(spacing: spacing) {
-                            ForEach(skills.dropFirst(columns)) { stat in
+                            ForEach(skills.prefix(max(columns, 1))) { stat in
                                 SkillProgressCircle(stat: stat, diameter: diameter)
                             }
                         }
+                        if rows > 1 {
+                            HStack(spacing: spacing) {
+                                ForEach(skills.dropFirst(columns)) { stat in
+                                    SkillProgressCircle(stat: stat, diameter: diameter)
+                                }
+                            }
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .containerBackground(for: .widget) {
@@ -133,7 +135,10 @@ private struct QuickLogWidgetEntryView: View {
     var body: some View {
         arcWidgetSurface(accent: accent) {
             VStack(alignment: .leading, spacing: 10) {
-                widgetEyebrow("QUICK LOG", accent: accent)
+                HStack {
+                    widgetEyebrow("QUICK LOG", accent: accent)
+                    Spacer(minLength: 4)
+                }
 
                 if habits.isEmpty {
                     emptyState

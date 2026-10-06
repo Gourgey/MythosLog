@@ -3,7 +3,17 @@ import SwiftData
 
 struct ContentView: View {
     var body: some View {
-        AppRootView()
+        if let error = TrainingStore.persistentStoreError {
+            ContentUnavailableView {
+                Label("Saved data couldn’t be opened", systemImage: "externaldrive.badge.exclamationmark")
+            } description: {
+                Text("Your database has been kept. Logging and syncing are paused to protect it. Close and reopen the app to retry.")
+            } actions: {
+                ShareLink("Share error details", item: error)
+            }
+        } else {
+            AppRootView()
+        }
     }
 }
 

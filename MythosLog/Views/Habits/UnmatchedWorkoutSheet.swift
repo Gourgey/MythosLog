@@ -6,7 +6,7 @@ import HealthKit
 struct UnmatchedWorkoutSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query private var workouts: [HealthImportedWorkout]
+    @Query private var workouts: [LocalHealthImportedWorkout]
 
     let stat: StatDomain
 
@@ -14,12 +14,12 @@ struct UnmatchedWorkoutSheet: View {
         self.stat = stat
         let statKey = stat.key
         _workouts = Query(
-            filter: #Predicate<HealthImportedWorkout> { record in
+            filter: #Predicate<LocalHealthImportedWorkout> { record in
                 record.statKeyRaw == statKey &&
                 record.awaitingHabitAssignment == true &&
                 record.isDuplicate == false
             },
-            sort: \HealthImportedWorkout.startDate,
+            sort: \LocalHealthImportedWorkout.startDate,
             order: .reverse
         )
     }
@@ -69,7 +69,7 @@ struct UnmatchedWorkoutSheet: View {
         }
     }
 
-    private func workoutRow(_ record: HealthImportedWorkout) -> some View {
+    private func workoutRow(_ record: LocalHealthImportedWorkout) -> some View {
         let activityName = Self.displayName(for: record.activityTypeRaw)
         let source = record.sourceName?.isEmpty == false ? record.sourceName ?? "Apple Health" : "Apple Health"
         let date = record.startDate.formatted(date: .abbreviated, time: .shortened)
@@ -149,7 +149,7 @@ struct UnmatchedWorkoutSheet: View {
 
     // MARK: - Actions
 
-    private func attribute(record: HealthImportedWorkout, to habit: Habit) {
+    private func attribute(record: LocalHealthImportedWorkout, to habit: Habit) {
         let records = matchingWorkouts(for: record)
         guard !records.isEmpty else { return }
 
@@ -174,7 +174,7 @@ struct UnmatchedWorkoutSheet: View {
     }
 
     @discardableResult
-    private func attributeSingle(record: HealthImportedWorkout, to habit: Habit) -> Bool {
+    private func attributeSingle(record: LocalHealthImportedWorkout, to habit: Habit) -> Bool {
         let value = loggedValue(for: record, habit: habit)
         let sessionType = record.sourceName ?? "Apple Health"
         let note = "Imported from Apple Health\(record.sourceName.map { " via \($0)" } ?? "")"
@@ -198,7 +198,7 @@ struct UnmatchedWorkoutSheet: View {
         return true
     }
 
-    private func createNewHabitAndAttribute(record: HealthImportedWorkout, name: String) {
+    private func createNewHabitAndAttribute(record: LocalHealthImportedWorkout, name: String) {
         let measurementType: MeasurementType = .minutes
         let nextSortOrder = (habits.map(\.sortOrder).max() ?? -1) + 1
         let habit = Habit(
@@ -218,18 +218,19 @@ struct UnmatchedWorkoutSheet: View {
         attribute(record: record, to: habit)
     }
 
-    private func ignore(record: HealthImportedWorkout) {
+    private func ignore(record: LocalHealthImportedWorkout) {
         for pendingRecord in matchingWorkouts(for: record) {
             pendingRecord.habitSystemKey = nil
             pendingRecord.awaitingHabitAssignment = false
             pendingRecord.wasImported = false
+            TrainingStore.dismissHealthWorkout(uuid: pendingRecord.workoutUUID, context: modelContext)
         }
         try? modelContext.save()
     }
 
     // MARK: - Helpers
 
-    private func matchingWorkouts(for record: HealthImportedWorkout) -> [HealthImportedWorkout] {
+    private func matchingWorkouts(for record: LocalHealthImportedWorkout) -> [LocalHealthImportedWorkout] {
         workouts.filter { candidate in
             candidate.statKeyRaw == record.statKeyRaw &&
             candidate.activityTypeRaw == record.activityTypeRaw &&
@@ -238,7 +239,7 @@ struct UnmatchedWorkoutSheet: View {
         }
     }
 
-    private func loggedValue(for record: HealthImportedWorkout, habit: Habit) -> Double {
+    private func loggedValue(for record: LocalHealthImportedWorkout, habit: Habit) -> Double {
         switch habit.measurementType {
         case .booleanSession: return 1
         case .minutes: return max(1, record.durationMinutes.rounded())

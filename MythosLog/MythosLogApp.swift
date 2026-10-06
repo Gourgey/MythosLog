@@ -19,6 +19,13 @@ final class MythosLogAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        TrainingStore.startCloudKitEventObserver()
+        WidgetRefreshService.register()
+        WidgetRefreshService.schedule()
+        #if canImport(HealthKit)
+        HealthImportService.startWorkoutObserverIfEnabled()
+        #endif
+
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
             Self.pendingShortcutItem = shortcutItem
             return false
@@ -44,6 +51,10 @@ enum HomeScreenQuickActionService {
 
     @MainActor
     static func refresh(using container: ModelContainer) {
+        guard TrainingStore.persistentStoreError == nil else {
+            UIApplication.shared.shortcutItems = []
+            return
+        }
         let context = ModelContext(container)
         guard let settings = try? TrainingStore.fetchSettings(context: context), settings.hasCompletedOnboarding else {
             UIApplication.shared.shortcutItems = []
@@ -152,6 +163,9 @@ struct MythosLogApp: App {
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                WidgetRefreshService.schedule()
+            }
             guard newPhase == .active else { return }
             TrainingStore.refreshAppState()
             #if canImport(UIKit)

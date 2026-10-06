@@ -3,13 +3,15 @@ import SwiftData
 
 private enum IntentSupport {
     @MainActor
-    static func context() -> ModelContext {
-        ModelContext(TrainingStore.sharedModelContainer)
+    static func context() throws -> ModelContext {
+        let container = TrainingStore.sharedModelContainer
+        guard TrainingStore.persistentStoreError == nil else { throw CocoaError(.persistentStoreOpen) }
+        return ModelContext(container)
     }
 
     @MainActor
     static func logHabit(systemKey: String, value: Double, note: String = "") throws -> String {
-        let context = context()
+        let context = try context()
         guard let habit = try TrainingStore.fetchActiveHabits(context: context).first(where: { $0.systemKey == systemKey }) else {
             return "Habit not found."
         }
@@ -20,7 +22,7 @@ private enum IntentSupport {
 
     @MainActor
     static func completeHabit(named habitName: String) throws -> String {
-        let context = context()
+        let context = try context()
         guard let habit = try TrainingStore.fetchActiveHabits(context: context).first(where: { $0.name == habitName }) else {
             return "Habit not found."
         }
@@ -185,7 +187,7 @@ private enum IntentSupport {
 
 struct ActiveHabitOptionsProvider: DynamicOptionsProvider {
     func results() async throws -> [String] {
-        let context = IntentSupport.context()
+        let context = try IntentSupport.context()
         return (try? TrainingStore.fetchActiveHabits(context: context).map(\.name)) ?? []
     }
 }

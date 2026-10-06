@@ -58,6 +58,8 @@ struct DashboardView: View {
     @State private var habitPickerStat: IdentifiableStat?
     @State private var unmatchedStat: IdentifiableStat?
     @State private var showingRankReview = false
+    @State private var rankDismissError = ""
+    @State private var showingRankDismissError = false
     @State private var showingStatsSheet = false
     @State private var honeycombAvailableWidth: CGFloat = 380
     @State private var dashboardViewportHeight: CGFloat = 0
@@ -99,14 +101,7 @@ struct DashboardView: View {
     }
 
     private var activeStats: [StatDomain] {
-        stats
-            .filter { $0.isActive }
-            .sorted {
-                if $0.sortOrder == $1.sortOrder {
-                    return $0.name < $1.name
-                }
-                return $0.sortOrder < $1.sortOrder
-            }
+        TrainingStore.canonicalStats(stats).filter { $0.isActive }
     }
 
     private var pendingRankChanges: [StatDomain] {
@@ -178,6 +173,11 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingStatsSheet) {
                 statsSheet
+            }
+            .alert("Couldn't dismiss changes", isPresented: $showingRankDismissError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(rankDismissError)
             }
     }
 
@@ -413,43 +413,69 @@ struct DashboardView: View {
     private var rankReviewBanner: some View {
         let ups = pendingRankChanges.filter { $0.pendingRankChange?.direction == .up }.count
         let downs = pendingRankChanges.count - ups
-        return Button {
-            showingRankReview = true
-        } label: {
-            V4Card(accent: TrainingTheme.positiveStrong) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(TrainingTheme.positiveStrong.opacity(0.14))
-                            .frame(width: 40, height: 40)
-                        Image(systemName: "rosette")
-                            .font(.system(size: 17, weight: .black))
-                            .foregroundStyle(TrainingTheme.positiveStrong)
-                    }
+        return V4Card(accent: TrainingTheme.positiveStrong) {
+            VStack(spacing: 12) {
+                Button {
+                    showingRankReview = true
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(TrainingTheme.positiveStrong.opacity(0.14))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "rosette")
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(TrainingTheme.positiveStrong)
+                        }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Rank changes to review")
-                            .font(.system(.headline, design: .serif).weight(.regular))
-                            .foregroundStyle(TrainingTheme.textPrimary)
-                        HStack(spacing: 8) {
-                            if ups > 0 {
-                                V4StatusPill(text: "\(ups) up", tint: TrainingTheme.positiveStrong, systemImage: "arrow.up")
-                            }
-                            if downs > 0 {
-                                V4StatusPill(text: "\(downs) down", tint: TrainingTheme.danger, systemImage: "arrow.down")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Rank changes to review")
+                                .font(.system(.headline, design: .serif).weight(.regular))
+                                .foregroundStyle(TrainingTheme.textPrimary)
+                            HStack(spacing: 8) {
+                                if ups > 0 {
+                                    V4StatusPill(text: "\(ups) up", tint: TrainingTheme.positiveStrong, systemImage: "arrow.up")
+                                }
+                                if downs > 0 {
+                                    V4StatusPill(text: "\(downs) down", tint: TrainingTheme.danger, systemImage: "arrow.down")
+                                }
                             }
                         }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(TrainingTheme.textMuted)
                     }
+                }
+                .buttonStyle(.plain)
 
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(TrainingTheme.textMuted)
+                Divider()
+                HStack(spacing: 12) {
+                    Text("Keep new levels and skip reveals.")
+                        .font(.caption)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                    Spacer(minLength: 0)
+                    Button("Dismiss all", action: dismissAllRankChanges)
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.bordered)
+                        .tint(TrainingTheme.positiveStrong)
+                        .fixedSize()
+                        .accessibilityHint("Acknowledges all rank changes without playing the animations.")
                 }
             }
         }
-        .buttonStyle(.plain)
+    }
+
+    private func dismissAllRankChanges() {
+        do {
+            try TrainingStore.acknowledgeAllPendingRankChanges(context: modelContext)
+            showingRankReview = false
+        } catch {
+            rankDismissError = error.localizedDescription
+            showingRankDismissError = true
+        }
     }
 
     // MARK: - Dashboard sections (Phase 7)
@@ -798,7 +824,7 @@ struct DashboardView: View {
                 .foregroundStyle(TrainingTheme.textSecondary)
 
             LazyVStack(spacing: 16) {
-                ForEach(activeStats) { stat in
+                ForEach(activeStats, id: \.key) { stat in
                     let itemSnapshot = snapshot(for: stat)
                     let trend = recentTrend(for: stat)
                     let habits = TrainingStore.activeHabits(for: stat)
@@ -840,7 +866,7 @@ struct DashboardView: View {
         let unmatched = awaitingAttributionStatKeys
         return VStack(alignment: .leading, spacing: 0) {
             CenteredDashboardGridLayout(columns: twoColumnColumns, spacing: twoColumnSpacing) {
-                ForEach(activeStats) { stat in
+                ForEach(activeStats, id: \.key) { stat in
                     twoColumnTile(
                         for: stat,
                         hasUnmatchedImports: unmatched.contains(stat.key)
@@ -858,7 +884,7 @@ struct DashboardView: View {
             honeycombGameGridDashboard(unmatched: unmatched)
         } else {
             CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
-                ForEach(activeStats) { stat in
+                ForEach(activeStats, id: \.key) { stat in
                     gameDashboardTile(
                         for: stat,
                         hasUnmatchedImports: unmatched.contains(stat.key)
@@ -890,7 +916,7 @@ struct DashboardView: View {
         return VStack(spacing: gameGridRowSpacing) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, rowStats in
                 HStack(spacing: gameGridSpacing) {
-                    ForEach(rowStats) { stat in
+                    ForEach(rowStats, id: \.key) { stat in
                         gameDashboardTile(
                             for: stat,
                             hasUnmatchedImports: unmatched.contains(stat.key)
@@ -1616,9 +1642,7 @@ private struct CenteredDashboardGridLayout: Layout {
     }
 
     func updateCache(_ cache: inout CacheData, subviews: Subviews) {
-        if cache.sizes.count != subviews.count {
-            cache = CacheData()
-        }
+        cache = CacheData()
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) -> CGSize {
@@ -1652,9 +1676,9 @@ private struct CenteredDashboardGridLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) {
         guard !subviews.isEmpty, columns > 0 else { return }
 
-        if cache.sizes.count != subviews.count || cache.columnWidth == 0 {
-            _ = sizeThatFits(proposal: ProposedViewSize(width: bounds.width, height: proposal.height), subviews: subviews, cache: &cache)
-        }
+        // Placement must use the final width and current tile contents, not
+        // measurements from an earlier proposal or an earlier rank.
+        _ = sizeThatFits(proposal: ProposedViewSize(width: bounds.width, height: nil), subviews: subviews, cache: &cache)
 
         var y = bounds.minY
 
@@ -1674,7 +1698,8 @@ private struct CenteredDashboardGridLayout: Layout {
 
                 subviews[index].place(
                     at: CGPoint(x: x, y: y + yOffset),
-                    proposal: ProposedViewSize(width: cache.columnWidth, height: rowHeight)
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: cache.columnWidth, height: itemSize.height)
                 )
             }
 

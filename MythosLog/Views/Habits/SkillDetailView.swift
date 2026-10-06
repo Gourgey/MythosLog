@@ -5,7 +5,7 @@ struct SkillDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsRecords: [AppSettings]
     @Query private var skillGoals: [Goal]
-    @Query private var unmatchedWorkouts: [HealthImportedWorkout]
+    @Query private var unmatchedWorkouts: [LocalHealthImportedWorkout]
 
     let stat: StatDomain
     let opensLogSheetOnAppear: Bool
@@ -42,7 +42,7 @@ struct SkillDetailView: View {
         )
         let statKey = stat.key
         _unmatchedWorkouts = Query(
-            filter: #Predicate<HealthImportedWorkout> { record in
+            filter: #Predicate<LocalHealthImportedWorkout> { record in
                 record.statKeyRaw == statKey &&
                 record.awaitingHabitAssignment == true &&
                 record.isDuplicate == false
