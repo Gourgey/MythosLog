@@ -563,14 +563,10 @@ struct RankArtworkView: View {
             return "heart.text.square.fill"
         case "focus":
             return "scope"
-        case "curiosity":
-            return "sparkles.rectangle.stack.fill"
         case "cardio":
             return "figure.run"
         case "cooking":
             return "fork.knife"
-        case "reading":
-            return "book.pages.fill"
         default:
             return "person.crop.circle.fill"
         }

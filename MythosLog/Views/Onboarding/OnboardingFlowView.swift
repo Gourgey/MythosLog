@@ -10,6 +10,9 @@ struct OnboardingFlowView: View {
     @State private var baselines = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, $0.defaultBaseline) })
     @State private var baselineDrafts = Dictionary(uniqueKeysWithValues: TrainingArcConfig.statTemplates.map { ($0.key, "\($0.defaultBaseline)") })
     @State private var goalDrafts: [StatKey: String] = [:]
+    /// Skills whose Level 10 goal (rather than current amount) is the value
+    /// the large editor on their card is changing.
+    @State private var editingGoalKeys: Set<StatKey> = []
     @State private var enableNotifications = false
     let onComplete: () -> Void
 
@@ -267,7 +270,7 @@ struct OnboardingFlowView: View {
                     .foregroundStyle(TrainingTheme.textPrimary)
                 Text("For each skill, set what you honestly do in a normal week. That sets your starting rank.")
                     .foregroundStyle(TrainingTheme.textSecondary)
-                Text("Optionally add a Level 10 goal: the weekly amount you're working toward. Reaching it is the top rank, and the ranks in between are spread evenly up to it. Leave it blank to use the standard scale.")
+                Text("Optionally tap Level 10 goal to set the weekly amount you're working toward. Reaching it is the top rank, and the ranks in between are spread evenly up to it.")
                     .font(.subheadline)
                     .foregroundStyle(TrainingTheme.textSecondary)
 
@@ -291,8 +294,39 @@ struct OnboardingFlowView: View {
     private func goalBinding(for key: StatKey) -> Binding<String> {
         Binding(
             get: { goalDrafts[key] ?? "" },
-            set: { goalDrafts[key] = $0.filter(\.isNumber) }
+            set: { draft in
+                let digitsOnly = draft.filter(\.isNumber)
+                let maximum = TrainingArcConfig.onboardingConfiguration(for: key).maximumValue
+                if let value = Int(digitsOnly), value > maximum {
+                    goalDrafts[key] = "\(maximum)"
+                } else {
+                    goalDrafts[key] = digitsOnly
+                }
+            }
         )
+    }
+
+    /// −/+ on the goal starts from the current amount when no goal is set,
+    /// and never goes below it.
+    private func adjustGoal(for key: StatKey, baseline: Int, delta: Int) {
+        let maximum = TrainingArcConfig.onboardingConfiguration(for: key).maximumValue
+        let start = Int(goalDrafts[key] ?? "") ?? baseline
+        let next = min(max(start + delta, baseline), maximum)
+        goalDrafts[key] = "\(next)"
+    }
+
+    private func selectEditor(goal: Bool, for key: StatKey) {
+        let wasTyping = focusedField != nil
+        if goal {
+            editingGoalKeys.insert(key)
+        } else {
+            editingGoalKeys.remove(key)
+        }
+        // Keep the keyboard on the newly selected value rather than leaving it
+        // attached to a field that just disappeared.
+        if wasTyping {
+            focusedField = goal ? .goal(key) : .baseline(key)
+        }
     }
 
     private func clampedGoal(for key: StatKey, baseline: Int) -> Int? {
@@ -316,7 +350,7 @@ struct OnboardingFlowView: View {
                 Text("Log as you go. Each Monday, last week is scored and you get a short review of what changed.")
                     .foregroundStyle(TrainingTheme.textSecondary)
 
-                SurfaceCard(accent: TrainingArcConfig.color(for: "curiosity")) {
+                SurfaceCard(accent: TrainingArcConfig.color(for: "intellect")) {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Your starting rank comes from the weekly amounts you just set", systemImage: "figure.stand")
                         Label("Weeks close at the end of Sunday, then charge updates", systemImage: "calendar")
@@ -507,6 +541,7 @@ struct OnboardingFlowView: View {
         let lowerThreshold = TrainingArcConfig.lowerRankThreshold(for: template.key, level: currentLevel, personalMax: goal)
         let nextThreshold = TrainingArcConfig.nextRankThreshold(for: template.key, level: currentLevel, personalMax: goal)
         let accent = TrainingArcConfig.color(for: template.colorToken)
+        let isEditingGoal = editingGoalKeys.contains(template.key)
 
         return SurfaceCard(accent: accent) {
             VStack(alignment: .leading, spacing: 16) {
@@ -519,87 +554,110 @@ struct OnboardingFlowView: View {
                         .foregroundStyle(TrainingTheme.textSecondary)
                 }
 
-                HStack(alignment: .top, spacing: 0) {
-                    summaryCell(title: "Current", value: "\(baseline)", tint: TrainingTheme.textPrimary)
-                    Rectangle()
-                        .fill(TrainingTheme.border.opacity(0.4))
-                        .frame(width: 1, height: 40)
-                    summaryCell(title: "Level 10 goal", value: goal.map { "\($0)" } ?? "—", tint: accent)
+                HStack(spacing: 10) {
+                    valueSelector(
+                        title: "Current",
+                        value: "\(baseline)",
+                        isSelected: !isEditingGoal,
+                        accent: accent
+                    ) {
+                        selectEditor(goal: false, for: template.key)
+                    }
+                    valueSelector(
+                        title: "Level 10 goal",
+                        value: goal.map { "\($0)" } ?? "—",
+                        isSelected: isEditingGoal,
+                        accent: accent
+                    ) {
+                        selectEditor(goal: true, for: template.key)
+                    }
                 }
 
                 HStack(spacing: 14) {
-                    baselineAdjustButton(systemName: "minus", label: "Decrease \(template.key.displayName)") {
-                        adjustBaseline(for: template.key, delta: -1)
+                    baselineAdjustButton(systemName: "minus", label: isEditingGoal ? "Lower \(template.key.displayName) goal" : "Decrease \(template.key.displayName)") {
+                        if isEditingGoal {
+                            adjustGoal(for: template.key, baseline: baseline, delta: -1)
+                        } else {
+                            adjustBaseline(for: template.key, delta: -1)
+                        }
                     }
 
-                    TextField("0", text: bindingForBaselineDraft(of: template.key))
-                        .keyboardType(.numberPad)
-                        .focused($focusedField, equals: .baseline(template.key))
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(TrainingTheme.background.opacity(0.5))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(TrainingTheme.border, lineWidth: 1)
-                        )
-                        .accessibilityLabel("\(template.key.displayName) per week")
+                    Group {
+                        if isEditingGoal {
+                            TextField("—", text: goalBinding(for: template.key))
+                                .focused($focusedField, equals: .goal(template.key))
+                                .accessibilityLabel("\(template.key.displayName) Level 10 goal")
+                        } else {
+                            TextField("0", text: bindingForBaselineDraft(of: template.key))
+                                .focused($focusedField, equals: .baseline(template.key))
+                                .accessibilityLabel("\(template.key.displayName) per week")
+                        }
+                    }
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(isEditingGoal ? accent : TrainingTheme.textPrimary)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(TrainingTheme.background.opacity(0.5))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(isEditingGoal ? accent.opacity(0.6) : TrainingTheme.border, lineWidth: 1)
+                    )
 
-                    baselineAdjustButton(systemName: "plus", label: "Increase \(template.key.displayName)") {
-                        adjustBaseline(for: template.key, delta: 1)
+                    baselineAdjustButton(systemName: "plus", label: isEditingGoal ? "Raise \(template.key.displayName) goal" : "Increase \(template.key.displayName)") {
+                        if isEditingGoal {
+                            adjustGoal(for: template.key, baseline: baseline, delta: 1)
+                        } else {
+                            adjustBaseline(for: template.key, delta: 1)
+                        }
                     }
                 }
 
-                Text(TrainingArcConfig.baselineValueLabel(for: template.key, value: baseline))
-                    .font(.caption)
-                    .foregroundStyle(TrainingTheme.textSecondary)
+                if isEditingGoal {
+                    VStack(spacing: 10) {
+                        Text(goal.map { "\(TrainingArcConfig.baselineValueLabel(for: template.key, value: $0)) reaches Level 10" } ?? "Optional. Leave blank to use the standard scale.")
+                            .font(.caption)
+                            .foregroundStyle(TrainingTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+
+                        if let typedGoal, let goal, typedGoal < goal {
+                            Text("A goal can't be below your current amount, so it counts as \(goal).")
+                                .font(.caption)
+                                .foregroundStyle(TrainingTheme.warning)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                goalDrafts[template.key] = "\(TrainingArcConfig.suggestedGoalValue(for: template.key, baseline: baseline))"
+                            } label: {
+                                Label("Suggest", systemImage: "wand.and.stars")
+                                    .font(.footnote.weight(.semibold))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(accent)
+
+                            if goal != nil {
+                                Button("Clear") {
+                                    goalDrafts[template.key] = nil
+                                }
+                                .font(.footnote.weight(.semibold))
+                                .buttonStyle(.bordered)
+                                .tint(TrainingTheme.textSecondary)
+                            }
+                        }
+                    }
                     .frame(maxWidth: .infinity)
-
-                HStack(spacing: 12) {
-                    Text("Level 10 goal")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textSecondary)
-
-                    TextField("Optional", text: goalBinding(for: template.key))
-                        .keyboardType(.numberPad)
-                        .focused($focusedField, equals: .goal(template.key))
-                        .multilineTextAlignment(.trailing)
-                        .font(.body.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(TrainingTheme.background.opacity(0.5))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(TrainingTheme.border, lineWidth: 1)
-                        )
-                        .frame(maxWidth: 110)
-                        .accessibilityLabel("\(template.key.displayName) Level 10 goal")
-
-                    Spacer()
-
-                    Button {
-                        goalDrafts[template.key] = "\(TrainingArcConfig.suggestedGoalValue(for: template.key, baseline: baseline))"
-                    } label: {
-                        Label("Suggest", systemImage: "wand.and.stars")
-                            .font(.footnote.weight(.semibold))
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(accent)
-                }
-
-                if let typedGoal, let goal, typedGoal < goal {
-                    Text("A goal can't be below your current amount, so it's set to \(goal).")
+                } else {
+                    Text(TrainingArcConfig.baselineValueLabel(for: template.key, value: baseline))
                         .font(.caption)
-                        .foregroundStyle(TrainingTheme.warning)
+                        .foregroundStyle(TrainingTheme.textSecondary)
+                        .frame(maxWidth: .infinity)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -619,18 +677,35 @@ struct OnboardingFlowView: View {
         }
     }
 
-    private func summaryCell(title: String, value: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.bold))
-                .tracking(1.2)
-                .foregroundStyle(TrainingTheme.textMuted)
-            Text(value)
-                .font(.system(.title2, design: .serif))
-                .foregroundStyle(tint)
-                .monospacedDigit()
+    /// One of the two tappable values at the top of a skill card. The
+    /// selected one is what the large editor below is changing.
+    private func valueSelector(title: String, value: String, isSelected: Bool, accent: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(1.2)
+                    .foregroundStyle(isSelected ? accent : TrainingTheme.textMuted)
+                Text(value)
+                    .font(.system(.title2, design: .serif))
+                    .foregroundStyle(isSelected ? TrainingTheme.textPrimary : TrainingTheme.textSecondary)
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(isSelected ? accent.opacity(0.55) : TrainingTheme.border, lineWidth: isSelected ? 1.5 : 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
+        .accessibilityHint("Edit this value")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func baselineAdjustButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {

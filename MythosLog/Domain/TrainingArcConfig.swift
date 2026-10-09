@@ -93,7 +93,6 @@ enum TrainingArcConfig {
     static let focusRankThresholds = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150]
     static let intellectRankThresholds = [0, 10, 20, 30, 45, 60, 80, 100, 130, 170]
     static let cardioRankThresholds = [0, 15, 30, 45, 60, 90, 120, 150, 180, 240]
-    static let readingRankThresholds = [0, 30, 60, 90, 120, 180, 240, 300, 360, 480]
 
     static let habitDefinitions: [HabitProgressionDefinition] = [
         HabitProgressionDefinition(
@@ -138,50 +137,6 @@ enum TrainingArcConfig {
                 RankLevelDefinition(level: 8, title: "Mature Artist", image: nil, description: nil),
                 RankLevelDefinition(level: 9, title: "Master Creator", image: nil, description: nil),
                 RankLevelDefinition(level: 10, title: "Defining Artist", image: nil, description: nil)
-            ]
-        ),
-        HabitProgressionDefinition(
-            key: .curiosity,
-            displayName: "Curiosity",
-            iconName: "sparkles.rectangle.stack.fill",
-            colorToken: "curiosity",
-            overview: "Open-ended exploration, research sessions, and questions investigated — distinct from structured study.",
-            defaultBaseline: 2,
-            starterHabit: HabitTemplate(
-                id: "curiosity",
-                systemKey: "habit.curiosity",
-                name: "Curiosity Research Sessions",
-                statKey: .curiosity,
-                measurementType: .booleanSession,
-                scheduleType: .weekly,
-                unitLabel: "sessions",
-                targetPerPeriod: 2,
-                notes: "Deep dives into topics that expand your range and perspective."
-            ),
-            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
-            onboarding: BaselineOnboardingConfiguration(
-                question: "How many research sessions do you do each week?",
-                valueLabelSingular: "session per week",
-                valueLabelPlural: "sessions per week",
-                minimumValue: minimumBaseline,
-                maximumValue: 30,
-                manualEntryLabel: "Custom number"
-            ),
-            progression: RankProgressionConfiguration(
-                rollingWindowWeeks: defaultRollingWindowWeeks,
-                levelThresholds: defaultRankThresholds
-            ),
-            ranks: [
-                RankLevelDefinition(level: 1, title: "Closed Off", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Browsing", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Exploring", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Active Learner", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Wide Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Pattern Hunter", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Deep Investigator", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Polymath", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Boundary Pusher", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Master Explorer", image: nil, description: nil)
             ]
         ),
         HabitProgressionDefinition(
@@ -447,50 +402,6 @@ enum TrainingArcConfig {
                 RankLevelDefinition(level: 9, title: "Expert Cook", image: nil, description: nil),
                 RankLevelDefinition(level: 10, title: "Master Cook", image: nil, description: nil)
             ]
-        ),
-        HabitProgressionDefinition(
-            key: .reading,
-            displayName: "Reading",
-            iconName: "book.fill",
-            colorToken: "reading",
-            overview: "Standalone reading volume — narrative immersion and longer-form work.",
-            defaultBaseline: 90,
-            starterHabit: HabitTemplate(
-                id: "reading.session",
-                systemKey: "habit.reading.session",
-                name: "Reading Minutes",
-                statKey: .reading,
-                measurementType: .minutes,
-                scheduleType: .weekly,
-                unitLabel: "min",
-                targetPerPeriod: 90,
-                notes: "Fiction, narrative non-fiction, or any long-form reading."
-            ),
-            charge: ChargeConfiguration(maximumValue: defaultChargeMaximum, label: "Charge"),
-            onboarding: BaselineOnboardingConfiguration(
-                question: "How many minutes a week do you read for pleasure?",
-                valueLabelSingular: "minute per week",
-                valueLabelPlural: "minutes per week",
-                minimumValue: minimumBaseline,
-                maximumValue: 1_000,
-                manualEntryLabel: "Custom minutes"
-            ),
-            progression: RankProgressionConfiguration(
-                rollingWindowWeeks: defaultRollingWindowWeeks,
-                levelThresholds: readingRankThresholds
-            ),
-            ranks: [
-                RankLevelDefinition(level: 1, title: "Non-Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 2, title: "Occasional Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 3, title: "Light Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 4, title: "Steady Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 5, title: "Regular Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 6, title: "Deep Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 7, title: "Voracious Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 8, title: "Scholar of Books", image: nil, description: nil),
-                RankLevelDefinition(level: 9, title: "Master Reader", image: nil, description: nil),
-                RankLevelDefinition(level: 10, title: "Lifelong Reader", image: nil, description: nil)
-            ]
         )
     ]
 
@@ -501,21 +412,14 @@ enum TrainingArcConfig {
         .strength, .cardio, .focus, .intellect, .creativity, .emotional, .cooking
     ]
 
-    /// Optional skills that are available but archived by default. Reading is
-    /// normally covered by the Reading Pages habit under Intellect; Curiosity is a
-    /// distinct open-ended exploration workflow.
-    static let optionalSkillKeys: [StatKey] = [.reading, .curiosity]
-
     static func isCoreSkill(_ key: StatKey) -> Bool {
         coreSkillKeys.contains(key)
     }
 
-    /// Sensible active parent to fall back to when an optional skill is archived.
+    /// Sensible active parent to fall back to when an optional skill is
+    /// archived. No catalog skill has one at the moment.
     static func parentSkillKey(for key: StatKey) -> StatKey? {
-        switch key {
-        case .reading: return .intellect
-        default: return nil
-        }
+        nil
     }
 
     static var statTemplates: [StatTemplate] {
@@ -686,8 +590,6 @@ enum TrainingArcConfig {
         case .focus: assetPrefix = "Focus"
         case .cardio: assetPrefix = "Cardio"
         case .cooking: assetPrefix = "Cooking"
-        case .curiosity, .reading:
-            return nil
         }
 
         let unlockedName = "\(assetPrefix)_Level_\(level)"
@@ -815,10 +717,8 @@ enum TrainingArcConfig {
         case "creativity": Color(red: 0.90, green: 0.58, blue: 0.31)
         case "emotional": Color(red: 0.84, green: 0.41, blue: 0.56)
         case "focus": Color(red: 0.34, green: 0.72, blue: 0.61)
-        case "curiosity": Color(red: 0.63, green: 0.56, blue: 0.88)
         case "cardio": Color(red: 0.30, green: 0.72, blue: 0.88)
         case "cooking": Color(red: 0.92, green: 0.50, blue: 0.30)
-        case "reading": Color(red: 0.45, green: 0.50, blue: 0.74)
         default: TrainingTheme.textSecondary
         }
     }

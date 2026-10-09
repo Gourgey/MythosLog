@@ -166,8 +166,6 @@ struct HabitDetailView: View {
 
 struct LogEntrySheetView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Query private var settingsRecords: [AppSettings]
     @FocusState private var focusedField: FocusField?
     @State private var workingDraft: LogEntryDraft
     @State private var isSaving = false
@@ -190,16 +188,8 @@ struct LogEntrySheetView: View {
         workingDraft.habit
     }
 
-    private var settings: AppSettings? {
-        settingsRecords.first
-    }
-
-    private var isReadingHabit: Bool {
-        habit.statDomain?.statKey == .reading
-    }
-
     private var sessionTypePlaceholder: String {
-        isReadingHabit ? "Book title (optional)" : "Session type (optional)"
+        "Session type (optional)"
     }
 
     private var skillName: String {
@@ -413,14 +403,6 @@ struct LogEntrySheetView: View {
                 }
             }
         }
-        .onAppear {
-            if isReadingHabit,
-               workingDraft.sessionType.isEmpty,
-               let last = settings?.lastReadingBookTitle,
-               !last.isEmpty {
-                workingDraft.sessionType = last
-            }
-        }
     }
 
     /// Names the unit being counted ("MEALS", "PAGES") so it's clear the
@@ -464,15 +446,6 @@ struct LogEntrySheetView: View {
             workingDraft.value = 1
         } else {
             workingDraft.value = max(0, workingDraft.value)
-        }
-
-        if isReadingHabit {
-            let trimmed = workingDraft.sessionType.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, let settings {
-                settings.lastReadingBookTitle = trimmed
-                settings.updatedAt = .now
-                try? modelContext.save()
-            }
         }
 
         onSave(workingDraft)

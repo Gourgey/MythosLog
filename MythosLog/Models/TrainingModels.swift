@@ -26,10 +26,8 @@ enum StatKey: String, Codable, CaseIterable, Identifiable, Sendable {
     case creativity
     case emotional
     case focus
-    case curiosity
     case cardio
     case cooking
-    case reading
 
     var id: String { rawValue }
 
@@ -40,10 +38,8 @@ enum StatKey: String, Codable, CaseIterable, Identifiable, Sendable {
         case .creativity: "Creativity"
         case .emotional: "Emotional"
         case .focus: "Focus"
-        case .curiosity: "Curiosity"
         case .cardio: "Cardio"
         case .cooking: "Cooking"
-        case .reading: "Reading"
         }
     }
 }
@@ -756,6 +752,8 @@ final class AppSettings {
     var regressionBehaviorRaw: String = RegressionBehavior.standard.rawValue
     var skillBehindPaceReminderEnabled: Bool = false
     var goalsAffectPacing: Bool = true
+    /// Unused since the Reading skill was removed. Kept because removing a
+    /// synced field breaks the deployed CloudKit schema.
     var lastReadingBookTitle: String?
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now

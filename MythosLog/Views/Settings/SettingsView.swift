@@ -385,20 +385,10 @@ struct SettingsView: View {
                 Section {
                     if isExpanded(.connectApps) {
                         DisclosureGroup("Reading via iOS Shortcut") {
-                            Text("Mythos Log cannot read directly from Kindle. After a reading session, run an iOS Shortcut that opens the URL below to log against your Reading skill.")
+                            Text("Mythos Log cannot read directly from Kindle. After a reading session, run an iOS Shortcut that opens the URL below to log pages against your Intellect skill.")
                                 .font(.caption)
                                 .foregroundStyle(TrainingTheme.textSecondary)
-                            Text("mythoslog://log?stat=reading&value=30&note=Kindle")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(TrainingTheme.textPrimary)
-                                .textSelection(.enabled)
-                        }
-
-                        DisclosureGroup("Curiosity Tracker") {
-                            Text("Your Curiosity Tracker app can mirror each research log into Mythos Log using the deep-link below.")
-                                .font(.caption)
-                                .foregroundStyle(TrainingTheme.textSecondary)
-                            Text("mythoslog://log?stat=curiosity&value=1&note=Topic")
+                            Text("mythoslog://log?stat=intellect&value=30&note=Kindle")
                                 .font(.caption.monospaced())
                                 .foregroundStyle(TrainingTheme.textPrimary)
                                 .textSelection(.enabled)

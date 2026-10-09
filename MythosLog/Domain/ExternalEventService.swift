@@ -3,9 +3,9 @@ import SwiftData
 
 // External apps log into MythosLog via the deep-link URL scheme handled by
 // DeepLinkRouter. Examples:
-//   mythoslog://log?stat=curiosity&value=1&note=Topic
-//   mythoslog://log?habit=habit.reading.session&value=30&note=Kindre
-//   mythoslog://log?stat=reading&value=30&note=Book%20title&date=2026-05-12T18:30:00Z
+//   mythoslog://log?stat=focus&value=10&note=Breathing
+//   mythoslog://log?habit=habit.reading&value=30&note=Kindle
+//   mythoslog://log?stat=intellect&value=30&note=Book%20title&date=2026-05-12T18:30:00Z
 // Query parameters: habit (Habit.systemKey) OR stat (StatKey.rawValue), value
 // (Double, defaults to 1), note (URL-encoded text), date (ISO8601, defaults to
 // .now). The matched Habit's measurementType determines how value is interpreted.

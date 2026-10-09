@@ -216,10 +216,8 @@ private struct SkillProgressCircle: View {
         case "creativity": return "paintbrush.pointed.fill"
         case "emotional": return "heart.text.square.fill"
         case "focus": return "scope"
-        case "curiosity": return "sparkles.rectangle.stack.fill"
         case "cardio": return "figure.run"
         case "cooking": return "fork.knife"
-        case "reading": return "book.pages.fill"
         default: return "sparkles"
         }
     }
@@ -324,14 +322,10 @@ private func arcWidgetAccent(for token: String) -> Color {
         Color(red: 0.96, green: 0.35, blue: 0.52)
     case "focus":
         Color(red: 0.32, green: 0.82, blue: 0.67)
-    case "curiosity":
-        Color(red: 0.73, green: 0.56, blue: 1.0)
     case "cardio":
         Color(red: 0.30, green: 0.72, blue: 0.88)
     case "cooking":
         Color(red: 0.92, green: 0.50, blue: 0.30)
-    case "reading":
-        Color(red: 0.45, green: 0.50, blue: 0.74)
     default:
         Color(red: 0.32, green: 0.82, blue: 0.67)
     }

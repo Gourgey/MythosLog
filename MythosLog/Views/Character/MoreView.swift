@@ -97,7 +97,7 @@ struct MoreView: View {
                             title: "Settings",
                             detail: "Notifications, exports, and progression preferences.",
                             icon: "gearshape.fill",
-                            accent: TrainingArcConfig.color(for: "curiosity")
+                            accent: TrainingArcConfig.color(for: "intellect")
                         )
                     }
                     .buttonStyle(.plain)

@@ -400,10 +400,10 @@ extension TrainingStore {
                 endDate: inEightWeeks
             ))
         }
-        if stats.contains(where: { $0.statKey == .reading }) {
+        if stats.contains(where: { $0.statKey == .intellect }) {
             seeded.append(makeGoal(
                 title: "Read 300 pages this month",
-                statKey: .reading,
+                statKey: .intellect,
                 type: .monthlyTotal,
                 measurementType: .pages,
                 targetValue: 300,

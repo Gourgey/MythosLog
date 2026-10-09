@@ -78,9 +78,8 @@ struct ConfigTests {
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 1) == "Untrained")
         #expect(TrainingArcConfig.rankTitle(for: .strength, level: 10) == "Master of Strength")
         #expect(TrainingArcConfig.rankTitle(for: .cardio, level: 4) == "Conditioned")
-        #expect(TrainingArcConfig.defaultHabitTemplates.count == 9)
+        #expect(TrainingArcConfig.defaultHabitTemplates.count == 7)
         #expect(TrainingArcConfig.rankTitle(for: .cooking, level: 1) == "Untrained Cook")
-        #expect(TrainingArcConfig.rankTitle(for: .reading, level: 10) == "Lifelong Reader")
     }
 
     @Test func baselineThresholdsMapToExpectedRankLevels() {
@@ -531,27 +530,26 @@ struct ProgressionTests {
 
         try TrainingStore.seedDefaultProfile(
             context: context,
-            selectedSkillKeys: [.focus, .reading],
+            selectedSkillKeys: [.focus, .cooking],
             completeOnboarding: true
         )
 
         let stats = try TrainingStore.fetchStats(context: context)
         let active = Set(stats.filter(\.isActive).compactMap(\.statKey))
-        #expect(active == [.focus, .reading])
+        #expect(active == [.focus, .cooking])
 
         let cardio = try #require(stats.first(where: { $0.statKey == .cardio }))
         #expect(cardio.isArchived)
         #expect((cardio.habits ?? []).isEmpty)
 
-        let reading = try #require(stats.first(where: { $0.statKey == .reading }))
-        #expect(!TrainingStore.activeHabits(for: reading).isEmpty)
+        let cooking = try #require(stats.first(where: { $0.statKey == .cooking }))
+        #expect(!TrainingStore.activeHabits(for: cooking).isEmpty)
 
-        // Launch-time reconciliation must neither revive a deselected core
-        // skill nor archive an optional skill the user just picked.
+        // Launch-time reconciliation must not revive a deselected skill.
         try TrainingStore.reconcileSyncedData(context: context)
         try TrainingStore.synchronizeCatalog(context: context)
         #expect(!cardio.isActive)
-        #expect(reading.isActive)
+        #expect(cooking.isActive)
     }
 
     @Test @MainActor func onboardingBaselineAssignsStartingRankAndCurrentBaseline() throws {
@@ -560,20 +558,20 @@ struct ProgressionTests {
 
         try TrainingStore.seedDefaultProfile(
             context: context,
-            baselines: [.strength: 0, .curiosity: 9],
+            baselines: [.strength: 0, .emotional: 9],
             completeOnboarding: true
         )
 
         let stats = try TrainingStore.fetchStats(context: context)
         let strength = try #require(stats.first(where: { $0.statKey == .strength }))
-        let curiosity = try #require(stats.first(where: { $0.statKey == .curiosity }))
+        let emotional = try #require(stats.first(where: { $0.statKey == .emotional }))
 
         #expect(strength.rankLevel == 1)
         #expect(strength.currentBaseline == 0)
         #expect(strength.startingBaseline == 0)
         #expect(strength.acknowledgedRankLevel == 1)
-        #expect(curiosity.rankLevel == 10)
-        #expect(curiosity.currentBaseline == 9)
+        #expect(emotional.rankLevel == 10)
+        #expect(emotional.currentBaseline == 9)
     }
 
     @Test @MainActor func completedWeekReplayUpdatesBankedStateFromBackdatedLogs() throws {
@@ -2113,8 +2111,8 @@ struct InsightsTests {
         )
         fixture.context.insert(
             WeeklyResolution(
-                statKey: StatKey.reading.rawValue,
-                statName: "Reading",
+                statKey: StatKey.cooking.rawValue,
+                statName: "Cooking",
                 weekStartDate: week.start,
                 weekEndDate: week.end,
                 baselineAtStart: 5,
@@ -2140,9 +2138,9 @@ struct InsightsTests {
 
         let recap = try TrainingStore.weeklyRecap(weekStart: week.start, context: fixture.context, settings: nil, now: now)
         #expect(recap.bestSkillName == "Strength")
-        #expect(recap.neglectedSkillName == "Reading")
+        #expect(recap.neglectedSkillName == "Cooking")
         #expect(recap.gainedChargeSkills.contains("Strength"))
-        #expect(recap.lostChargeSkills.contains("Reading"))
+        #expect(recap.lostChargeSkills.contains("Cooking"))
         #expect(recap.hasContent)
     }
 
@@ -2228,22 +2226,23 @@ struct TransferTests {
 
     @Test @MainActor func skillActivationFieldsRoundTripThroughExportImport() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
-        let reading = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .reading })
-        #expect(!reading.isActive)
+        let cardio = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .cardio })
+        try TrainingStore.archiveSkill(cardio, context: fixture.context)
+        #expect(!cardio.isActive)
 
         let bundle = try TrainingStore.exportBundle(context: fixture.context)
-        let exportedReading = try #require(bundle.stats.first { $0.key == StatKey.reading.rawValue })
-        #expect(exportedReading.isCore == false)
-        #expect(exportedReading.isEnabled == false)
-        #expect(exportedReading.isArchived == true)
+        let exportedCardio = try #require(bundle.stats.first { $0.key == StatKey.cardio.rawValue })
+        #expect(exportedCardio.isCore == true)
+        #expect(exportedCardio.isEnabled == false)
+        #expect(exportedCardio.isArchived == true)
 
         let data = try JSONEncoder().encode(bundle)
         let decoded = try JSONDecoder().decode(TrainingExportBundle.self, from: data)
         try TrainingStore.importBundle(decoded, context: fixture.context)
 
-        let importedReading = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .reading })
-        #expect(!importedReading.isActive)
-        #expect(!importedReading.isCore)
+        let importedCardio = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .cardio })
+        #expect(!importedCardio.isActive)
+        #expect(importedCardio.isCore)
         let importedStrength = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .strength })
         #expect(importedStrength.isCore)
         #expect(importedStrength.isActive)
@@ -2253,35 +2252,61 @@ struct TransferTests {
 
 @Suite("SkillTaxonomyTests")
 struct SkillTaxonomyTests {
-    @Test @MainActor func onboardingSeedsCoreSkillsActiveAndOptionalArchived() throws {
+    @Test @MainActor func defaultSeedActivatesEveryCatalogSkill() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let active = Set(try TrainingStore.fetchActiveStats(context: fixture.context).compactMap(\.statKey))
         #expect(active == TrainingArcConfig.coreSkillKeys)
-        #expect(!active.contains(.reading))
-        #expect(!active.contains(.curiosity))
-
-        let reading = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .reading })
-        #expect(reading.isArchived)
-        #expect(!reading.isCore)
-        #expect(reading.parentSkillKey == .intellect)
+        #expect(active == Set(StatKey.allCases))
     }
 
-    @Test @MainActor func intellectKeepsReadingHabitAndReadingSkillStaysOptional() throws {
+    @Test @MainActor func intellectKeepsReadingHabit() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
         let intellect = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .intellect })
         #expect(intellect.isActive)
         #expect(TrainingStore.activeHabits(for: intellect).contains { $0.systemKey == "habit.reading" })
-
-        let reading = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .reading })
-        #expect(!reading.isActive)
     }
 
-    @Test @MainActor func curiosityIsOptionalAndArchivedByDefault() throws {
+    @Test @MainActor func retiredSkillRowsAreRemovedWithTheirData() throws {
         let fixture = try makeStrengthFixture(baseline: 3)
-        let curiosity = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .curiosity })
-        #expect(!curiosity.isCore)
-        #expect(!curiosity.isActive)
-        #expect(curiosity.parentSkillKey == nil)
+        let context = fixture.context
+
+        // A Reading skill synced from an older build, with a habit, a log and
+        // a linked goal.
+        let reading = StatDomain(
+            key: "reading",
+            name: "Reading",
+            iconName: "book.fill",
+            colorToken: "reading",
+            descriptor: "",
+            currentTierName: "Steady Reader",
+            startingBaseline: 90,
+            currentBaseline: 90,
+            parentSkillKeyRaw: "intellect"
+        )
+        context.insert(reading)
+        let habit = Habit(
+            systemKey: "habit.reading.session",
+            name: "Reading Minutes",
+            measurementType: .minutes,
+            unitLabel: "min",
+            scheduleType: .weekly,
+            targetPerPeriod: 90,
+            statDomain: reading
+        )
+        context.insert(habit)
+        context.insert(HabitLog(date: isoDate("2026-04-01T12:00:00Z"), numericValue: 30, note: "", sourceType: .manual, habit: habit))
+        let goal = Goal(title: "Read more")
+        goal.linkedStatKeyRaw = "reading"
+        context.insert(goal)
+        try context.save()
+
+        _ = try TrainingStore.reconcileSyncedData(context: context)
+
+        #expect(try TrainingStore.fetchStats(context: context).allSatisfy { $0.key != "reading" })
+        #expect(try TrainingStore.fetchHabits(context: context).allSatisfy { $0.systemKey != "habit.reading.session" })
+        #expect(try TrainingStore.fetchGoals(context: context).allSatisfy { $0.linkedStatKeyRaw != "reading" })
+        // The Intellect reading habit is untouched.
+        #expect(try TrainingStore.fetchHabits(context: context).contains { $0.systemKey == "habit.reading" })
     }
 
     @Test @MainActor func archivingSkillPreservesLogsAndExcludesFromActive() throws {
@@ -2315,25 +2340,20 @@ struct SkillTaxonomyTests {
         #expect(try TrainingStore.fetchGoals(context: fixture.context).contains { $0.id == goal.id })
     }
 
-    @Test @MainActor func restoringArchivedOptionalSkillReactivatesWithStarterHabit() throws {
-        let fixture = try makeStrengthFixture(baseline: 3)
-        let reading = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .reading })
-        #expect(!reading.isActive)
+    @Test @MainActor func restoringArchivedSkillReactivatesWithStarterHabit() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+        try TrainingStore.seedDefaultProfile(context: context, selectedSkillKeys: [.strength], completeOnboarding: true)
+        let cooking = try #require(try TrainingStore.fetchStats(context: context).first { $0.statKey == .cooking })
+        #expect(!cooking.isActive)
+        #expect((cooking.habits ?? []).isEmpty)
 
-        try TrainingStore.restoreSkill(reading, context: fixture.context)
-        #expect(reading.isActive)
-        #expect(!TrainingStore.activeHabits(for: reading).isEmpty)
+        try TrainingStore.restoreSkill(cooking, context: context)
+        #expect(cooking.isActive)
+        #expect(!TrainingStore.activeHabits(for: cooking).isEmpty)
 
-        let active = try TrainingStore.fetchActiveStats(context: fixture.context).compactMap(\.statKey)
-        #expect(active.contains(.reading))
-    }
-
-    @Test @MainActor func enablingOptionalSkillFromArchivedStateAddsItToActive() throws {
-        let fixture = try makeStrengthFixture(baseline: 3)
-        let curiosity = try #require(try TrainingStore.fetchStats(context: fixture.context).first { $0.statKey == .curiosity })
-        try TrainingStore.enableSkill(curiosity, context: fixture.context)
-        #expect(curiosity.isActive)
-        #expect(try TrainingStore.fetchActiveStats(context: fixture.context).compactMap(\.statKey).contains(.curiosity))
+        let active = try TrainingStore.fetchActiveStats(context: context).compactMap(\.statKey)
+        #expect(active.contains(.cooking))
     }
 
     @Test @MainActor func widgetSnapshotRefreshHandlesArchivedSkillWithoutCrashing() throws {
@@ -2344,42 +2364,6 @@ struct SkillTaxonomyTests {
         try TrainingStore.refreshWidgetSnapshot(context: fixture.context)
         #expect(try TrainingStore.fetchActiveStats(context: fixture.context).allSatisfy { $0.statKey != .strength })
     }
-
-    @Test @MainActor func migrationKeepsOptionalSkillWithLogsAndArchivesEmptyOne() throws {
-        let container = TrainingStore.makeModelContainer(inMemory: true)
-        let context = ModelContext(container)
-        try TrainingStore.seedDefaultProfile(context: context, baselines: [:], completeOnboarding: true)
-
-        // Simulate pre-migration data: optional skills active, reading has a log.
-        let reading = try #require(try TrainingStore.fetchStats(context: context).first { $0.statKey == .reading })
-        let curiosity = try #require(try TrainingStore.fetchStats(context: context).first { $0.statKey == .curiosity })
-        for stat in [reading, curiosity] {
-            stat.isArchived = false
-            stat.isEnabled = true
-            stat.isCore = false
-        }
-        let readingHabit = Habit(
-            systemKey: "habit.reading.session",
-            name: "Reading",
-            measurementType: .pages,
-            unitLabel: "pages",
-            scheduleType: .weekly,
-            targetPerPeriod: 90,
-            statDomain: reading
-        )
-        context.insert(readingHabit)
-        context.insert(HabitLog(date: isoDate("2026-04-01T12:00:00Z"), numericValue: 30, note: "", sourceType: .manual, habit: readingHabit))
-        try context.save()
-
-        // Force the one-time migration to run.
-        UserDefaults(suiteName: AppIdentity.appGroupIdentifier)?.removeObject(forKey: "training.arc.skillActivationMigrated.v1")
-        _ = try TrainingStore.reconcileSyncedData(context: context)
-
-        #expect(reading.isActive)      // has logged history → kept
-        #expect(!curiosity.isActive)   // empty optional → archived
-        #expect(curiosity.isArchived)
-    }
-
 }
 
 @Suite("WidgetBackgroundRefreshTests")

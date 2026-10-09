@@ -69,6 +69,7 @@ extension TrainingStore {
         didMutate = try reconcileHealthImports(context: context) || didMutate
         didMutate = try reconcileWeeklyResolutions(context: context) || didMutate
         didMutate = try reconcileGoals(context: context) || didMutate
+        didMutate = try removeRetiredSkills(context: context) || didMutate
         didMutate = try migrateSkillActivation(context: context) || didMutate
         #if canImport(HealthKit)
         didMutate = try HealthImportService.purgeDeprecatedAutoMappings(context: context) || didMutate
@@ -154,6 +155,33 @@ extension TrainingStore {
         return didMutate
     }
 
+    /// Skills that have been taken out of the catalog. Their keys no longer
+    /// map to a `StatKey`, so leftover rows would otherwise surface as
+    /// parentless custom skills.
+    static let retiredSkillKeys: Set<String> = ["reading", "curiosity"]
+
+    /// Deletes rows for retired skills. Their habits, logs and resolved weeks
+    /// go with them through the cascade rules, and goals linked to them are
+    /// removed explicitly. Idempotent: a no-op once nothing is left, and it
+    /// also cleans up rows that arrive later from another device.
+    @discardableResult
+    static func removeRetiredSkills(context: ModelContext) throws -> Bool {
+        var didMutate = false
+
+        for stat in try fetchStats(context: context) where retiredSkillKeys.contains(stat.key) {
+            context.delete(stat)
+            didMutate = true
+        }
+
+        for goal in try fetchGoals(context: context) {
+            guard let raw = goal.linkedStatKeyRaw, retiredSkillKeys.contains(raw) else { continue }
+            context.delete(goal)
+            didMutate = true
+        }
+
+        return didMutate
+    }
+
     private static let skillActivationMigratedKey = "training.arc.skillActivationMigrated.v1"
 
     /// A freshly seeded profile already has the activation the user chose in
@@ -165,7 +193,7 @@ extension TrainingStore {
     }
 
     /// Backfills the skill-activation flags on existing rows and, on first run,
-    /// archives optional skills (Reading, Curiosity) that have no logged history.
+    /// archives optional skills that have no logged history.
     /// Idempotent: the flag backfill always re-derives from the catalog; the
     /// one-time auto-archive is guarded so a user who re-enables an empty optional
     /// skill is never re-archived.

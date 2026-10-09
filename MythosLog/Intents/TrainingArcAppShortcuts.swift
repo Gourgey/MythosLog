@@ -43,15 +43,6 @@ struct TrainingArcAppShortcuts: AppShortcutsProvider {
             systemImageName: "brain.head.profile"
         ),
         AppShortcut(
-            intent: LogCuriositySessionIntent(),
-            phrases: [
-                "Log curiosity session in \(.applicationName)",
-                "Record research session in \(.applicationName)"
-            ],
-            shortTitle: "Curiosity",
-            systemImageName: "sparkles.rectangle.stack.fill"
-        ),
-        AppShortcut(
             intent: OpenSkillIntent(),
             phrases: [
                 "Open \(\.$skill) in \(.applicationName)",

@@ -281,11 +281,6 @@ private enum SkillEntityAliases {
             "journaling",
             "journal entry",
             "journal entries"
-        ],
-        .curiosity: [
-            "research",
-            "research session",
-            "research sessions"
         ]
     ]
 
@@ -316,16 +311,6 @@ struct LogJournalSessionIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         .result(dialog: IntentDialog(stringLiteral: try IntentSupport.logHabit(systemKey: "habit.journal", value: 1)))
-    }
-}
-
-struct LogCuriositySessionIntent: AppIntent {
-    static let title: LocalizedStringResource = "Log Curiosity Session"
-    static let description = IntentDescription("Log a curiosity research session.")
-
-    @MainActor
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        .result(dialog: IntentDialog(stringLiteral: try IntentSupport.logHabit(systemKey: "habit.curiosity", value: 1)))
     }
 }
 

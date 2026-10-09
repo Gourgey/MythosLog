@@ -880,7 +880,7 @@ struct DashboardView: View {
     private var gameGridDashboard: some View {
         let unmatched = awaitingAttributionStatKeys
 
-        if activeStats.count == 7 {
+        if honeycombRowSizes(for: activeStats.count) != nil {
             honeycombGameGridDashboard(unmatched: unmatched)
         } else {
             CenteredDashboardGridLayout(columns: gameGridColumnCount, spacing: gameGridSpacing, rowSpacing: gameGridRowSpacing) {
@@ -934,11 +934,32 @@ struct DashboardView: View {
     }
 
     private var honeycombRows: [[StatDomain]] {
-        [
-            Array(activeStats.prefix(2)),
-            Array(activeStats.dropFirst(2).prefix(3)),
-            Array(activeStats.dropFirst(5).prefix(2))
-        ]
+        var remaining = activeStats[...]
+        return (honeycombRowSizes(for: activeStats.count) ?? []).map { size in
+            defer { remaining = remaining.dropFirst(size) }
+            return Array(remaining.prefix(size))
+        }
+    }
+
+    /// How many tiles sit on each row for a given number of active skills.
+    /// Fewer skills get fewer columns and more rows, so the rings grow to
+    /// fill the screen instead of leaving an empty band above the tab bar.
+    /// Nil for counts with no arrangement, which use the plain grid.
+    private func honeycombRowSizes(for count: Int) -> [Int]? {
+        switch count {
+        case 1: [1]
+        case 2: [1, 1]
+        case 3: [2, 1]
+        case 4: [2, 2]
+        case 5: [2, 1, 2]
+        case 6: [2, 2, 2]
+        case 7: [2, 3, 2]
+        default: nil
+        }
+    }
+
+    private var honeycombColumnCount: Int {
+        max(honeycombRows.map(\.count).max() ?? gameGridColumnCount, 1)
     }
 
     /// Vertical space the honeycomb may fill: the scroll viewport (already
@@ -964,7 +985,8 @@ struct DashboardView: View {
     /// strip on big phones and overshot small ones — is what makes the bottom
     /// row land the same distance above the bar on every device.
     private func honeycombTileWidth(for availableWidth: CGFloat) -> CGFloat {
-        let widthCap = (availableWidth - CGFloat(gameGridColumnCount - 1) * gameGridSpacing) / CGFloat(gameGridColumnCount)
+        let columns = honeycombColumnCount
+        let widthCap = (availableWidth - CGFloat(columns - 1) * gameGridSpacing) / CGFloat(columns)
 
         let budget = honeycombHeightBudget
         guard budget > 0 else { return clampedHoneycombTileWidth(widthCap) }
@@ -978,10 +1000,16 @@ struct DashboardView: View {
         return clampedHoneycombTileWidth(min(widthCap, heightCap))
     }
 
-    /// iPhone rings top out at 160pt; iPad lets them grow until the three
-    /// rows fill the screen, as they do on a phone.
+    /// iPhone rings top out at 160pt in a three-wide row, and a little larger
+    /// when fewer skills share a row; iPad lets them grow until the rows fill
+    /// the screen, as they do on a phone.
     private func clampedHoneycombTileWidth(_ width: CGFloat) -> CGFloat {
-        min(max(width, 96), isRegularWidth ? 340 : 160)
+        let phoneCap: CGFloat = switch honeycombColumnCount {
+        case 1: 260
+        case 2: 200
+        default: 160
+        }
+        return min(max(width, 96), isRegularWidth ? 340 : phoneCap)
     }
 
     private func gameDashboardTile(for stat: StatDomain, hasUnmatchedImports: Bool) -> some View {
