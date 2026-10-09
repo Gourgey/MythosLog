@@ -626,23 +626,12 @@ struct HistoryView: View {
                             .foregroundStyle(TrainingTheme.textSecondary)
                         }
 
-                        if let target = stat.targetValue {
-                            RuleMark(y: .value("Target", target))
-                                .foregroundStyle(TrainingTheme.warning.opacity(0.85))
+                        if let goal = stat.goalValue {
+                            RuleMark(y: .value("Level 10 goal", goal))
+                                .foregroundStyle(TrainingTheme.positiveStrong.opacity(0.85))
                                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                                 .annotation(position: .topTrailing, alignment: .trailing) {
-                                    Text("Target")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(TrainingTheme.warning)
-                                }
-                        }
-
-                        if let max = stat.personalMaxValue {
-                            RuleMark(y: .value("Max", max))
-                                .foregroundStyle(TrainingTheme.positiveStrong.opacity(0.85))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                                .annotation(position: .topTrailing, alignment: .trailing) {
-                                    Text("Max")
+                                    Text("Lv 10 goal")
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(TrainingTheme.positiveStrong)
                                 }
@@ -687,8 +676,8 @@ struct HistoryView: View {
                         .foregroundStyle(TrainingTheme.textPrimary)
                 }
 
-                if let target = stat.targetValue {
-                    Text("Active target: \(target) \(MetricFormatting.unit(TrainingStore.weeklyUnitLabel(for: stat), count: Double(target))) per week")
+                if let goal = stat.goalValue {
+                    Text("Level 10 goal: \(goal) \(MetricFormatting.unit(TrainingStore.weeklyUnitLabel(for: stat), count: Double(goal))) per week")
                         .font(.caption)
                         .foregroundStyle(TrainingTheme.textSecondary)
                         .monospacedDigit()

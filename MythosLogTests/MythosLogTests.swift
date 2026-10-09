@@ -105,7 +105,6 @@ struct ConfigTests {
 
         #expect(creativityOnboarding.question == "How many times a week do you draw, or paint?")
         #expect(intellectOnboarding.question == "How many pages do you read each week?")
-        #expect(intellectOnboarding.quickAdjustments == [5, 10, 25])
         #expect(TrainingArcConfig.lowerRankThreshold(for: .strength, level: 4) == 2)
         #expect(TrainingArcConfig.nextRankThreshold(for: .strength, level: 4) == 4)
         #expect(TrainingArcConfig.baselineValueLabel(for: .intellect, value: 25) == "25 pages per week")
@@ -524,6 +523,35 @@ struct ProgressionTests {
         #expect(result.weeklyChargeDelta == -5)
         #expect(result.bankedUnitsAfter == 0)
         #expect(result.visibleChargesAfter == 0)
+    }
+
+    @Test @MainActor func onboardingSkillSelectionControlsActiveSkills() throws {
+        let container = TrainingStore.makeModelContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        try TrainingStore.seedDefaultProfile(
+            context: context,
+            selectedSkillKeys: [.focus, .reading],
+            completeOnboarding: true
+        )
+
+        let stats = try TrainingStore.fetchStats(context: context)
+        let active = Set(stats.filter(\.isActive).compactMap(\.statKey))
+        #expect(active == [.focus, .reading])
+
+        let cardio = try #require(stats.first(where: { $0.statKey == .cardio }))
+        #expect(cardio.isArchived)
+        #expect((cardio.habits ?? []).isEmpty)
+
+        let reading = try #require(stats.first(where: { $0.statKey == .reading }))
+        #expect(!TrainingStore.activeHabits(for: reading).isEmpty)
+
+        // Launch-time reconciliation must neither revive a deselected core
+        // skill nor archive an optional skill the user just picked.
+        try TrainingStore.reconcileSyncedData(context: context)
+        try TrainingStore.synchronizeCatalog(context: context)
+        #expect(!cardio.isActive)
+        #expect(reading.isActive)
     }
 
     @Test @MainActor func onboardingBaselineAssignsStartingRankAndCurrentBaseline() throws {

@@ -82,7 +82,7 @@ struct HabitQuickActionButtons: View {
                             Text("+\(Int(step))")
                                 .font(.system(.headline, design: .rounded).weight(.bold))
                                 .foregroundStyle(accent)
-                            Text(habit.measurementType.displayUnitLabel(for: step))
+                            Text(unitLabel(for: step))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textSecondary)
                         }
@@ -98,9 +98,17 @@ struct HabitQuickActionButtons: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Log \(Int(step)) \(habit.measurementType.displayUnitLabel(for: step))")
+                    .accessibilityLabel("Log \(Int(step)) \(unitLabel(for: step))")
                 }
             }
         }
+    }
+
+    /// The habit's own unit ("meals", "pages") reads better than the generic
+    /// measurement label ("times") on the tap targets.
+    private func unitLabel(for step: Double) -> String {
+        let label = habit.unitLabel.trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty else { return habit.measurementType.displayUnitLabel(for: step) }
+        return MetricFormatting.unit(label, count: step)
     }
 }

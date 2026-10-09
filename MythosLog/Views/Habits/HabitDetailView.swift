@@ -286,18 +286,30 @@ struct LogEntrySheetView: View {
                     .overlay(TrainingTheme.border.opacity(0.5))
 
                 if habit.measurementType != .booleanSession {
-                    logFieldRow(label: "AMOUNT") {
-                        HStack(spacing: 8) {
+                    logFieldRow(label: amountLabel) {
+                        HStack(spacing: 10) {
+                            amountStepButton(systemName: "minus", label: "Fewer \(habit.unitLabel)") {
+                                workingDraft.value = max(0, workingDraft.value - habit.measurementType.defaultIncrement)
+                            }
+                            .disabled(workingDraft.value <= 0)
+
                             TextField("0", value: $workingDraft.value, format: .number)
                                 .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
+                                .multilineTextAlignment(.center)
                                 .font(.title3.weight(.semibold))
                                 .monospacedDigit()
                                 .focused($focusedField, equals: .amount)
-                                .frame(maxWidth: 120)
-                            Text(habit.unitLabel)
+                                .frame(width: 64)
+                                .accessibilityLabel("Number of \(habit.unitLabel)")
+
+                            amountStepButton(systemName: "plus", label: "More \(habit.unitLabel)") {
+                                workingDraft.value += habit.measurementType.defaultIncrement
+                            }
+
+                            Text(MetricFormatting.unit(habit.unitLabel, count: workingDraft.value))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(TrainingTheme.textSecondary)
+                                .frame(minWidth: 44, alignment: .leading)
                         }
                     }
 
@@ -372,23 +384,6 @@ struct LogEntrySheetView: View {
                 }
                 .disabled(isSaving)
                 .buttonStyle(.plain)
-
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Save for later")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(TrainingTheme.textPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            Capsule().fill(Color(red: 0.97, green: 0.96, blue: 0.94))
-                        )
-                        .overlay(
-                            Capsule().strokeBorder(TrainingTheme.border.opacity(0.7), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -426,6 +421,25 @@ struct LogEntrySheetView: View {
                 workingDraft.sessionType = last
             }
         }
+    }
+
+    /// Names the unit being counted ("MEALS", "PAGES") so it's clear the
+    /// number can be changed, rather than a generic "AMOUNT".
+    private var amountLabel: String {
+        let unit = habit.unitLabel.trimmingCharacters(in: .whitespaces)
+        return unit.isEmpty ? "AMOUNT" : unit.uppercased()
+    }
+
+    private func amountStepButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(accent)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(accent.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private func logFieldRow<Content: View>(label: String, @ViewBuilder trailing: () -> Content) -> some View {

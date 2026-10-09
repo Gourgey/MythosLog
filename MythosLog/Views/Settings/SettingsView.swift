@@ -178,7 +178,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .progression: "Strictness, regression, decay, week start"
-        case .calibration: "Personal max visibility and how goals count"
+        case .calibration: "Level 10 goal visibility and how goals count"
         case .notifications: "Daily, evening, weekly, and at-risk reminders"
         case .experience: "Artwork, icons, haptics"
         case .appleHealth: "Authorization, auto-import, manual sync"
@@ -264,7 +264,7 @@ struct SettingsView: View {
 
                 Section {
                     if isExpanded(.calibration) {
-                        Toggle("Show personal max in UI", isOn: binding(\.showPersonalMaxInUI))
+                        Toggle("Show Level 10 goal in UI", isOn: binding(\.showPersonalMaxInUI))
                         Toggle("Goals affect pacing", isOn: binding(\.goalsAffectPacing))
                         Text("When on, at-risk goals surface in Train Today and reminders. Turn off to keep goals purely for tracking.")
                             .font(.caption)

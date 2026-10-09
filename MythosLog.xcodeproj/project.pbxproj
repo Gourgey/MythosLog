@@ -697,7 +697,7 @@
 				CODE_SIGN_ENTITLEMENTS = MythosLog/MythosLog.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MythosLog/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -721,7 +721,7 @@
 				CODE_SIGN_ENTITLEMENTS = MythosLogWidgets/MythosLogWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MythosLogWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -838,7 +838,7 @@
 				CODE_SIGN_ENTITLEMENTS = MythosLogWidgets/MythosLogWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MythosLogWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -947,7 +947,7 @@
 				CODE_SIGN_ENTITLEMENTS = MythosLog/MythosLog.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MythosLog/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

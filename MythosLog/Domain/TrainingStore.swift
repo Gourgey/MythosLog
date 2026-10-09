@@ -694,11 +694,21 @@ enum TrainingStore {
     static func seedDefaultProfile(
         context: ModelContext,
         baselines: [StatKey: Int] = [:],
-        selectedHabitKeys: Set<String> = [],
+        selectedSkillKeys: Set<StatKey>? = nil,
         completeOnboarding: Bool = true
     ) throws {
-        guard try fetchStats(context: context).isEmpty else {
+        // nil keeps the catalog default: core skills on, optional skills off.
+        let activeKeys = selectedSkillKeys ?? TrainingArcConfig.coreSkillKeys
+
+        let existingStats = try fetchStats(context: context)
+        guard existingStats.isEmpty else {
             try synchronizeCatalog(context: context)
+            if selectedSkillKeys != nil {
+                for stat in existingStats {
+                    guard let key = stat.statKey else { continue }
+                    applyOnboardingActivation(activeKeys.contains(key), to: stat, context: context)
+                }
+            }
             let settings = try fetchSettings(context: context)
             settings.hasCompletedOnboarding = completeOnboarding
             settings.updatedAt = .now
@@ -726,9 +736,9 @@ enum TrainingStore {
                 storedCharges: 0,
                 bankedProgressUnits: 0,
                 lastAcknowledgedLevel: startingLevel,
-                isArchived: !template.isCore,
+                isArchived: !activeKeys.contains(template.key),
                 isCore: template.isCore,
-                isEnabled: template.isCore,
+                isEnabled: activeKeys.contains(template.key),
                 parentSkillKeyRaw: template.parentKey?.rawValue
             )
             updateDerivedFields(for: stat)
@@ -736,13 +746,10 @@ enum TrainingStore {
             statIndex[template.key] = stat
         }
 
-        // Only core skills get a starter habit by default. Optional skills start
-        // archived; enabling one later creates its habit (see enableSkill).
-        let coreStatKeys = Set(TrainingArcConfig.coreSkillKeys.map(\.rawValue))
-        let selectedKeys = selectedHabitKeys.isEmpty ? Set(TrainingArcConfig.defaultHabitTemplates.map(\.systemKey)) : selectedHabitKeys
-
+        // Only skills chosen during onboarding get a starter habit. The rest
+        // start archived; enabling one later creates its habit (see enableSkill).
         for (offset, template) in TrainingArcConfig.defaultHabitTemplates.enumerated()
-        where selectedKeys.contains(template.systemKey) && coreStatKeys.contains(template.statKey.rawValue) {
+        where activeKeys.contains(template.statKey) {
             let habit = Habit(
                 systemKey: template.systemKey,
                 name: template.name,
@@ -758,6 +765,8 @@ enum TrainingStore {
             context.insert(habit)
         }
 
+        markSkillActivationMigrated()
+
         let settings = try fetchSettings(context: context)
         settings.hasCompletedOnboarding = completeOnboarding
         settings.updatedAt = .now
@@ -765,6 +774,18 @@ enum TrainingStore {
         recordLocalWrite(reason: "seeded default onboarding profile")
         try refreshAllProgress(context: context, reason: .onboarding)
         try refreshWidgetSnapshot(context: context)
+    }
+
+    /// Matches an existing skill to the onboarding choice without touching its
+    /// logs or history.
+    private static func applyOnboardingActivation(_ isActive: Bool, to stat: StatDomain, context: ModelContext) {
+        guard stat.isActive != isActive else { return }
+        stat.isEnabled = isActive
+        stat.isArchived = !isActive
+        if isActive {
+            ensureStarterHabit(for: stat, context: context)
+        }
+        stat.updatedAt = .now
     }
 
     static func clearAll(context: ModelContext) throws {

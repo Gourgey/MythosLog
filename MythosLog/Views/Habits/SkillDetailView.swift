@@ -450,15 +450,11 @@ struct SkillDetailView: View {
 
                 HStack(alignment: .top, spacing: 0) {
                     calibrationCell(title: "Baseline", value: "\(stat.currentBaseline)")
-                    Rectangle()
-                        .fill(TrainingTheme.border.opacity(0.4))
-                        .frame(width: 1, height: 36)
-                    calibrationCell(title: "Target", value: stat.targetValue.map { "\($0)" } ?? "—")
                     if settings?.showPersonalMaxInUI ?? true {
                         Rectangle()
                             .fill(TrainingTheme.border.opacity(0.4))
                             .frame(width: 1, height: 36)
-                        calibrationCell(title: "Personal Max", value: stat.personalMaxValue.map { "\($0)" } ?? "—")
+                        calibrationCell(title: "Lv 10 Goal", value: stat.goalValue.map { "\($0)" } ?? "—")
                     }
                 }
             }
@@ -1735,16 +1731,15 @@ struct SkillCalibrationSheet: View {
 
     @State private var baselineText: String
     @State private var baselineWasEdited = false
-    @State private var targetText: String
-    @State private var maxText: String
+    @State private var goalText: String
     @State private var maintenanceText: String
+    @FocusState private var isEditingNumber: Bool
     @State private var primaryMeasurementType: MeasurementType
 
     init(stat: StatDomain) {
         self.stat = stat
         _baselineText = State(initialValue: "\(stat.currentBaseline)")
-        _targetText = State(initialValue: stat.targetValue.map { "\($0)" } ?? "")
-        _maxText = State(initialValue: stat.personalMaxValue.map { "\($0)" } ?? "")
+        _goalText = State(initialValue: stat.goalValue.map { "\($0)" } ?? "")
         _maintenanceText = State(initialValue: stat.maintenanceFloor.map { "\($0)" } ?? "")
         _primaryMeasurementType = State(initialValue: TrainingStore.primaryHabit(for: stat)?.measurementType ?? .count)
     }
@@ -1812,24 +1807,20 @@ struct SkillCalibrationSheet: View {
             }
 
             Section {
-                calibrationField(title: "Target", text: $targetText, hint: "What you’re training toward. Leave blank if none.")
-                calibrationField(title: "Personal Max", text: $maxText, hint: "Your believable maximum in a strong week.")
+                calibrationField(title: "Level 10 goal", text: $goalText, hint: "The weekly amount you’re working toward. Reaching it is Level 10. Leave blank to use the standard scale.")
                 calibrationField(title: "Maintenance Floor", text: $maintenanceText, hint: "Lowest acceptable maintenance level (optional).")
             } header: {
                 Text("Optional Calibration")
             } footer: {
-                Text("Goals don’t replace your baseline. Missing an ambitious target while still meeting baseline counts as ‘maintained’.")
+                Text("Your Level 10 goal sets the top of the rank ladder; the levels in between scale evenly up to it. Your baseline stays your everyday expectation.")
                     .font(.caption)
             }
 
             Section {
                 Button {
-                    let suggestedTarget = TrainingArcConfig.suggestedTargetValue(for: statKey, baseline: baselineForSave)
-                    targetText = "\(suggestedTarget)"
-                    let suggestedMax = TrainingArcConfig.suggestedPersonalMaxValue(for: statKey, baseline: baselineForSave, target: suggestedTarget)
-                    maxText = "\(suggestedMax)"
+                    goalText = "\(TrainingArcConfig.suggestedGoalValue(for: statKey, baseline: baselineForSave))"
                 } label: {
-                    Label("Suggest values for me", systemImage: "wand.and.stars")
+                    Label("Suggest a Level 10 goal", systemImage: "wand.and.stars")
                 }
             }
         }
@@ -1840,7 +1831,12 @@ struct SkillCalibrationSheet: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isEditingNumber = false }
+            }
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func calibrationField(title: String, text: Binding<String>, hint: String) -> some View {
@@ -1851,6 +1847,7 @@ struct SkillCalibrationSheet: View {
                 TextField(title, text: text)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
+                    .focused($isEditingNumber)
                     .frame(maxWidth: 120)
                 Text(unitLabel)
                     .font(.caption)
@@ -1881,21 +1878,17 @@ struct SkillCalibrationSheet: View {
     }
 
     private func save() {
-        // Personal-max, target, maintenance, or unit-only edits must not write
-        // an old/default baseline value back over the live skill calibration.
+        // Goal, maintenance, or unit-only edits must not write an old/default
+        // baseline value back over the live skill calibration.
         let baseline = baselineForSave
-        let target = Int(targetText)
-        let personalMax = Int(maxText)
-        let maintenance = Int(maintenanceText)
         let clamped = TrainingArcConfig.clampCalibration(
             baseline: baseline,
-            target: target,
-            personalMax: personalMax,
-            maintenance: maintenance
+            target: nil,
+            personalMax: Int(goalText),
+            maintenance: Int(maintenanceText)
         )
 
         stat.currentBaseline = baseline
-        stat.targetValue = clamped.target
         stat.maintenanceFloor = clamped.maintenance
 
         if let primary = TrainingStore.primaryHabit(for: stat),

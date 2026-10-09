@@ -48,7 +48,7 @@ struct ManageSkillsView: View {
                     .tracking(2.0)
                     .foregroundStyle(TrainingTheme.textMuted)
             } footer: {
-                Text("Tap a skill for its settings and personal-max reassessment. Drag to reorder; swipe to archive.")
+                Text("Tap a skill for its settings and Level 10 goal. Drag to reorder; swipe to archive.")
                     .font(.caption)
             }
 
@@ -148,10 +148,10 @@ struct ManageSkillsView: View {
 
     private func calibrationLine(for stat: StatDomain) -> String {
         let unit = TrainingStore.weeklyUnitLabel(for: stat)
-        guard let max = stat.personalMaxValue else {
-            return "Baseline \(stat.currentBaseline) \(unit) · Max not set"
+        guard let goal = stat.goalValue else {
+            return "Baseline \(stat.currentBaseline) \(unit) · Level 10 goal not set"
         }
-        return "Baseline \(stat.currentBaseline) · Max \(max) \(unit)"
+        return "Baseline \(stat.currentBaseline) · Level 10 goal \(goal) \(unit)"
     }
 
     private func moveActive(from source: IndexSet, to destination: Int) {
@@ -216,14 +216,13 @@ private struct ManagedSkillSettingsView: View {
 
             Section("Weekly calibration") {
                 LabeledContent("Baseline", value: "\(stat.currentBaseline) \(unit)")
-                LabeledContent("Target", value: stat.targetValue.map { "\($0) \(unit)" } ?? "Not set")
-                LabeledContent("Personal max", value: stat.personalMaxValue.map { "\($0) \(unit)" } ?? "Not set")
+                LabeledContent("Level 10 goal", value: stat.goalValue.map { "\($0) \(unit)" } ?? "Not set")
                 LabeledContent("Maintenance", value: stat.maintenanceFloor.map { "\($0) \(unit)" } ?? "Not set")
 
                 Button {
                     isReassessingPersonalMax = true
                 } label: {
-                    Label("Reassess Personal Max", systemImage: "gauge.with.dots.needle.67percent")
+                    Label("Reassess Level 10 Goal", systemImage: "gauge.with.dots.needle.67percent")
                 }
 
                 Button {
@@ -289,10 +288,11 @@ private struct PersonalMaxReassessmentView: View {
 
     let stat: StatDomain
     @State private var valueText: String
+    @FocusState private var isEditingValue: Bool
 
     init(stat: StatDomain) {
         self.stat = stat
-        _valueText = State(initialValue: (stat.personalMaxValue ?? stat.targetValue ?? stat.currentBaseline).description)
+        _valueText = State(initialValue: (stat.goalValue ?? stat.currentBaseline).description)
     }
 
     private var accent: Color {
@@ -307,8 +307,7 @@ private struct PersonalMaxReassessmentView: View {
         Form {
             Section {
                 LabeledContent("Baseline", value: "\(stat.currentBaseline) \(unit)")
-                LabeledContent("Target", value: stat.targetValue.map { "\($0) \(unit)" } ?? "Not set")
-                LabeledContent("Current max", value: stat.personalMaxValue.map { "\($0) \(unit)" } ?? "Not set")
+                LabeledContent("Current goal", value: stat.goalValue.map { "\($0) \(unit)" } ?? "Not set")
                 if let enteredMax {
                     LabeledContent("Reassessed level") {
                         HStack(spacing: 6) {
@@ -332,11 +331,12 @@ private struct PersonalMaxReassessmentView: View {
 
             Section {
                 HStack {
-                    Text("Maximum")
+                    Text("Level 10 goal")
                     Spacer()
-                    TextField("Maximum", text: $valueText)
+                    TextField("Goal", text: $valueText)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
+                        .focused($isEditingValue)
                         .frame(maxWidth: 110)
                     Text(unit)
                         .font(.caption)
@@ -370,9 +370,9 @@ private struct PersonalMaxReassessmentView: View {
                     }
                 }
             } header: {
-                Text("New maximum")
+                Text("New Level 10 goal")
             } footer: {
-                Text("The most you'd believably log for \(stat.name) in one strong week. Saving recalculates your current level; past logs and resolved weeks stay unchanged.")
+                Text("The weekly amount you're working toward in \(stat.name). Logging it in a week is Level 10, and the levels below scale up to it. Saving recalculates your current level; past logs and resolved weeks stay unchanged.")
                     .font(.caption)
             }
 
@@ -415,7 +415,8 @@ private struct PersonalMaxReassessmentView: View {
         }
         .scrollContentBackground(.hidden)
         .background(TrainingTheme.background.ignoresSafeArea())
-        .navigationTitle("Reassess \(stat.name) Max")
+        .navigationTitle("\(stat.name) Level 10 Goal")
+        .scrollDismissesKeyboard(.interactively)
         .navigationBarTitleDisplayMode(.inline)
         .tint(accent)
         .toolbar {
@@ -425,6 +426,10 @@ private struct PersonalMaxReassessmentView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
                     .disabled(Int(valueText) == nil)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isEditingValue = false }
             }
         }
     }
@@ -437,7 +442,7 @@ private struct PersonalMaxReassessmentView: View {
         guard let entered = Int(valueText) else { return nil }
         return TrainingArcConfig.clampCalibration(
             baseline: stat.currentBaseline,
-            target: stat.targetValue,
+            target: nil,
             personalMax: max(entered, 0),
             maintenance: stat.maintenanceFloor
         ).max
@@ -469,15 +474,14 @@ private struct PersonalMaxReassessmentView: View {
             options.append(
                 MaxSuggestion(
                     label: "Suggested",
-                    value: TrainingArcConfig.suggestedPersonalMaxValue(
+                    value: TrainingArcConfig.suggestedGoalValue(
                         for: rankKey,
-                        baseline: stat.currentBaseline,
-                        target: stat.targetValue
+                        baseline: stat.currentBaseline
                     )
                 )
             )
         }
-        if let current = stat.personalMaxValue {
+        if let current = stat.goalValue {
             options.append(MaxSuggestion(label: "Keep current", value: current))
         }
         var seen = Set<Int>()
@@ -489,7 +493,7 @@ private struct PersonalMaxReassessmentView: View {
     }
 
     private func adjust(by delta: Int) {
-        let current = Int(valueText) ?? stat.personalMaxValue ?? stat.currentBaseline
+        let current = Int(valueText) ?? stat.goalValue ?? stat.currentBaseline
         valueText = "\(max(current + delta, 0))"
     }
 

@@ -16,7 +16,6 @@ struct BaselineOnboardingConfiguration: Sendable {
     let valueLabelPlural: String
     let minimumValue: Int
     let maximumValue: Int
-    let quickAdjustments: [Int]
     let manualEntryLabel: String
 }
 
@@ -122,7 +121,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "times per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 30,
-                quickAdjustments: [1, 2, 3],
                 manualEntryLabel: "Custom number"
             ),
             progression: RankProgressionConfiguration(
@@ -167,7 +165,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "sessions per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 30,
-                quickAdjustments: [1, 2, 3],
                 manualEntryLabel: "Custom number"
             ),
             progression: RankProgressionConfiguration(
@@ -212,7 +209,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "times per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 30,
-                quickAdjustments: [1, 2, 3],
                 manualEntryLabel: "Custom number"
             ),
             progression: RankProgressionConfiguration(
@@ -257,7 +253,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "minutes per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 600,
-                quickAdjustments: [5, 10, 20],
                 manualEntryLabel: "Custom minutes"
             ),
             progression: RankProgressionConfiguration(
@@ -302,7 +297,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "pages per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 1_000,
-                quickAdjustments: [5, 10, 25],
                 manualEntryLabel: "Custom pages"
             ),
             progression: RankProgressionConfiguration(
@@ -347,7 +341,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "sessions per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 30,
-                quickAdjustments: [1, 2, 3],
                 manualEntryLabel: "Custom number"
             ),
             progression: RankProgressionConfiguration(
@@ -392,7 +385,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "minutes per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 1_000,
-                quickAdjustments: [5, 10, 25],
                 manualEntryLabel: "Custom minutes"
             ),
             progression: RankProgressionConfiguration(
@@ -437,7 +429,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "meals per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 30,
-                quickAdjustments: [1, 2, 3],
                 manualEntryLabel: "Custom number"
             ),
             progression: RankProgressionConfiguration(
@@ -482,7 +473,6 @@ enum TrainingArcConfig {
                 valueLabelPlural: "minutes per week",
                 minimumValue: minimumBaseline,
                 maximumValue: 1_000,
-                quickAdjustments: [10, 30, 60],
                 manualEntryLabel: "Custom minutes"
             ),
             progression: RankProgressionConfiguration(
@@ -743,6 +733,11 @@ enum TrainingArcConfig {
         let basis = max(target ?? baseline, baseline)
         let suggested = max(basis * 2, basis + 2)
         return min(max(suggested, basis), onboarding.maximumValue)
+    }
+
+    /// A starting goal (the Level 10 amount) for a given weekly baseline.
+    static func suggestedGoalValue(for statKey: StatKey, baseline: Int) -> Int {
+        suggestedPersonalMaxValue(for: statKey, baseline: baseline)
     }
 
     static func clampCalibration(baseline: Int, target: Int?, personalMax: Int?, maintenance: Int?) -> (target: Int?, max: Int?, maintenance: Int?) {

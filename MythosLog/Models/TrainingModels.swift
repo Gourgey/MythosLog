@@ -450,6 +450,12 @@ final class StatDomain {
     var isActive: Bool {
         isEnabled && !isArchived
     }
+
+    /// The weekly amount the user is training toward. Reaching it is Level 10:
+    /// the rank ladder is scaled so its top rung equals this value.
+    var goalValue: Int? {
+        personalMaxValue
+    }
 }
 
 extension StatDomain {

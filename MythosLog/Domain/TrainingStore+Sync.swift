@@ -156,6 +156,14 @@ extension TrainingStore {
 
     private static let skillActivationMigratedKey = "training.arc.skillActivationMigrated.v1"
 
+    /// A freshly seeded profile already has the activation the user chose in
+    /// onboarding, so the legacy one-time archive pass must never run on it
+    /// (it would archive an optional skill the user just picked).
+    static func markSkillActivationMigrated() {
+        let defaults = UserDefaults(suiteName: AppIdentity.appGroupIdentifier) ?? .standard
+        defaults.set(true, forKey: skillActivationMigratedKey)
+    }
+
     /// Backfills the skill-activation flags on existing rows and, on first run,
     /// archives optional skills (Reading, Curiosity) that have no logged history.
     /// Idempotent: the flag backfill always re-derives from the catalog; the
@@ -187,8 +195,8 @@ extension TrainingStore {
             }
 
             if core {
-                // Core skills are always part of the active set.
-                if !stat.isEnabled {
+                // Core skills stay enabled unless the user archived them.
+                if !stat.isEnabled && !stat.isArchived {
                     stat.isEnabled = true
                     changed = true
                 }

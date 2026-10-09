@@ -202,9 +202,12 @@ extension TrainingStore {
         guard let rankKey = stat.rankKey else { return }
         let baselineBeforeReassessment = stat.currentBaseline
 
+        // The goal is a single value: the weekly amount that equals Level 10.
+        // It is stored as the personal max (which scales the rank ladder) and
+        // mirrored into the legacy target field so older builds agree.
         let clamped = TrainingArcConfig.clampCalibration(
             baseline: baselineBeforeReassessment,
-            target: stat.targetValue,
+            target: nil,
             personalMax: personalMax.map { max($0, 0) },
             maintenance: stat.maintenanceFloor
         )
@@ -216,7 +219,7 @@ extension TrainingStore {
             personalMax: clamped.max
         )
 
-        stat.targetValue = clamped.target
+        stat.targetValue = clamped.max
         stat.personalMaxValue = clamped.max
         stat.maintenanceFloor = clamped.maintenance
         // A max reassessment changes the scale, never the user's working
