@@ -108,9 +108,12 @@ Fill in the bracketed parts, and keep every statement true.
 > **3. Gap addressed.** Gamified habit apps generally use XP points, avatars with cosmetic items, or streak counters. None that we found combine (a) an adaptive weekly baseline that rises with each rank and falls with sustained underperformance, (b) Charge carried between weeks, so one strong week doesn't instantly level a skill, and (c) seventy character forms, ten per skill, made specifically for this app, that serve as the progression itself rather than decoration.
 >
 > **4. Beta testing.** We ran an external TestFlight beta from [date] to [date] with [N] testers recruited through [subreddit / personal network]. Feedback applied to this build:
-> - [Feedback] → [change made]
-> - [Feedback] → [change made]
-> - [Feedback] → [change made]
+> - Skills turned off during setup still appeared on the dashboard → setup now chooses skills directly, and unchosen skills stay off the dashboard until the user turns them on.
+> - Testers didn't understand Charge → a new setup page explains it with a worked example of a skill ranking up over three weeks.
+> - "Target" and "personal max" were confusing as two separate numbers → they are now one optional Level 10 goal: the weekly amount that equals the top rank.
+> - The number of meals couldn't easily be changed when logging cooking → the log screen has − and + buttons labelled with the unit (meals, pages).
+> - A "Save for later" button closed the log screen without saving → removed.
+> - No way to dismiss the number keypad when recalibrating a skill → a Done button was added.
 >
 > **5. Standalone or suite.** Mythos Log is a standalone product. [It is the only app on this developer account. / Other apps on this account are: ___; they share no functionality with Mythos Log.]
 >

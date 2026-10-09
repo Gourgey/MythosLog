@@ -6,10 +6,11 @@ Mythos Log turns your real habits into skills you can build over time. Set a wee
 
 The first time you open the app, follow the setup screens:
 
-1. Choose the starter habits you want to track. All seven core skills are included, and you can change habits later.
-2. Set a **baseline** for each skill: the amount you normally do in a week. Be honest about your current routine; this sets your starting rank.
-3. Optionally add a **target** and **personal max** for each skill. You can skip these and add them later.
-4. Tap **Begin Training**.
+1. Read the two intro pages. The second explains **Charge**, which is how ranks move.
+2. Choose your skills. Only the skills you pick appear on the Dashboard; you can turn others on later in **More → Manage Skills**.
+3. For each skill, set **Current**: the amount you normally do in a week. Be honest about your current routine; this sets your starting rank.
+4. Optionally tap **Level 10 goal** on a skill and set the weekly amount you're working toward. Reaching it is the top rank, and the ranks in between are spread evenly up to it. Tap **Suggest** for a starting value, or leave it blank to use the standard scale.
+5. Choose whether to turn on reminders, then tap **Begin Training**.
 
 The **Dashboard** shows your skills and this week's progress. Use the tabs at the bottom to open **Review**, **Goals**, and **More**.
 
@@ -17,25 +18,32 @@ The **Dashboard** shows your skills and this week's progress. Use the tabs at th
 
 1. On the **Dashboard**, tap the log button on a skill card. You can also tap **Log** beside a skill in **Review**.
 2. If the skill has several habits, choose the one you did.
-3. Enter the amount, such as minutes, pages, or a session. Change the date if you're logging something from earlier, and add a note if you like.
+3. Enter the amount with **−** and **+** or by typing it, such as minutes, pages, or meals. Change the date if you're logging something from earlier, and add a note if you like.
 4. Tap **Save Log** or **Complete Session**.
 
 Tap a skill card to see its habits and weekly total. Open a habit to use its quick log buttons, make a custom log, or see recent entries. To remove an entry logged by mistake, swipe left on it in the habit's **Recent Logs** list and tap **Delete**.
 
 ## Skills, Habits, and Baselines
 
-A **skill** is an area you want to improve, such as Strength or Reading. A **habit** is a specific activity you log under that skill. Habits linked to the same skill contribute to its weekly total.
+A **skill** is an area you want to improve, such as Strength or Cooking. A **habit** is a specific activity you log under that skill. Habits linked to the same skill contribute to its weekly total.
 
 Your **baseline** is your normal weekly expectation. It drives the progress shown on the Dashboard and your rank changes. A habit can also have its own daily or weekly target to help you track that activity.
 
 - To add a habit, open its skill on the **Dashboard** and tap **Add** in the **Habits** section.
 - To change a habit, open it and tap **Edit**. You can change its name, measurement, schedule, target, or whether it is active.
-- To change a skill's baseline or measurement unit, open the skill and tap **Recalibrate**.
+- To change a skill's baseline, Level 10 goal, or measurement unit, open the skill and tap **Recalibrate**.
 - To enable, archive, or reorder skills, go to **More → Manage Skills**. Archiving keeps the skill and its history.
 
 ## Charge and Ranks
 
-At the end of each week, Mythos Log compares each skill's logged total with its baseline. Going above your baseline can earn **Charge** toward the next rank. Meeting your baseline maintains your progress. Falling short can reduce Charge or build up a deficit; repeated shortfalls may lower a rank, depending on your progression settings.
+At the end of each week, Mythos Log compares each skill's logged total with the weekly amount its current rank asks for. **Charge** runs from −4 to +4 and shows as a row of dots on each skill:
+
+- Beat the weekly amount and you earn Charge. The further above, the more you earn.
+- Fall short and you lose Charge, and any Charge you'd built fades by one.
+- Hit it exactly and Charge stays where it is.
+- Reach +4 to rank up, or drop to −4 to rank down. Either way, Charge resets to 0.
+
+For example, a Strength skill at Level 4 asks for 3 sessions a week. Logging 5, then 4, then 4 sessions earns +2, +1 and +1, which reaches +4 and ranks up to Level 5.
 
 Rank changes happen when the week is finalized. You can adjust strictness, regression, and decay under **More → Settings → Progression**.
 
